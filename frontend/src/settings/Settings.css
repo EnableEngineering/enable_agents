@@ -385,50 +385,52 @@
 .btn-primary,
 .btn-secondary,
 .btn-danger {
-  padding: 10px 20px;
-  border-radius: 8px;
-  font-size: var(--text-body);
-  font-weight: 600;
-  font-family: inherit;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  border: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-6);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  border-radius: var(--radius-md);
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-normal);
   white-space: nowrap;
-  height: 40px;
 }
 
 .btn-primary {
-  background: var(--color-accent);
-  color: white;
+  background: var(--gradient-accent);
+  color: var(--color-text-inverse);
 }
 
-.btn-primary:hover {
+.btn-primary:hover:not(:disabled) {
+  box-shadow: var(--shadow-accent-md);
   opacity: 0.9;
+  color: var(--color-text-inverse);
 }
 
 .btn-secondary {
   background: var(--color-surface);
-  color: var(--color-text-muted);
-  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  border: 1.5px solid var(--color-border);
 }
 
-.btn-secondary:hover {
-  border-color: var(--color-text-muted);
+.btn-secondary:hover:not(:disabled) {
+  background: var(--color-surface-alt);
+  border-color: var(--color-accent);
   color: var(--color-text);
 }
 
 .btn-danger {
   background: var(--color-error-bg);
   color: var(--color-error);
-  border: 1px solid #fecaca;
 }
 
-.btn-danger:hover {
-  background: var(--color-error-bg);
+.btn-danger:hover:not(:disabled) {
+  background: var(--color-error-bg-hover);
+  color: var(--color-error);
 }
 
 .btn-small {

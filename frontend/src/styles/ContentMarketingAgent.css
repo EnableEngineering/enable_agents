@@ -178,21 +178,6 @@
   font-family: var(--font-body);
 }
 
-.btn-primary {
-  background: var(--gradient-accent);
-  color: var(--color-background);
-  justify-content: center;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: var(--color-accent-dark, #9a3412);
-}
-
-.btn-primary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
 /* ========== UPLOAD AREA ========== */
 .upload-area {
   border: 2px dashed var(--color-border);
