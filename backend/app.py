@@ -5769,6 +5769,108 @@ def process_documents_with_kg_rag(documents, nodes, edges, query, include_contex
             'answer': answer
         }
 
+
+# Ready single-purpose agents a task can be routed to - mirrors the READY
+# entries in frontend/src/config/agentsConfig.js. Kept as a small fixed list
+# here rather than sharing that file directly since there's no existing
+# backend-side source of truth for agent metadata; if agentsConfig.js
+# changes its ready set, update this list too.
+TASK_ROUTER_AGENTS = [
+    {"id": "marketResearch", "name": "Market Research", "route": "/market-research", "description": "Discover market trends, analyze competitors, and gather customer insights."},
+    {"id": "salesHelper", "name": "Sales Helper", "route": "/sales-helper", "description": "Score and prioritize leads, CRM integration, sales strategy recommendations."},
+    {"id": "contentMarketing", "name": "Content Marketing", "route": "/content-marketing", "description": "Generate on-brand content and manage marketing campaigns."},
+    {"id": "communityNetwork", "name": "Community Network", "route": "/community-network", "description": "Analyze your network and get warm-intro recommendations."},
+    {"id": "eventNetworking", "name": "Event Networking", "route": "/event-networking", "description": "Match attendee lists to your goals, plan event follow-up."},
+    {"id": "executiveAssistant", "name": "Executive Assistant", "route": "/executive-assistant", "description": "Manage tasks, stakeholders, and reminders for a project."},
+    {"id": "dataInsights", "name": "Data Insights", "route": "/data-insights", "description": "Upload documents and get instant, sourced answers from your data."},
+    {"id": "emailOutreach", "name": "Email Outreach", "route": "/email-outreach", "description": "Send personalized bulk emails to leads or contacts with tracking."},
+    {"id": "supplyChainAudit", "name": "Supply Chain Audit", "route": "/supply-chain-agent", "description": "Qualify and audit suppliers against compliance requirements."},
+]
+
+
+@app.route('/api/route-task', methods=['POST'])
+@cross_origin()
+@require_auth
+def route_task():
+    """
+    Given a free-text task description, decide whether it's better served by
+    a single agent or a multi-stage workflow, and which specific one - only
+    ever choosing from the real templates/agents that actually exist, never
+    inventing one. Used by the chat-first Home screen's routing conversation.
+
+    Input: {"task": "..."}
+    Output: {"success": true, "route": {
+        "type": "workflow" | "agent" | "none",
+        "id": "<template_id or agent id>",
+        "recap": [{"label": "...", "value": "..."}, ...],
+        "reasoning": "...",
+        "template": {...}   # only when type == "workflow"
+        "agent": {...}      # only when type == "agent"
+    }}
+    """
+    data = request.get_json() or {}
+    task = (data.get('task') or '').strip()
+    if not task:
+        return jsonify({'success': False, 'error': 'task is required'}), 400
+
+    from models.workflow import WorkflowTemplate
+
+    templates = WorkflowTemplate.query.filter_by(is_active=True).all()
+    template_options = [
+        {"id": t.template_id, "name": t.name, "description": t.description, "stage_count": len(t.stages)}
+        for t in templates
+    ]
+
+    prompt = f"""You are routing a user's task to the right tool in a business AI platform.
+
+Decide whether this task needs a single AI agent, or a multi-stage guided workflow (use a workflow only when the task genuinely spans multiple distinct steps handled by different agents, like "find suppliers AND qualify them AND send RFQs").
+
+Only ever pick an id from the lists below - never invent one. If nothing is a reasonable fit, return {{"type": "none"}}.
+
+WORKFLOWS (multi-stage):
+{json.dumps(template_options, indent=2)}
+
+SINGLE AGENTS:
+{json.dumps(TASK_ROUTER_AGENTS, indent=2)}
+
+TASK: "{task}"
+
+Return JSON only, in exactly this shape:
+{{"type": "workflow" or "agent" or "none", "id": "<id from a list above, omit if type is none>", "recap": [{{"label": "short field name", "value": "extracted value"}}], "reasoning": "one sentence explaining the choice"}}
+
+"recap" should pull out up to 4 concrete details actually present in the task (e.g. region, product, industry, quantity) - do not invent values that aren't in the task text. Omit fields you can't fill from the task.
+"""
+
+    try:
+        from core.ai_client import ai_chat_completion
+        response = ai_chat_completion(
+            user_id=None, project_id=None, agent="task_router.route_task",
+            model=os.getenv('OPENAI_MODEL', 'gpt-4o-mini'),
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"},
+            temperature=0.2,
+        )
+        result = json.loads(response.choices[0].message.content)
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+    route_type = result.get('type')
+    if route_type == 'workflow':
+        match = next((t for t in templates if t.template_id == result.get('id')), None)
+        if not match:
+            return jsonify({'success': True, 'route': {'type': 'none'}}), 200
+        result['template'] = match.to_dict()
+    elif route_type == 'agent':
+        match = next((a for a in TASK_ROUTER_AGENTS if a['id'] == result.get('id')), None)
+        if not match:
+            return jsonify({'success': True, 'route': {'type': 'none'}}), 200
+        result['agent'] = match
+    else:
+        result = {'type': 'none'}
+
+    return jsonify({'success': True, 'route': result}), 200
+
+
 @app.route('/extract-with-kg-rag', methods=['POST'])
 @cross_origin()
 @require_auth

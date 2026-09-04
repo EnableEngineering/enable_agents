@@ -11,7 +11,7 @@ const NAV_ITEMS = [
   {
     id: 'home',
     label: 'Home',
-    to: '/dashboard',
+    to: '/home',
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5" /></svg>
     ),
@@ -45,7 +45,7 @@ const NAV_ITEMS = [
 // Routes that belong under a given nav item even though the URL doesn't
 // match its `to` exactly (e.g. individual agent pages under "Agents").
 const ACTIVE_PREFIXES = {
-  home: ['/dashboard'],
+  home: ['/home'],
   agents: [
     '/agents', '/market-research', '/sales-helper', '/content-marketing',
     '/community-network', '/event-networking', '/data-insights', '/aichatbot',
@@ -202,7 +202,7 @@ function Sidebar() {
   return (
     <>
       <nav className="sidebar" aria-label="Primary">
-        <Link to="/dashboard" className="sidebar-logo" aria-label="Enable home">
+        <Link to="/home" className="sidebar-logo" aria-label="Enable home">
           <img src={`${process.env.PUBLIC_URL}/logo192.svg`} alt="Enable" />
         </Link>
 
@@ -296,6 +296,7 @@ function Sidebar() {
           </button>
           {showUserMenu && (
             <div className="sidebar-user-menu" role="menu">
+              <button className="sidebar-user-menu-item" role="menuitem" onClick={() => { setShowUserMenu(false); navigate('/dashboard'); }}>Dashboard</button>
               <button className="sidebar-user-menu-item" role="menuitem" onClick={() => { setShowUserMenu(false); navigate('/team'); }}>Team</button>
               <button className="sidebar-user-menu-item" role="menuitem" onClick={() => { setShowUserMenu(false); navigate('/usage'); }}>Usage</button>
               <button className="sidebar-user-menu-item" role="menuitem" onClick={() => { setShowUserMenu(false); navigate('/settings'); }}>Settings</button>

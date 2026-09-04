@@ -1,0 +1,215 @@
+.home-page {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  background: var(--color-background);
+}
+
+.home-content {
+  width: 100%;
+  max-width: 720px;
+  padding: 96px 40px 60px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.home-title {
+  font-family: var(--font-display);
+  font-size: 34px;
+  font-weight: 600;
+  color: var(--color-primary);
+  margin: 0 0 12px;
+  text-align: center;
+}
+
+.home-subtitle {
+  font-size: var(--text-heading);
+  color: var(--color-text-muted);
+  margin: 0 0 36px;
+  text-align: center;
+  max-width: 560px;
+}
+
+.home-chat-input {
+  width: 100%;
+  background: var(--color-surface);
+  border: 1.5px solid var(--color-border-strong, var(--color-border));
+  border-radius: 18px;
+  padding: 10px 10px 10px 22px;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.home-chat-textarea {
+  flex: 1;
+  border: none;
+  outline: none;
+  resize: none;
+  padding: 14px 0;
+  min-height: 24px;
+  max-height: 160px;
+  line-height: 1.4;
+  font-size: var(--text-body);
+  font-family: var(--font-body);
+  color: var(--color-text);
+  background: transparent;
+}
+
+.home-chat-textarea::placeholder {
+  color: var(--color-text-subtle);
+}
+
+.home-chat-send {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  background: var(--gradient-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity var(--transition-fast);
+}
+
+.home-chat-send:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.home-examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 48px;
+}
+
+.home-example-chip {
+  padding: 9px 16px;
+  border-radius: 999px;
+  border: 1.5px solid var(--color-border);
+  background: var(--color-surface);
+  font-size: var(--text-body);
+  font-weight: 500;
+  color: var(--color-primary);
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: inherit;
+  transition: border-color var(--transition-fast);
+}
+
+.home-example-chip:hover {
+  border-color: var(--color-accent);
+}
+
+.home-secondary-links {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  font-size: var(--text-body);
+  color: var(--color-text-subtle);
+  margin-bottom: 48px;
+}
+
+.home-secondary-links button {
+  background: none;
+  border: none;
+  padding: 0;
+  font-weight: 600;
+  font-size: inherit;
+  color: var(--color-primary);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.home-secondary-links button:hover {
+  color: var(--color-accent);
+}
+
+.home-recent {
+  width: 100%;
+}
+
+.home-recent-label {
+  font-size: var(--text-caption);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-subtle);
+  margin: 0 0 12px;
+}
+
+.home-recent-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.home-recent-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 14px 18px;
+  cursor: pointer;
+  transition: border-color var(--transition-fast);
+}
+
+.home-recent-item:hover {
+  border-color: var(--color-accent);
+}
+
+.home-recent-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: var(--color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.home-recent-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.home-recent-title {
+  font-size: var(--text-body);
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-recent-meta {
+  font-size: var(--text-caption);
+  color: var(--color-text-subtle);
+  margin: 0;
+}
+
+.home-recent-status {
+  font-size: var(--text-caption);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .home-content {
+    padding: 56px 20px 40px;
+  }
+  .home-title {
+    font-size: 26px;
+  }
+}

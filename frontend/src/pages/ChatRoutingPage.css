@@ -1,0 +1,330 @@
+.chatroute-page {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  background: var(--color-background);
+  padding: 40px 40px 80px;
+}
+
+.chatroute-content {
+  width: 100%;
+  max-width: 640px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.chatroute-bubble-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.chatroute-bubble-row.user {
+  justify-content: flex-end;
+}
+
+.chatroute-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--gradient-accent);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.chatroute-bubble {
+  max-width: 78%;
+  padding: 13px 17px;
+  font-size: var(--text-body);
+  line-height: 1.6;
+}
+
+.chatroute-bubble.user {
+  background: var(--color-primary);
+  color: #fff;
+  border-radius: 16px 16px 4px 16px;
+}
+
+.chatroute-bubble.assistant {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  border-radius: 16px 16px 16px 4px;
+}
+
+.chatroute-thinking {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chatroute-dots span {
+  animation: chatroute-blink 1.4s infinite both;
+}
+.chatroute-dots span:nth-child(2) { animation-delay: 0.2s; }
+.chatroute-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes chatroute-blink {
+  0%, 80%, 100% { opacity: 0.2; }
+  40% { opacity: 1; }
+}
+
+.chatroute-project-picker {
+  max-width: 78%;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chatroute-project-tabs {
+  display: flex;
+  gap: 6px;
+}
+
+.chatroute-project-tabs button {
+  flex: 1;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-alt);
+  color: var(--color-text-muted);
+  font-size: var(--text-caption);
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.chatroute-project-tabs button.active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}
+
+.chatroute-project-picker select,
+.chatroute-project-picker input {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: var(--text-body);
+  color: var(--color-text);
+  background: var(--color-surface);
+  box-sizing: border-box;
+}
+
+.chatroute-project-confirmed {
+  font-size: var(--text-caption);
+  font-weight: 600;
+  color: var(--color-success-text);
+}
+
+.chatroute-recap-block {
+  flex: 1;
+  max-width: 78%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chatroute-recap-fields {
+  background: var(--color-background-subtle);
+  border: 1px dashed var(--color-border-strong, var(--color-border));
+  border-radius: var(--radius-lg);
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chatroute-recap-row {
+  display: flex;
+  gap: 8px;
+  font-size: var(--text-body);
+}
+
+.chatroute-recap-label {
+  color: var(--color-text-subtle);
+  min-width: 64px;
+  text-transform: capitalize;
+}
+
+.chatroute-recap-value {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.chatroute-recap-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.chatroute-btn-ghost {
+  font-size: var(--text-caption);
+  font-weight: 600;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1.5px solid var(--color-border);
+  border-radius: 999px;
+  padding: 6px 14px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.chatroute-btn-confirm {
+  font-size: var(--text-caption);
+  font-weight: 600;
+  color: var(--color-success-text);
+  background: var(--color-success-bg);
+  border: none;
+  border-radius: 999px;
+  padding: 6px 14px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.chatroute-result {
+  flex: 1;
+}
+
+.chatroute-card {
+  background: var(--color-surface);
+  border: 1.5px solid var(--color-border-strong, var(--color-border));
+  border-radius: 16px;
+  padding: 22px;
+}
+
+.chatroute-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.chatroute-card-kicker {
+  font-size: var(--text-caption);
+  font-weight: 600;
+  color: var(--color-text-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.chatroute-card-stages {
+  font-size: var(--text-caption);
+  font-weight: 600;
+  color: var(--color-accent);
+}
+
+.chatroute-card-title {
+  font-family: var(--font-display);
+  font-size: var(--text-page-title);
+  font-weight: 600;
+  color: var(--color-primary);
+  margin: 4px 0 14px;
+}
+
+.chatroute-stage-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-bottom: 18px;
+}
+
+.chatroute-stage-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.chatroute-stage-num {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(30, 58, 95, 0.08);
+  color: var(--color-primary);
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.chatroute-stage-name {
+  font-size: var(--text-body);
+  color: var(--color-text);
+}
+
+.chatroute-stage-agent {
+  font-size: var(--text-caption);
+  color: var(--color-text-subtle);
+  margin-left: auto;
+}
+
+.chatroute-card-footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.chatroute-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 18px;
+  font-family: var(--font-body);
+  font-size: var(--text-body);
+  font-weight: 600;
+  border-radius: var(--radius-md);
+  border: none;
+  cursor: pointer;
+  color: #fff;
+  background: var(--gradient-accent);
+}
+
+.chatroute-btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.chatroute-agent-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 10px 0 16px;
+}
+
+.chatroute-agent-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  background: var(--color-surface-alt);
+  flex-shrink: 0;
+}
+
+.chatroute-agent-desc {
+  font-size: var(--text-body);
+  color: var(--color-text-muted);
+  margin: 2px 0 0;
+}
+
+.chatroute-footnote {
+  font-size: var(--text-caption);
+  color: var(--color-text-subtle);
+  margin: 10px 0 0;
+}
+
+.chatroute-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--color-accent);
+  font-weight: 600;
+  font-size: inherit;
+  cursor: pointer;
+  font-family: inherit;
+}

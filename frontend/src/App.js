@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 
 // Shared UI
 import Login from './core/Login';
@@ -16,6 +16,8 @@ import './App.css';
 
 // Pages
 import Dashboard from './pages/Dashboard';
+import Home from './pages/Home';
+import ChatRoutingPage from './pages/ChatRoutingPage';
 
 // Agent components
 import AgentsAssembly from './components/AgentsAssembly';
@@ -42,10 +44,14 @@ function isLoggedIn() {
   return Boolean(localStorage.getItem('sessionToken') || localStorage.getItem('userEmail'));
 }
 
-// Root redirect - go to /dashboard if logged in, /login otherwise
+// Root redirect - go to the chat-first Home if logged in, /login otherwise
 function RootRedirect() {
-  return <Navigate to={isLoggedIn() ? '/dashboard' : '/login'} replace />;
+  return <Navigate to={isLoggedIn() ? '/home' : '/login'} replace />;
 }
+
+// The docked AI Assistant panel is redundant on pages that are themselves a
+// full-page chat surface.
+const PANEL_HIDDEN_PATHS = ['/home', '/route'];
 
 function App() {
   const [loggedIn, setLoggedIn] = useState(isLoggedIn());
@@ -76,6 +82,21 @@ function App() {
 
   return (
     <Router>
+      <AppShell
+        loggedIn={loggedIn}
+        panelOpen={panelOpen}
+        onPanelToggle={handlePanelToggle}
+      />
+    </Router>
+  );
+}
+
+function AppShell({ loggedIn, panelOpen, onPanelToggle }) {
+  const location = useLocation();
+  const showPanel = loggedIn && !PANEL_HIDDEN_PATHS.includes(location.pathname);
+
+  return (
+    <>
       <SkipLink />
       <div className="App">
         <ErrorBoundary>
@@ -84,13 +105,15 @@ function App() {
             id="main-content"
             className={[
               loggedIn ? 'main-content--sidebar-open' : '',
-              loggedIn && panelOpen ? 'main-content--panel-open' : '',
+              showPanel && panelOpen ? 'main-content--panel-open' : '',
             ].filter(Boolean).join(' ')}
           >
           <Routes>
           <Route path="/" element={<RootRedirect />} />
           <Route path="/login" element={<Login />} />
            <Route path="/register" element={<RegisterUser />} />
+          <Route path="/home" element={<Home />} />
+          <Route path="/route" element={<ChatRoutingPage />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/market-research" element={<RequirementsGathering />} />
           <Route path="/market-research/campaigns" element={<CampaignDashboard />} />
@@ -100,7 +123,7 @@ function App() {
           <Route path="/agents" element={<AgentsAssembly />} />
           <Route path="/agents-assembly" element={<AgentsAssembly />} />
           <Route path="/data-insights" element={<DataInsights />} />
-          <Route path="/datainsights" element={<Navigate to="/data-insights" replace />} /> 
+          <Route path="/datainsights" element={<Navigate to="/data-insights" replace />} />
           <Route path="/aichatbot" element={<Chatbot />} />
           <Route path="/community-network" element={<CommunityNetworkAgent />} />
           <Route path="/sales-helper" element={<SalesHelperAgent />} />
@@ -119,10 +142,10 @@ function App() {
           <Route path="/workflows/:instanceId" element={<WorkflowRunner />} />
           </Routes>
           </main>
-          {loggedIn && <AiAssistantPanel open={panelOpen} onToggle={handlePanelToggle} />}
+          {showPanel && <AiAssistantPanel open={panelOpen} onToggle={onPanelToggle} />}
         </ErrorBoundary>
       </div>
-    </Router>
+    </>
   );
 }
 

@@ -1,5 +1,3 @@
-import { API_CONFIG } from '../config/apiConfig';
-
 /** Merge JSON headers with optional Bearer session token from login/register/OAuth */
 
 export function authJsonHeaders(extra = {}) {
@@ -26,25 +24,13 @@ export function authJsonHeaders(extra = {}) {
 }
 
 /**
- * Post-login/register routing: returning users (already have a project) go
- * straight to the Dashboard; first-time users land on the agent catalog.
- * Fails open to /agents if the check itself fails, rather than blocking on
- * a broken state.
+ * Post-login/register routing: everyone lands on the chat-first Home screen.
  */
-export async function navigateAfterLogin(navigate) {
-  try {
-    const res = await fetch(`${API_CONFIG.BASE_URL}/api/projects`, {
-      headers: authJsonHeaders(),
-    });
-    const data = await res.json();
-    if (Array.isArray(data.projects) && data.projects.length > 0) {
-      navigate('/dashboard');
-      return;
-    }
-  } catch {
-    // fall through to /agents
-  }
-  navigate('/agents');
+export function navigateAfterLogin(navigate) {
+  // Chat-first Home is the universal post-login landing screen now, for
+  // both new and returning users - it replaces the old branch-by-project-
+  // history logic (dashboard for returning users, catalog for new ones).
+  navigate('/home');
 }
 
 /** For GET requests: only add Authorization when logged in. */
