@@ -7,7 +7,7 @@
  * Usage: @import './tokens.css'; (already imported in index.css)
  */
 
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Fraunces:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
 
 :root {
   /* ═══════════════════════════════════════════════════════════════════════════
@@ -82,7 +82,11 @@
      TYPOGRAPHY — Simplified (2 sizes only)
      ═══════════════════════════════════════════════════════════════════════════ */
 
-  --font-display: 'Fraunces', Georgia, serif;
+  /* One typeface throughout (IBM Plex Sans, the same family Carbon uses) -
+     the serif/sans display pairing this replaced read as editorial rather
+     than product UI, and it's the one place a font choice was hard to
+     centralize (a <link>/@import can't be "one token" the way a color can). */
+  --font-display: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-body: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-mono: 'IBM Plex Mono', 'Courier New', monospace;
 
@@ -339,10 +343,10 @@
   max-width: 100%;
 }
 
-/* Cards */
+/* Cards - shadow-elevated, not bordered, so a page of cards reads as
+   surfaces sitting on the background rather than a grid of outlines. */
 .card {
   background: var(--color-surface);
-  border: 1.5px solid var(--color-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
 }

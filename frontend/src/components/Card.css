@@ -4,10 +4,10 @@
  * Uses design tokens from tokens.css
  */
 
-/* Base Card */
+/* Base Card - shadow-elevated, not bordered, so a grid of cards reads as
+   surfaces on the page background rather than a wall of outlines. */
 .card-component {
   background: var(--color-surface);
-  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
   transition: all var(--transition-normal);
@@ -22,7 +22,6 @@
 }
 
 .card-interactive:hover {
-  border-color: var(--color-accent);
   box-shadow: var(--shadow-md);
   transform: translateY(-2px);
 }
@@ -96,17 +95,17 @@
 
 .module-card-component {
   background: var(--color-surface);
-  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
   padding: var(--space-4);
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+  text-align: left;
   transition: all var(--transition-normal);
 }
 
 .module-card-component:hover {
-  border-color: var(--color-accent);
   box-shadow: var(--shadow-md);
   transform: translateY(-2px);
 }
@@ -121,8 +120,7 @@
 }
 
 .module-card-locked:hover {
-  border-color: var(--color-border);
-  box-shadow: none;
+  box-shadow: var(--shadow-sm);
 }
 
 .module-card-header {

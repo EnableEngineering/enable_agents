@@ -225,7 +225,6 @@
   width: 100%;
   padding: var(--space-3) var(--space-4);
   background: var(--color-surface);
-  border: 1.5px solid var(--color-border-strong, var(--color-border));
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
 }
@@ -268,9 +267,9 @@
 
 .department-chip {
   padding: var(--space-2) var(--space-4);
-  border: 1px solid var(--color-border);
   border-radius: var(--radius-full);
   background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
   color: var(--color-text-muted);
   font-size: var(--text-small);
   font-weight: var(--font-medium);
@@ -281,14 +280,14 @@
 }
 
 .department-chip:hover:not(.department-chip--active) {
-  border-color: var(--color-accent);
   color: var(--color-text);
+  box-shadow: var(--shadow-md);
 }
 
 .department-chip--active {
   background: var(--color-primary);
-  border-color: var(--color-primary);
   color: var(--color-text-inverse);
+  box-shadow: none;
 }
 
 @media (max-width: 600px) {
@@ -1021,7 +1020,6 @@
   text-align: center;
   background: var(--gradient-surface);
   border-radius: var(--radius-lg);
-  border: 1px solid var(--color-border);
   width: 100%;
   max-width: 500px;
   margin: var(--space-10) auto;

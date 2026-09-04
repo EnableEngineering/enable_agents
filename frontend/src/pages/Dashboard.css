@@ -64,7 +64,6 @@
   flex: 1 1 200px;
   max-width: 260px;
   background: var(--color-surface);
-  border: 1.5px solid var(--color-border);
   border-radius: var(--radius-lg);
   padding: var(--space-4);
   display: flex;
@@ -75,7 +74,6 @@
 }
 
 .dashboard-page .stat-card:hover {
-  border-color: var(--color-accent);
   box-shadow: var(--shadow-md);
 }
 
@@ -250,9 +248,9 @@
   align-items: stretch;
   gap: var(--space-3);
   background: var(--color-surface);
-  border: 1.5px solid var(--color-border);
   border-radius: var(--radius-lg);
   padding: var(--space-4);
+  text-align: left;
   cursor: pointer;
   transition: all var(--transition-normal);
   box-shadow: var(--shadow-sm);

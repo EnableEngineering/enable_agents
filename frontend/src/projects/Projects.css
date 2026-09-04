@@ -114,14 +114,14 @@
 /* Project Card */
 .projects-page .project-card {
   background: var(--color-surface);
-  border: 1.5px solid var(--color-border);
   border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
   padding: var(--space-5);
+  text-align: left;
   transition: all var(--transition-fast);
 }
 
 .projects-page .project-card:hover {
-  border-color: var(--color-accent);
   box-shadow: var(--shadow-md);
 }
 
@@ -251,7 +251,6 @@
 .projects-page .agent-tag {
   padding: 4px 10px;
   background: var(--color-background);
-  border: 1px solid var(--color-border);
   border-radius: var(--radius-full);
   font-size: 0.75rem;
   color: var(--color-text);

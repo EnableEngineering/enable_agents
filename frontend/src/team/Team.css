@@ -94,8 +94,8 @@
 /* Cards */
 .card {
   background: var(--color-surface);
-  border: 1px solid var(--color-border);
   border-radius: 12px;
+  box-shadow: var(--shadow-sm);
   padding: 16px;
   margin-bottom: 12px;
 }

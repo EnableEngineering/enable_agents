@@ -91,8 +91,8 @@
 /* Progress Section */
 .wf-progress-section {
   background: var(--color-surface);
-  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
   padding: var(--space-3) var(--space-4);
   margin-bottom: var(--space-4);
 }
@@ -160,8 +160,8 @@
 /* Stages Panel */
 .wf-stages-panel {
   background: var(--color-surface);
-  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
   padding: var(--space-4);
 }
 
@@ -354,8 +354,8 @@
 /* Action Panels */
 .wf-action-panel {
   background: var(--color-surface);
-  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
   padding: var(--space-5);
   text-align: center;
 }
@@ -429,10 +429,12 @@
   color: var(--color-text);
 }
 
-/* Current Stage Panel */
+/* Current Stage Panel - flagged as the active one with a left accent bar
+   and stronger shadow instead of a full outline. */
 .wf-current-panel {
   text-align: left;
-  border: 2px solid var(--color-primary);
+  border-left: 3px solid var(--color-primary);
+  box-shadow: var(--shadow-md);
 }
 
 .wf-current-badge {
@@ -512,14 +514,14 @@
 
 .wf-success-panel {
   background: var(--color-success-bg);
-  border-color: var(--color-success);
+  border-left: 3px solid var(--color-success);
 }
 
 /* Lane 3: Activity timeline */
 .wf-activity-lane {
   background: var(--color-surface);
-  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
   padding: var(--space-4);
   position: sticky;
   top: var(--space-4);
@@ -619,8 +621,8 @@
 /* Stage Detail View */
 .wf-stage-detail {
   background: var(--color-surface);
-  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
   padding: var(--space-5);
 }
 
@@ -830,7 +832,6 @@
 .wf-agent-type-form {
   background: var(--color-background);
   color: var(--color-text-muted);
-  border: 1px solid var(--color-border);
 }
 
 .wf-execution-prompt > div {
@@ -1082,8 +1083,8 @@ a.wf-btn {
 /* Add Task Form */
 .wf-add-task-form {
   background: var(--color-surface);
-  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
   padding: var(--space-3);
   margin-bottom: var(--space-3);
 }
@@ -1177,18 +1178,18 @@ a.wf-btn {
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
   background: var(--color-surface);
-  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
   transition: all 0.15s ease;
 }
 
 .wf-task-item:hover {
-  border-color: var(--color-primary);
+  box-shadow: var(--shadow-md);
 }
 
 .wf-task-item.done {
   background: var(--color-success-bg);
-  border-color: rgba(22, 163, 74, 0.2);
+  box-shadow: none;
 }
 
 .wf-task-item.done .wf-task-title {
