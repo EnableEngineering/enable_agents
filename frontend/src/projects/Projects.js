@@ -444,7 +444,7 @@ function Projects() {
 
                 <div className="project-actions">
                   <button
-                    className="btn-open"
+                    className="btn btn-primary"
                     onClick={() => {
                       // Navigate to first enabled agent with this project
                       const firstAgent = project.agents[0];

@@ -86,7 +86,6 @@ export function CardGrid({
  * @param {string} title - Module title
  * @param {string} description - Short module description (optional)
  * @param {string} department - Department label shown above the title (e.g. "Sales")
- * @param {string} departmentColor - Dot color for the department label
  * @param {string} status - 'ready' | 'in-progress' | 'unavailable'
  * @param {string} price - Price string (e.g., '$29/month'), shown next to the action when ready
  * @param {function} onOpen - "Open agent" button handler (ready modules only)
@@ -98,7 +97,6 @@ export function ModuleCard({
   title,
   description,
   department,
-  departmentColor = 'var(--color-text-subtle)',
   status = 'ready',
   price,
   onOpen,
@@ -122,7 +120,7 @@ export function ModuleCard({
         <div className="module-card-heading">
           {department && (
             <div className="module-card-department">
-              <span className="module-card-dot" style={{ background: departmentColor }} />
+              <span className="module-card-dot" />
               <span>{department}</span>
             </div>
           )}

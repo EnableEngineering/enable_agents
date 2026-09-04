@@ -5372,17 +5372,24 @@ def recommend_agents():
             with open(modules_file, 'r', encoding='utf-8') as f:
                 modules = json.load(f)
         else:
+            # Mirrors frontend/src/data/agentCatalog.js exactly - the recommendation
+            # must use the catalog's real names, since the frontend matches a
+            # recommended tool_name to a card via an exact-string lookup
+            # (findModuleByName); any name that drifts from the catalog silently
+            # disappears from the recommended list instead of erroring loudly.
             modules = [
-                {"name": "Market Research", "description": "Market analysis, competitor research, and customer insights."},
-                {"name": "Sales Helper Agent", "description": "Lead management, sales enablement, and CRM support."},
-                {"name": "Content Marketing Agent", "description": "Content strategy and campaign execution support."},
-                {"name": "Executive Assistant Agent", "description": "Task coordination, reminders, and stakeholder updates."},
-                {"name": "Supply Chain Agent", "description": "Supply chain monitoring and impact analysis."},
-                {"name": "Data Discovery", "description": "Data exploration and business insight generation."},
-                {"name": "AI Chatbot", "description": "Conversational workflow automation and user support."},
-                {"name": "Dashboards", "description": "KPI dashboards, reporting, and decision support."},
-                {"name": "Integration", "description": "Connect tools and automate cross-system data flow."},
-                {"name": "Automation", "description": "Automate repetitive workflows and approvals."}
+                {"name": "Market Research", "description": "Discover market trends, analyze competitors, and gather customer insights to make data-driven decisions."},
+                {"name": "Sales Helper Agent", "description": "Supercharge your sales with lead management, CRM integration, and intelligent sales strategy recommendations."},
+                {"name": "Content Marketing Agent", "description": "Create compelling content, manage campaigns, and boost your brand presence with AI-powered marketing."},
+                {"name": "Community Network", "description": "Build and engage your community, manage relationships, and grow customer loyalty organically."},
+                {"name": "Executive Assistant Agent", "description": "AI-powered executive assistant for task management, reminders, and stakeholder coordination via email."},
+                {"name": "Event Networking Agent", "description": "Maximize event ROI with smart attendee matching and follow-up automation."},
+                {"name": "Email Outreach", "description": "Send personalized bulk emails to suppliers, leads, or contacts with templates and tracking."},
+                {"name": "Supply Chain Audit", "description": "Qualify suppliers through capability and compliance audits with weighted scoring."},
+                {"name": "Data Insights", "description": "Explore your data, uncover hidden patterns, and generate actionable business insights with AI-powered document analysis."},
+                {"name": "AI Chatbot", "description": "General-purpose assistant for quick questions across your uploaded documents."},
+                {"name": "Investment Agent", "description": "Make smarter investment decisions with AI-powered market analysis and portfolio recommendations. (Coming soon)"},
+                {"name": "Team Performance", "description": "Track team productivity, evaluate performance, and identify areas for improvement with analytics. (Coming soon)"}
             ]
 
         # Prepare context for OpenAI
@@ -5401,8 +5408,12 @@ def recommend_agents():
             "considering the existing tools, missing necessary tools, and possible integrations. "
             "For each recommendation, provide: "
             "1. recommended_tools: list of modules/tools with name, description, and why recommended. "
+            "For recommended_tools specifically, only choose from `available_modules` and copy each "
+            "chosen module's \"name\" field character-for-character - do not paraphrase, rename, or "
+            "invent a module not in that list, since the caller matches on the exact name. "
             "2. integration_pairs: pairs of tools/modules that should be integrated, with integration description and data shared. "
-            "3. additional_tools: tools/modules that are needed but missing, with name, description, names of companies offering it and why needed. "
+            "3. additional_tools: genuinely external tools/services that are needed but missing (not "
+            "already in `available_modules`), with name, description, names of companies offering it, and why needed. "
             "Return the output as a JSON object with a 'recommendations' key containing these three lists. "
             "Here is the user context and available modules:\n\n" + json.dumps(context, indent=2)
         )

@@ -2,11 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import '../styles/AgentsAssembly.css';
 import { getRouteByModuleName } from '../config/agentsConfig';
-import { BUSINESS_MODULES, TECHNICAL_MODULES, DEPARTMENT_COLORS } from '../data/agentCatalog';
+import { BUSINESS_MODULES, TECHNICAL_MODULES, DEPARTMENTS as CATALOG_DEPARTMENTS } from '../data/agentCatalog';
 import { CardGrid, ModuleCard } from './Card';
 
 const ALL_MODULES = [...BUSINESS_MODULES, ...TECHNICAL_MODULES];
-const DEPARTMENTS = ['All', ...Object.keys(DEPARTMENT_COLORS)];
+const DEPARTMENTS = ['All', ...CATALOG_DEPARTMENTS];
 
 function AgentsAssembly() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -132,7 +132,6 @@ function AgentsAssembly() {
                   status={isReady ? 'ready' : 'in-progress'}
                   locked={!isReady}
                   department={module.department}
-                  departmentColor={DEPARTMENT_COLORS[module.department]}
                   onOpen={() => handleOpenModule(module.name)}
                 />
               );

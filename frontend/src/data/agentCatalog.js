@@ -3,20 +3,22 @@
  * AI Assistant panel's recommended-modules list, so the two stay in sync
  * instead of maintaining separate copies of the same entries.
  *
- * `department` + `departmentColor` back the catalog's unified department
- * filter (All/Sales/Marketing/Procurement/Operations/Finance/Customer
- * Service) - replacing the old Business/Technical split, which grouped by
- * how the agent was built rather than what it helps you do.
+ * `department` backs the catalog's unified department filter, replacing the
+ * old Business/Technical split, which grouped by how the agent was built
+ * rather than what it helps you do. Departments are distinguished by label
+ * text only (ModuleCard's dot is a single accent color for all of them) to
+ * keep the catalog within the app's ~3-color palette rather than assigning
+ * each department its own hue.
  */
 
-export const DEPARTMENT_COLORS = {
-  Sales: '#1E3A5F',
-  Marketing: '#C2410C',
-  Procurement: '#16A34A',
-  Operations: '#F59E0B',
-  Finance: '#7C3AED',
-  'Customer Service': '#2563EB',
-};
+export const DEPARTMENTS = [
+  'Sales',
+  'Marketing',
+  'Procurement',
+  'Operations',
+  'Finance',
+  'Customer Service',
+];
 
 export const BUSINESS_MODULES = [
   {

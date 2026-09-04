@@ -196,7 +196,7 @@
   align-items: center;
   justify-content: center;
   background: transparent;
-  border: 1px solid var(--color-border);
+  border: none;
   border-radius: var(--radius-sm);
   color: var(--color-text-muted);
   cursor: pointer;
@@ -205,7 +205,7 @@
 }
 
 .projects-page .btn-icon:hover {
-  background: var(--color-background);
+  background: var(--color-background-subtle);
   color: var(--color-text);
 }
 
@@ -286,23 +286,6 @@
 .projects-page .project-actions {
   display: flex;
   gap: var(--space-3);
-}
-
-.projects-page .btn-open {
-  flex: 1;
-  padding: var(--space-3);
-  background: var(--color-primary);
-  color: #fff;
-  border: none;
-  border-radius: var(--radius-md);
-  font-weight: var(--font-semibold);
-  font-size: var(--text-small);
-  cursor: pointer;
-  transition: background var(--transition-fast);
-}
-
-.projects-page .btn-open:hover {
-  background: var(--color-primary-dark);
 }
 
 /* Modal */

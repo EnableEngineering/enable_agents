@@ -77,10 +77,10 @@ function Dashboard() {
 
   const getStatusBadge = (status) => {
     const badges = {
-      pending: { label: 'Pending', color: '#94a3b8' },
-      in_progress: { label: 'In Progress', color: '#3b82f6' },
-      completed: { label: 'Completed', color: '#10b981' },
-      failed: { label: 'Failed', color: '#ef4444' }
+      pending: { label: 'Pending', color: 'var(--color-grey-muted)' },
+      in_progress: { label: 'In Progress', color: 'var(--role-member)' },
+      completed: { label: 'Completed', color: 'var(--color-success)' },
+      failed: { label: 'Failed', color: 'var(--color-error)' }
     };
     return badges[status] || badges.pending;
   };

@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { API_CONFIG } from '../config/apiConfig';
 import { authJsonHeaders } from '../core/authHeaders';
 import { getRouteByModuleName } from '../config/agentsConfig';
-import { findModuleByName, DEPARTMENT_COLORS } from '../data/agentCatalog';
+import { findModuleByName } from '../data/agentCatalog';
 import { CardGrid, ModuleCard } from './Card';
 import { STRINGS } from '../constants/strings';
 import './AiAssistantPanel.css';
@@ -76,13 +76,17 @@ function AiAssistantPanel({ open, onToggle }) {
     localStorage.setItem('aiAssistantDeptPrompted', departmentPrompted.toString());
   }, [departmentPrompted]);
 
-  // Auto-scroll chat history to bottom when new messages arrive
+  // Auto-scroll chat history to bottom when new messages arrive. The ref is
+  // re-checked inside the timeout (not just before scheduling it) because
+  // the panel can collapse - unmounting the scrolling element - in the gap
+  // between scheduling and firing.
   useEffect(() => {
-    if (chatHistoryRef.current) {
-      setTimeout(() => {
+    const timeoutId = setTimeout(() => {
+      if (chatHistoryRef.current) {
         chatHistoryRef.current.scrollTop = chatHistoryRef.current.scrollHeight;
-      }, 0);
-    }
+      }
+    }, 0);
+    return () => clearTimeout(timeoutId);
   }, [chatHistory, isBuffering]);
 
   const clearChatSession = () => {
@@ -337,7 +341,6 @@ function AiAssistantPanel({ open, onToggle }) {
                   status={isReady ? 'ready' : 'in-progress'}
                   locked={!isReady}
                   department={module.department}
-                  departmentColor={DEPARTMENT_COLORS[module.department]}
                   badge="Recommended"
                   onOpen={() => handleOpenModule(module.name)}
                 />
