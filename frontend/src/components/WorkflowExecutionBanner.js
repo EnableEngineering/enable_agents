@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { API_CONFIG } from '../config/apiConfig';
 import { authJsonHeaders } from '../core/authHeaders';
-import { useMode } from '../contexts';
 import './WorkflowExecutionBanner.css';
 
 /**
@@ -21,7 +20,6 @@ function WorkflowExecutionBanner() {
   const stageId = searchParams.get('stage');
   const viewMode = searchParams.get('view'); // 'history' or 'run'
 
-  const { isDemoMode } = useMode();
   const [workflowData, setWorkflowData] = useState(null);
   const [stageName, setStageName] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -29,26 +27,6 @@ function WorkflowExecutionBanner() {
   useEffect(() => {
     if (!workflowId) return;
 
-    // Demo mode: use mock data
-    if (isDemoMode) {
-      setWorkflowData({
-        name: 'Apex Manufacturing - Aluminum Housing Sourcing',
-        templateName: 'Supplier Qualification Pipeline',
-      });
-      // Map stage ID to friendly name
-      const stageNames = {
-        supplier_discovery: 'Supplier Discovery',
-        document_analysis: 'Document Analysis',
-        rfq_outreach: 'RFQ Outreach',
-        response_analysis: 'Response Analysis',
-        qualification_audit: 'Qualification Audit',
-        selection_tasks: 'Selection Tasks',
-      };
-      setStageName(stageNames[stageId] || stageId);
-      return;
-    }
-
-    // Live mode: fetch from API
     setLoading(true);
     fetch(`${API_CONFIG.BASE_URL}/api/workflows/instances/${workflowId}`, {
       headers: authJsonHeaders(),
@@ -67,7 +45,7 @@ function WorkflowExecutionBanner() {
       })
       .catch(err => console.error('Error loading workflow:', err))
       .finally(() => setLoading(false));
-  }, [workflowId, stageId, isDemoMode]);
+  }, [workflowId, stageId]);
 
   // Don't render if no workflow context
   if (!workflowId) return null;

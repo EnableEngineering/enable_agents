@@ -6,32 +6,8 @@ import Header from '../core/Header';
 import { authJsonHeaders, authOptionalHeaders } from '../core/authHeaders';
 import { BackButton, showConfirm } from '../components';
 import { AGENTS } from '../config/agentsConfig';
-import { initializeDemoProjects } from '../hooks/useProjectData';
-import { useMode } from '../contexts';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
-const PROJECTS_STORAGE_KEY = 'enableAgentsProjects';
-
-// Helper to get/save projects from localStorage
-const getStoredProjects = () => {
-  try {
-    const data = localStorage.getItem(PROJECTS_STORAGE_KEY);
-    return data ? JSON.parse(data) : [];
-  } catch {
-    return [];
-  }
-};
-
-const saveStoredProjects = (projects) => {
-  try {
-    localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(projects));
-  } catch (e) {
-    console.warn('Failed to save projects:', e);
-  }
-};
-
-// Initialize demo projects on first load
-initializeDemoProjects();
 
 const Icons = {
   ArrowLeft: () => (
@@ -90,7 +66,6 @@ function Projects() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const userEmail = localStorage.getItem('userEmail') || '';
-  const { isDemoMode } = useMode();
 
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -142,7 +117,7 @@ function Projects() {
 
   useEffect(() => {
     fetchProjects();
-  }, [isDemoMode]);
+  }, []);
 
   // Deep link from the Dashboard's "Create New Project" button.
   useEffect(() => {
@@ -156,10 +131,10 @@ function Projects() {
 
   // Fetch teams when create modal opens
   useEffect(() => {
-    if (showCreateModal && !isDemoMode) {
+    if (showCreateModal) {
       fetchTeams();
     }
-  }, [showCreateModal, isDemoMode]);
+  }, [showCreateModal]);
 
   const fetchTeams = async () => {
     setLoadingTeams(true);
@@ -183,14 +158,6 @@ function Projects() {
   };
 
   const fetchProjects = async () => {
-    if (isDemoMode) {
-      // Use localStorage for demo mode
-      const storedProjects = getStoredProjects();
-      setProjects(storedProjects);
-      setLoading(false);
-      return;
-    }
-
     try {
       const res = await fetch(`${API_URL}/api/projects`, {
         headers: authOptionalHeaders(),
@@ -209,31 +176,6 @@ function Projects() {
   const handleCreate = async () => {
     if (!newProject.name.trim()) {
       showToast('Please enter a project name', 'warning');
-      return;
-    }
-
-    // All agents are enabled by default
-    const allAgents = ['marketResearch', 'salesHelper', 'contentMarketing',
-      'communityNetwork', 'eventNetworking', 'executiveAssistant', 'dataInsights'];
-
-    if (isDemoMode) {
-      const project = {
-        id: `proj-${Date.now()}`,
-        name: newProject.name,
-        description: newProject.description,
-        agents: allAgents,
-        owner: userEmail || 'demo@example.com',
-        status: 'active',
-        createdAt: new Date().toISOString().split('T')[0],
-        updatedAt: new Date().toISOString(),
-        data: { business_context: newProject.business_context },
-      };
-      const updatedProjects = [...projects, project];
-      setProjects(updatedProjects);
-      saveStoredProjects(updatedProjects);
-      setNewProject({ name: '', description: '', team_id: '', business_context: { ...emptyBusinessContext } });
-      setShowCreateModal(false);
-      showToast('Project created', 'success');
       return;
     }
 
@@ -271,14 +213,6 @@ function Projects() {
       variant: 'danger',
     });
     if (!confirmed) return;
-
-    if (isDemoMode) {
-      const updatedProjects = projects.filter(p => p.id !== projectId);
-      setProjects(updatedProjects);
-      saveStoredProjects(updatedProjects);
-      showToast('Project deleted', 'success');
-      return;
-    }
 
     try {
       const res = await fetch(`${API_URL}/api/projects/${projectId}`, {
@@ -476,15 +410,13 @@ function Projects() {
                       {project.status}
                     </span>
                   </div>
-                  {!isDemoMode && (
-                    <button
-                      className="btn-icon"
-                      onClick={() => openProjectSettings(project)}
-                      title="AI provider settings"
-                    >
-                      <Icon name="Settings" />
-                    </button>
-                  )}
+                  <button
+                    className="btn-icon"
+                    onClick={() => openProjectSettings(project)}
+                    title="AI provider settings"
+                  >
+                    <Icon name="Settings" />
+                  </button>
                   <button
                     className="btn-icon danger"
                     onClick={() => handleDelete(project.id)}
@@ -563,30 +495,28 @@ function Projects() {
                   rows={2}
                 />
               </div>
-              {!isDemoMode && (
-                <div className="field">
-                  <label>Team</label>
-                  <div className="team-select-row">
-                    <select
-                      value={newProject.team_id}
-                      onChange={(e) => setNewProject({ ...newProject, team_id: e.target.value })}
-                      disabled={loadingTeams}
-                    >
-                      <option value="">Select team...</option>
-                      {teams.map(team => (
-                        <option key={team.id} value={team.id}>{team.name}</option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      className="btn-link"
-                      onClick={() => navigate('/team')}
-                    >
-                      Manage Team
-                    </button>
-                  </div>
+              <div className="field">
+                <label>Team</label>
+                <div className="team-select-row">
+                  <select
+                    value={newProject.team_id}
+                    onChange={(e) => setNewProject({ ...newProject, team_id: e.target.value })}
+                    disabled={loadingTeams}
+                  >
+                    <option value="">Select team...</option>
+                    {teams.map(team => (
+                      <option key={team.id} value={team.id}>{team.name}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className="btn-link"
+                    onClick={() => navigate('/team')}
+                  >
+                    Manage Team
+                  </button>
                 </div>
-              )}
+              </div>
 
               <div className="field-group-divider">
                 <span>Business context (optional)</span>

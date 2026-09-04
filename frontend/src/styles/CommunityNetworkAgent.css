@@ -39,15 +39,6 @@
   }
 }
 
-.demo-data-banner {
-  margin: var(--space-2) 0 0;
-  padding: var(--space-2) var(--space-3);
-  font-size: var(--text-body);
-  color: var(--color-success-text);
-  background: var(--color-success-bg);
-  border-radius: var(--radius-md);
-}
-
 .community-network-agent .agent-page-header + .agent-outcomes,
 .community-network-agent .agent-page-header + .agent-outcomes + .live-mode-hint {
   max-width: var(--content-max-width);

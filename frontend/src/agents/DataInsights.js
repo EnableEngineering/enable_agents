@@ -21,237 +21,6 @@ const ALLOWED_EXTENSIONS = ['pdf', 'docx', 'doc', 'txt', 'xlsx', 'xls', 'csv'];
 // Storage key for state persistence
 const STATE_KEY = 'dataInsightsState';
 
-// Demo documents with rich metadata (DDA-style)
-const DEMO_DOCUMENTS = [
-  {
-    id: 'doc-1',
-    name: 'Q3 Financial Report.pdf',
-    type: 'pdf',
-    size: '2.4 MB',
-    uploadedAt: '2026-07-10',
-    category: 'financial',
-    pages: 24,
-    status: 'completed',
-    entities: 45,
-    relationships: 28,
-    confidence: 0.92,
-  },
-  {
-    id: 'doc-2',
-    name: 'Customer Survey Results.xlsx',
-    type: 'xlsx',
-    size: '1.1 MB',
-    uploadedAt: '2026-07-12',
-    category: 'research',
-    pages: null,
-    status: 'completed',
-    entities: 32,
-    relationships: 15,
-    confidence: 0.88,
-  },
-  {
-    id: 'doc-3',
-    name: 'Product Roadmap 2026.pdf',
-    type: 'pdf',
-    size: '3.8 MB',
-    uploadedAt: '2026-07-14',
-    category: 'strategy',
-    pages: 18,
-    status: 'completed',
-    entities: 28,
-    relationships: 22,
-    confidence: 0.95,
-  },
-  {
-    id: 'doc-4',
-    name: 'Market Analysis Report.pdf',
-    type: 'pdf',
-    size: '5.2 MB',
-    uploadedAt: '2026-07-15',
-    category: 'research',
-    pages: 42,
-    status: 'completed',
-    entities: 56,
-    relationships: 31,
-    confidence: 0.91,
-  },
-];
-
-// Demo extracted entities per document
-const DEMO_ENTITIES = {
-  'doc-1': [
-    { id: 'e1', name: 'Revenue', type: 'metric', confidence: 0.95, value: '$4.2M' },
-    { id: 'e2', name: 'Q3 2026', type: 'period', confidence: 0.98 },
-    { id: 'e3', name: 'Enterprise Segment', type: 'segment', confidence: 0.92, value: '62%' },
-    { id: 'e4', name: 'Gross Margin', type: 'metric', confidence: 0.94, value: '68%' },
-    { id: 'e5', name: 'Operating Expenses', type: 'metric', confidence: 0.91, value: '$1.8M' },
-    { id: 'e6', name: 'YoY Growth', type: 'trend', confidence: 0.89, value: '+18%' },
-    { id: 'e7', name: 'Net Profit', type: 'metric', confidence: 0.93, value: '$1.0M' },
-    { id: 'e8', name: 'New ARR', type: 'metric', confidence: 0.87, value: '$800K' },
-  ],
-  'doc-2': [
-    { id: 'e9', name: 'NPS Score', type: 'metric', confidence: 0.96, value: '72' },
-    { id: 'e10', name: 'CSAT Rating', type: 'metric', confidence: 0.94, value: '4.5/5' },
-    { id: 'e11', name: 'Response Rate', type: 'metric', confidence: 0.92, value: '34%' },
-    { id: 'e12', name: 'Product Quality', type: 'attribute', confidence: 0.88, value: '4.7/5' },
-    { id: 'e13', name: 'Support Response', type: 'attribute', confidence: 0.85, value: '3.8/5' },
-    { id: 'e14', name: 'Detractors', type: 'metric', confidence: 0.91, value: '8%' },
-  ],
-  'doc-3': [
-    { id: 'e15', name: 'AI Assistant', type: 'feature', confidence: 0.97 },
-    { id: 'e16', name: 'Mobile App v2', type: 'feature', confidence: 0.95 },
-    { id: 'e17', name: 'Enterprise SSO', type: 'feature', confidence: 0.93 },
-    { id: 'e18', name: 'Q4 Launch', type: 'milestone', confidence: 0.96 },
-    { id: 'e19', name: 'Tech Debt Reduction', type: 'goal', confidence: 0.90, value: '15%' },
-    { id: 'e20', name: 'Engineering Team', type: 'resource', confidence: 0.88, value: '12 FTEs' },
-  ],
-  'doc-4': [
-    { id: 'e21', name: 'TAM', type: 'metric', confidence: 0.94, value: '$12B' },
-    { id: 'e22', name: 'Market Growth', type: 'trend', confidence: 0.92, value: '24% CAGR' },
-    { id: 'e23', name: 'Competitor A', type: 'company', confidence: 0.96, value: '32% share' },
-    { id: 'e24', name: 'Competitor B', type: 'company', confidence: 0.95, value: '18% share' },
-    { id: 'e25', name: 'Our Position', type: 'metric', confidence: 0.91, value: '8% share' },
-    { id: 'e26', name: 'Target Segment', type: 'segment', confidence: 0.89, value: 'Mid-Market' },
-    { id: 'e27', name: 'Growth Opportunity', type: 'trend', confidence: 0.87, value: '+45%' },
-    { id: 'e28', name: 'Key Region', type: 'geography', confidence: 0.93, value: 'North America' },
-  ],
-};
-
-// Demo knowledge graph data
-const DEMO_GRAPHS = {
-  'doc-1': {
-    nodes: [
-      { id: 'n1', label: 'Revenue', type: 'metric', x: 200, y: 150 },
-      { id: 'n2', label: 'Q3 2026', type: 'period', x: 350, y: 80 },
-      { id: 'n3', label: 'Enterprise', type: 'segment', x: 100, y: 80 },
-      { id: 'n4', label: '$4.2M', type: 'value', x: 200, y: 250 },
-      { id: 'n5', label: '+18% YoY', type: 'growth', x: 350, y: 200 },
-      { id: 'n6', label: 'Gross Margin', type: 'metric', x: 50, y: 200 },
-      { id: 'n7', label: '68%', type: 'value', x: 50, y: 280 },
-    ],
-    edges: [
-      { source: 'n1', target: 'n4', label: 'equals' },
-      { source: 'n1', target: 'n2', label: 'period' },
-      { source: 'n3', target: 'n1', label: 'drives' },
-      { source: 'n1', target: 'n5', label: 'growth' },
-      { source: 'n6', target: 'n7', label: 'equals' },
-      { source: 'n6', target: 'n1', label: 'impacts' },
-    ],
-  },
-  'doc-2': {
-    nodes: [
-      { id: 'n1', label: 'NPS', type: 'metric', x: 200, y: 100 },
-      { id: 'n2', label: '72', type: 'value', x: 200, y: 200 },
-      { id: 'n3', label: 'Satisfaction', type: 'metric', x: 350, y: 150 },
-      { id: 'n4', label: '4.5/5', type: 'value', x: 350, y: 250 },
-      { id: 'n5', label: 'Product', type: 'category', x: 100, y: 180 },
-    ],
-    edges: [
-      { source: 'n1', target: 'n2', label: 'score' },
-      { source: 'n3', target: 'n4', label: 'rating' },
-      { source: 'n5', target: 'n1', label: 'influences' },
-      { source: 'n5', target: 'n3', label: 'influences' },
-    ],
-  },
-  'doc-4': {
-    nodes: [
-      { id: 'n1', label: 'TAM', type: 'metric', x: 200, y: 100 },
-      { id: 'n2', label: '$12B', type: 'value', x: 200, y: 200 },
-      { id: 'n3', label: 'Competitor A', type: 'segment', x: 80, y: 150 },
-      { id: 'n4', label: '32%', type: 'value', x: 80, y: 250 },
-      { id: 'n5', label: 'Us', type: 'segment', x: 320, y: 150 },
-      { id: 'n6', label: '8%', type: 'value', x: 320, y: 250 },
-      { id: 'n7', label: 'Growth', type: 'growth', x: 200, y: 300 },
-    ],
-    edges: [
-      { source: 'n1', target: 'n2', label: 'size' },
-      { source: 'n3', target: 'n4', label: 'share' },
-      { source: 'n5', target: 'n6', label: 'share' },
-      { source: 'n3', target: 'n1', label: 'in' },
-      { source: 'n5', target: 'n1', label: 'in' },
-      { source: 'n5', target: 'n7', label: 'potential' },
-    ],
-  },
-};
-
-// Demo insights with key facts and sources
-const DEMO_INSIGHTS = {
-  'doc-1': {
-    summary: 'Q3 Financial Performance Analysis',
-    keyFacts: [
-      { fact: 'Revenue reached $4.2M', confidence: 0.95, source: 'Page 3' },
-      { fact: 'YoY growth of 18%', confidence: 0.92, source: 'Page 5' },
-      { fact: 'Enterprise segment contributed 62%', confidence: 0.89, source: 'Page 8' },
-      { fact: 'Operating expenses reduced by 5%', confidence: 0.91, source: 'Page 12' },
-    ],
-    recommendations: [
-      'Expand enterprise sales team for high ROI',
-      'Invest in customer success to improve retention',
-      'Accelerate automation initiatives',
-    ],
-    sources: [
-      { page: 3, text: 'Total Q3 revenue of $4.2 million...', relevance: 0.95 },
-      { page: 5, text: 'Compared to Q3 2025, revenue increased by 18%...', relevance: 0.92 },
-      { page: 8, text: 'Enterprise customers now represent 62% of total revenue...', relevance: 0.89 },
-    ],
-  },
-  'doc-2': {
-    summary: 'Customer Satisfaction Insights',
-    keyFacts: [
-      { fact: 'NPS score of 72 (up 8 points)', confidence: 0.96, source: 'Summary' },
-      { fact: 'Product quality rated 4.7/5', confidence: 0.94, source: 'Section 2' },
-      { fact: 'Support response time needs improvement', confidence: 0.88, source: 'Section 4' },
-    ],
-    recommendations: [
-      'Prioritize mobile app improvements',
-      'Enhance API documentation',
-      'Reduce support response time',
-    ],
-    sources: [
-      { page: 1, text: 'Net Promoter Score reached 72...', relevance: 0.96 },
-      { page: 4, text: 'Average support response time of 4.2 hours...', relevance: 0.88 },
-    ],
-  },
-  'doc-3': {
-    summary: 'Product Strategy Overview',
-    keyFacts: [
-      { fact: '24 features planned for 2026', confidence: 0.97, source: 'Roadmap' },
-      { fact: '8 features launching in Q4', confidence: 0.95, source: 'Q4 Section' },
-      { fact: '15% tech debt reduction target', confidence: 0.90, source: 'Goals' },
-    ],
-    recommendations: [
-      'Prioritize AI assistant feature launch',
-      'Allocate resources for mobile v2',
-      'Address tech debt before scaling',
-    ],
-    sources: [
-      { page: 2, text: 'Q4 priorities include AI assistant launch...', relevance: 0.97 },
-      { page: 5, text: 'Technical debt reduction target of 15%...', relevance: 0.90 },
-    ],
-  },
-  'doc-4': {
-    summary: 'Market Landscape & Competitive Analysis',
-    keyFacts: [
-      { fact: 'Total addressable market is $12B', confidence: 0.94, source: 'Page 4' },
-      { fact: 'Market growing at 24% CAGR', confidence: 0.92, source: 'Page 6' },
-      { fact: 'Top competitor holds 32% market share', confidence: 0.96, source: 'Page 12' },
-      { fact: 'Our current position is 8% market share', confidence: 0.91, source: 'Page 15' },
-      { fact: 'Mid-market segment shows highest growth potential', confidence: 0.89, source: 'Page 22' },
-    ],
-    recommendations: [
-      'Focus expansion on mid-market segment',
-      'Differentiate on AI capabilities vs competitors',
-      'Increase North America sales presence',
-      'Target 15% market share by 2027',
-    ],
-    sources: [
-      { page: 4, text: 'The total addressable market for enterprise solutions reached $12 billion...', relevance: 0.94 },
-      { page: 12, text: 'Competitor A maintains market leadership with 32% share...', relevance: 0.96 },
-      { page: 22, text: 'Mid-market companies represent the fastest-growing segment at 45% growth...', relevance: 0.89 },
-    ],
-  },
-};
-
 // Suggested prompts
 const SUGGESTED_PROMPTS = [
   'What are the key findings?',
@@ -275,11 +44,6 @@ function DataInsights() {
       return {};
     }
   }, []);
-
-  // Demo mode detection
-  const [isDemoMode, setIsDemoMode] = useState(() => {
-    return localStorage.getItem('enableAgentsMode') === 'demo';
-  });
 
   // Workflow context - for saving results back to workflow
   const { isInWorkflow, isHistoryView, stageData, stageId, saveStageData, getContext } = useWorkflowContext();
@@ -333,21 +97,6 @@ function DataInsights() {
     setSearchParams(params, { replace: true });
   }, [activeView, selectedDocument, searchParams, setSearchParams]);
 
-  // Listen for mode changes
-  useEffect(() => {
-    const handleModeChange = () => {
-      const newMode = localStorage.getItem('enableAgentsMode') === 'demo';
-      if (isDemoMode !== newMode) {
-        setIsDemoMode(newMode);
-        setCurrentInsight(null);
-        setConversationHistory([]);
-        setSelectedDocument(null);
-      }
-    };
-    window.addEventListener('storage', handleModeChange);
-    return () => window.removeEventListener('storage', handleModeChange);
-  }, [isDemoMode]);
-
   // Load documents when project selected
   useEffect(() => {
     if (!selectedProjectId) {
@@ -357,13 +106,8 @@ function DataInsights() {
       return;
     }
 
-    if (isDemoMode) {
-      setDocuments(DEMO_DOCUMENTS);
-    } else {
-      // Live mode - fetch from backend
-      fetchDocuments();
-    }
-  }, [isDemoMode, selectedProjectId]);
+    fetchDocuments();
+  }, [selectedProjectId]);
 
   // Fetch documents from backend (live mode)
   const fetchDocuments = async () => {
@@ -545,10 +289,7 @@ function DataInsights() {
     setActiveView('analysis');
     setAnalysisTab('insights');
 
-    // Load demo insights if available
-    if (isDemoMode && DEMO_INSIGHTS[doc.id]) {
-      setCurrentInsight(DEMO_INSIGHTS[doc.id]);
-    } else if (!isDemoMode && doc.status === 'completed') {
+    if (doc.status === 'completed') {
       fetchDocumentInsight(doc.id);
     } else {
       setCurrentInsight(null);
@@ -584,40 +325,7 @@ function DataInsights() {
 
     setIsUploading(true);
 
-    if (isDemoMode) {
-      setTimeout(() => {
-        const newDocs = files.map((file, idx) => ({
-          id: `doc-new-${Date.now()}-${idx}`,
-          name: file.name,
-          type: file.name.split('.').pop().toLowerCase(),
-          size: `${(file.size / 1024 / 1024).toFixed(1)} MB`,
-          uploadedAt: new Date().toISOString().split('T')[0],
-          category: 'other',
-          pages: null,
-          status: 'processing',
-          entities: 0,
-          relationships: 0,
-          confidence: 0,
-        }));
-        setDocuments([...newDocs, ...documents]);
-        setFiles([]);
-        setIsUploading(false);
-        showToast(`${files.length} file(s) uploaded - processing started`, 'info');
-
-        // Simulate processing completion after 3 seconds
-        setTimeout(() => {
-          setDocuments(prev => prev.map(d =>
-            newDocs.find(n => n.id === d.id)
-              ? { ...d, status: 'completed', entities: Math.floor(Math.random() * 30) + 10, relationships: Math.floor(Math.random() * 20) + 5, confidence: 0.85 + Math.random() * 0.1 }
-              : d
-          ));
-          showToast('Document processing completed', 'success');
-        }, 3000);
-      }, 1000);
-      return;
-    }
-
-    // Live mode - upload to backend API
+    // Upload to backend API
     const uploadedDocIds = [];
 
     try {
@@ -684,35 +392,7 @@ function DataInsights() {
     const userMessage = { role: 'user', content: inputPrompt, timestamp: new Date() };
     setConversationHistory(prev => [...prev, userMessage]);
 
-    if (isDemoMode) {
-      setTimeout(() => {
-        const baseInsight = DEMO_INSIGHTS[selectedDocument.id] || DEMO_INSIGHTS['doc-1'];
-        const aiResponse = {
-          role: 'assistant',
-          content: `Based on **${selectedDocument.name}**:\n\n${baseInsight.keyFacts.map(f => `• ${f.fact}`).join('\n')}\n\n**Recommendations:**\n${baseInsight.recommendations.map(r => `• ${r}`).join('\n')}`,
-          timestamp: new Date(),
-          sources: baseInsight.sources,
-          confidence: 0.92,
-        };
-        setConversationHistory(prev => [...prev, aiResponse]);
-        setInputPrompt('');
-        setIsLoading(false);
-
-        // Save to workflow if in workflow context
-        if (isInWorkflow) {
-          saveStageData({
-            document_analyzed: selectedDocument.name,
-            analysis_query: inputPrompt,
-            key_findings: baseInsight.keyFacts.map(f => f.fact),
-            recommendations: baseInsight.recommendations,
-            confidence_score: 0.92,
-          });
-        }
-      }, 1500);
-      return;
-    }
-
-    // Live mode - use document intelligence chat API
+    // Use document intelligence chat API
     try {
       const response = await fetch(`${DOC_API}/chat`, {
         method: 'POST',
@@ -793,10 +473,8 @@ function DataInsights() {
   const [liveEntities, setLiveEntities] = useState([]);
   const [liveEntitiesByType, setLiveEntitiesByType] = useState(null);
 
-  // Fetch entities for document (live mode)
+  // Fetch entities for document
   const fetchDocumentEntities = async (documentId) => {
-    if (isDemoMode) return;
-
     try {
       const res = await fetch(`${DOC_API}/status/${documentId}?project_id=${selectedProjectId}`, {
         headers: authOptionalHeaders(),
@@ -829,9 +507,6 @@ function DataInsights() {
   // Get entities for selected document
   const getDocumentEntities = () => {
     if (!selectedDocument) return [];
-    if (isDemoMode) {
-      return DEMO_ENTITIES[selectedDocument.id] || [];
-    }
     // Structured entity extraction (with page/type) isn't available for a
     // synthetic workflow document, or before the real pipeline finishes -
     // fall back to the flat key facts we already have so the tab isn't
@@ -848,12 +523,12 @@ function DataInsights() {
     return liveEntities;
   };
 
-  // Fetch entities when document is selected (live mode)
+  // Fetch entities when document is selected
   useEffect(() => {
-    if (selectedDocument && !isDemoMode && selectedDocument.id !== 'workflow-doc') {
+    if (selectedDocument && selectedDocument.id !== 'workflow-doc') {
       fetchDocumentEntities(selectedDocument.id);
     }
-  }, [selectedDocument, isDemoMode]);
+  }, [selectedDocument]);
 
   // Load workflow data when viewing completed stage history
   useEffect(() => {
@@ -940,10 +615,10 @@ function DataInsights() {
 
   // Get graph for selected document
   // Builds a real graph from the document's extracted entities (grouped by
-  // type, e.g. email/money/date) when there's no demo data to fall back on.
-  // There's no LLM-derived relationship data to draw on, so edges connect
-  // each entity to a hub node for its type rather than asserting a
-  // specific (and potentially false) relationship between entities.
+  // type, e.g. email/money/date). There's no LLM-derived relationship data
+  // to draw on, so edges connect each entity to a hub node for its type
+  // rather than asserting a specific (and potentially false) relationship
+  // between entities.
   const buildLiveGraph = (entitiesByType) => {
     const types = Object.keys(entitiesByType || {}).filter(t => entitiesByType[t]?.length > 0).slice(0, 5);
     if (types.length === 0) return null;
@@ -988,7 +663,6 @@ function DataInsights() {
 
   const getDocumentGraph = () => {
     if (!selectedDocument) return null;
-    if (isDemoMode) return DEMO_GRAPHS[selectedDocument.id] || null;
     if (liveEntitiesByType && Object.keys(liveEntitiesByType).length > 0) {
       return buildLiveGraph(liveEntitiesByType);
     }

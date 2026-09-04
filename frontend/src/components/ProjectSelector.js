@@ -8,36 +8,19 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import './ProjectSelector.css';
-import { initializeDemoProjects } from '../hooks/useProjectData';
-import { useMode } from '../contexts';
 import { authOptionalHeaders } from '../core/authHeaders';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
-const PROJECTS_STORAGE_KEY = 'enableAgentsProjects';
 // Remembers the last project picked in ANY agent, so navigating to a
 // different agent (or leaving and coming back) restores it instead of
 // requiring the user to pick a project again every time - the `?project=`
 // URL param alone doesn't survive a plain nav-link click to another agent.
 const LAST_PROJECT_STORAGE_KEY = 'enableAgentsLastProjectId';
 
-// Helper to get projects from localStorage
-const getStoredProjects = () => {
-  try {
-    const data = localStorage.getItem(PROJECTS_STORAGE_KEY);
-    return data ? JSON.parse(data) : [];
-  } catch {
-    return [];
-  }
-};
-
-// Initialize demo projects if needed
-initializeDemoProjects();
-
 function ProjectSelector({ agentKey, onProjectChange }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const userEmail = localStorage.getItem('userEmail') || '';
-  const { isDemoMode } = useMode();
 
   const [projects, setProjects] = useState([]);
   const [selectedProject, setSelectedProject] = useState(null);
@@ -55,9 +38,9 @@ function ProjectSelector({ agentKey, onProjectChange }) {
   // Fetch projects for this agent
   useEffect(() => {
     fetchProjects();
-  }, [isDemoMode, agentKey]);
+  }, [agentKey]);
 
-  // Set selected project from URL; auto-select first project in demo mode
+  // Set selected project from URL, or restore the last one used
   useEffect(() => {
     if (projectIdFromUrl && projects.length > 0) {
       const project = projects.find(p => p.id === projectIdFromUrl);
@@ -70,7 +53,7 @@ function ProjectSelector({ agentKey, onProjectChange }) {
         // Remember it even when it arrived via a deep link (e.g. opened from
         // the Projects page) rather than a manual dropdown pick, so the next
         // agent visited without its own `?project=` can still restore it.
-        if (!isDemoMode) localStorage.setItem(LAST_PROJECT_STORAGE_KEY, project.id);
+        localStorage.setItem(LAST_PROJECT_STORAGE_KEY, project.id);
       }
       return;
     }
@@ -81,15 +64,9 @@ function ProjectSelector({ agentKey, onProjectChange }) {
       const currentPath = window.location.pathname;
       const newParams = new URLSearchParams(window.location.search);
 
-      if (isDemoMode) {
-        newParams.set('project', projects[0].id);
-        navigate(`${currentPath}?${newParams.toString()}`, { replace: true });
-        return;
-      }
-
-      // Live mode: restore the last project selected in any agent, if it's
-      // still one this agent has access to, instead of making the user pick
-      // a project again every time they open a different agent.
+      // Restore the last project selected in any agent, if it's still one
+      // this agent has access to, instead of making the user pick a
+      // project again every time they open a different agent.
       const rememberedId = localStorage.getItem(LAST_PROJECT_STORAGE_KEY);
       const remembered = rememberedId && projects.find(p => p.id === rememberedId);
       if (remembered) {
@@ -97,7 +74,7 @@ function ProjectSelector({ agentKey, onProjectChange }) {
         navigate(`${currentPath}?${newParams.toString()}`, { replace: true });
       }
     }
-  }, [projectIdFromUrl, projects, isDemoMode, loading, navigate]);
+  }, [projectIdFromUrl, projects, loading, navigate]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -111,14 +88,6 @@ function ProjectSelector({ agentKey, onProjectChange }) {
   }, []);
 
   const fetchProjects = async () => {
-    if (isDemoMode) {
-      // Show ALL projects (not filtered by agent)
-      const allProjects = getStoredProjects();
-      setProjects(allProjects);
-      setLoading(false);
-      return;
-    }
-
     try {
       // Fetch all user projects (not filtered by agent)
       const res = await fetch(`${API_URL}/api/projects`, {

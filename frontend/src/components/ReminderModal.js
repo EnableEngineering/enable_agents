@@ -20,7 +20,6 @@ function ReminderModal({
   onClose,
   recipient,      // { name, email?, phone? }
   context,        // { taskTitle?, taskDetails?, projectName? }
-  isDemoMode = false,
 }) {
   const [selectedChannel, setSelectedChannel] = useState(null);
   const [customMessage, setCustomMessage] = useState('');
@@ -68,7 +67,6 @@ function ReminderModal({
       recipient,
       subject,
       message,
-      isDemoMode,
     });
 
     setSending(false);

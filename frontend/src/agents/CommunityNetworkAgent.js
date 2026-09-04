@@ -9,26 +9,14 @@ import { authJsonHeaders, authOptionalHeaders } from '../core/authHeaders';
 import MessageContent from '../components/MessageContent';
 import { formatDate, formatTime, getRelativeDateLabel, isSameDay } from '../utils/dateFormat';
 import { useSelectedProjectId } from '../hooks/useSelectedProjectId';
-import { useMode } from '../contexts';
 
 // message.data.type values with their own rich renderer in the chat below -
 // any other type (e.g. csv_upload_success) still renders as a normal text
 // message, just with extra metadata attached.
 const RICH_MESSAGE_TYPES = ['search_results', 'user_favorites', 'profile_detail', 'cv_analysis'];
 
-// Demo network data
-const DEMO_NETWORK_DATA = [
-  { name: 'Alex Chen', company: 'TechCorp', role: 'CTO', industry: 'Technology', location: 'San Francisco', email: 'alex@techcorp.com', linkedin: 'linkedin.com/in/alexchen', skills: ['AI', 'Cloud', 'Leadership'] },
-  { name: 'Maria Garcia', company: 'HealthFirst', role: 'VP Marketing', industry: 'Healthcare', location: 'Boston', email: 'maria@healthfirst.com', linkedin: 'linkedin.com/in/mariagarcia', skills: ['Marketing', 'Strategy', 'Healthcare'] },
-  { name: 'James Wilson', company: 'FinanceHub', role: 'Director', industry: 'Finance', location: 'New York', email: 'james@financehub.com', linkedin: 'linkedin.com/in/jameswilson', skills: ['Finance', 'Analytics', 'Investment'] },
-  { name: 'Sarah Kim', company: 'EduTech', role: 'Founder', industry: 'Education', location: 'Seattle', email: 'sarah@edutech.io', linkedin: 'linkedin.com/in/sarahkim', skills: ['EdTech', 'Startups', 'Product'] },
-  { name: 'David Brown', company: 'CloudScale', role: 'Engineering Lead', industry: 'Technology', location: 'Austin', email: 'david@cloudscale.com', linkedin: 'linkedin.com/in/davidbrown', skills: ['Engineering', 'DevOps', 'Scale'] },
-];
-
 function CommunityNetworkAgent() {
   const selectedProjectId = useSelectedProjectId();
-  const { isDemoMode } = useMode();
-  const prevModeRef = useRef(isDemoMode);
   const {
     messages, inputMessage, setInputMessage,
     isLoading, setIsLoading, messagesEndRef,
@@ -50,50 +38,17 @@ function CommunityNetworkAgent() {
   const currentUserId = localStorage.getItem('userEmail') || 'anonymous';
   const [userFavorites, setUserFavorites] = useState([]);
 
-  // Handle mode change side effects
-  useEffect(() => {
-    if (prevModeRef.current && !isDemoMode) {
-      // Switching from demo to live: clear chat
-      clearChat();
-    }
-    prevModeRef.current = isDemoMode;
-  }, [isDemoMode, clearChat]);
-
-  // Preload demo network data when a project is selected in demo mode
+  // Clear cached data when the project changes
   useEffect(() => {
     if (!selectedProjectId) {
       setCsvData(null);
       setUserProfile(null);
-      return;
     }
-    if (isDemoMode) {
-      setCsvData(DEMO_NETWORK_DATA);
-    } else {
-      setCsvData(null);
-      setUserProfile(null);
-    }
-  }, [isDemoMode, selectedProjectId]);
+  }, [selectedProjectId]);
 
   // Function to save JSON data to file
   // Enhanced handleSearch function with better user feedback
   const handleSearch = async (query) => {
-    // Demo mode: use mock search results
-    if (isDemoMode) {
-      addMessage("Searching through the network... (Demo Mode)", 'agent', null, 'markdown');
-      const filteredResults = DEMO_NETWORK_DATA.filter(person =>
-        person.name.toLowerCase().includes(query.toLowerCase()) ||
-        person.company.toLowerCase().includes(query.toLowerCase()) ||
-        person.industry.toLowerCase().includes(query.toLowerCase()) ||
-        person.skills.some(s => s.toLowerCase().includes(query.toLowerCase()))
-      );
-      const results = filteredResults.length > 0 ? filteredResults : DEMO_NETWORK_DATA.slice(0, 3);
-      addMessage(`**Search Results** (${results.length} found)`, 'agent', {
-        type: 'search_results',
-        data: { results, total_found: results.length, query },
-      }, 'markdown');
-      return;
-    }
-
     try {
       addMessage("Searching through the data...", 'agent', null, 'markdown');
 
@@ -730,10 +685,7 @@ function CommunityNetworkAgent() {
               </span>
             </div>
             <p>Upload network data or ask the Admin for access. Write at <strong>engineering@enableyou.co</strong> for data access</p>
-            {isDemoMode && csvData && (
-              <p className="demo-data-banner">Sample network loaded ({csvData.length} profiles) — try asking &quot;Find engineers in technology&quot;</p>
-            )}
-            <button 
+            <button
               onClick={() => csvFileRef.current?.click()} 
               className="upload-btn csv-btn"
               disabled={isLoading}

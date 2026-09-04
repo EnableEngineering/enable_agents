@@ -5,58 +5,9 @@ import { BackButton, ProjectGate, ProjectSelector, WorkflowExecutionBanner, Work
 import { API_CONFIG } from '../config/apiConfig';
 import { authJsonHeaders } from '../core/authHeaders';
 import { showToast } from '../core/toast';
-import { useMode } from '../contexts';
 import { useWorkflowContext } from '../hooks';
 import { useSelectedProjectId } from '../hooks/useSelectedProjectId';
 import './SupplyChainAgent.css';
-
-// Demo suppliers for qualification audit
-const DEMO_SUPPLIERS = [
-  {
-    id: 1,
-    name: 'Bharat Precision Engineering',
-    location: 'Gujarat, India',
-    certifications: ['ISO 9001', 'IATF 16949'],
-    auditStatus: 'passed',
-    auditDate: '2026-07-18',
-    score: 92,
-    capabilities: ['CNC Machining', 'Die Casting', 'Surface Treatment'],
-    capacity: '100,000 units/month',
-  },
-  {
-    id: 2,
-    name: 'Precision Components Ltd',
-    location: 'Pune, India',
-    certifications: ['ISO 9001', 'ISO 14001'],
-    auditStatus: 'pending',
-    auditDate: null,
-    score: null,
-    capabilities: ['CNC Machining', 'Assembly'],
-    capacity: '50,000 units/month',
-  },
-  {
-    id: 3,
-    name: 'Quality CNC Works',
-    location: 'Chennai, India',
-    certifications: ['ISO 9001'],
-    auditStatus: 'scheduled',
-    auditDate: '2026-07-25',
-    score: null,
-    capabilities: ['CNC Machining', 'Grinding'],
-    capacity: '75,000 units/month',
-  },
-  {
-    id: 4,
-    name: 'Shenzhen MFG Co.',
-    location: 'Shenzhen, China',
-    certifications: ['ISO 9001', 'IATF 16949', 'ISO 14001'],
-    auditStatus: 'passed',
-    auditDate: '2026-07-15',
-    score: 88,
-    capabilities: ['CNC Machining', 'Die Casting', 'Injection Molding'],
-    capacity: '200,000 units/month',
-  },
-];
 
 const AUDIT_CRITERIA = [
   { id: 'facility', name: 'Facility & Equipment', weight: 25 },
@@ -67,11 +18,10 @@ const AUDIT_CRITERIA = [
 ];
 
 function SupplyChainAgent() {
-  const { isDemoMode } = useMode();
   const selectedProjectId = useSelectedProjectId();
   const { isInWorkflow, isHistoryView, stageData, stageId, saveStageData, getContext, context: workflowContext } = useWorkflowContext();
 
-  const [suppliers, setSuppliers] = useState(isDemoMode ? DEMO_SUPPLIERS : []);
+  const [suppliers, setSuppliers] = useState([]);
   const [selectedSupplier, setSelectedSupplier] = useState(null);
   const [auditScores, setAuditScores] = useState({});
   const [showAuditModal, setShowAuditModal] = useState(false);
@@ -103,42 +53,19 @@ function SupplyChainAgent() {
     }
   };
 
-  // Load suppliers when mode or project changes
+  // Load suppliers when project changes
   useEffect(() => {
-    if (isDemoMode) {
-      setSuppliers(DEMO_SUPPLIERS);
-      return;
-    }
     if (!selectedProjectId) {
       setSuppliers([]);
       return;
     }
     fetchSuppliers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isDemoMode, selectedProjectId]);
+  }, [selectedProjectId]);
 
   const handleAddSupplier = async () => {
     if (!newSupplier.name.trim()) {
       showToast('Please enter a supplier name', 'warning');
-      return;
-    }
-
-    if (isDemoMode) {
-      const demoAdd = {
-        id: Date.now(),
-        name: newSupplier.name,
-        location: newSupplier.location,
-        capacity: newSupplier.capacity,
-        certifications: newSupplier.certifications.split(',').map(c => c.trim()).filter(Boolean),
-        capabilities: newSupplier.capabilities.split(',').map(c => c.trim()).filter(Boolean),
-        auditStatus: 'pending',
-        score: null,
-        auditDate: null,
-      };
-      setSuppliers(prev => [demoAdd, ...prev]);
-      setShowAddSupplierModal(false);
-      setNewSupplier({ name: '', location: '', capacity: '', certifications: '', capabilities: '' });
-      showToast('Supplier added (Demo Mode)', 'info');
       return;
     }
 
@@ -222,28 +149,26 @@ function SupplyChainAgent() {
     const auditResult = totalScore >= 70 ? 'passed' : 'failed';
     const auditDate = new Date().toISOString().split('T')[0];
 
-    if (!isDemoMode) {
-      setSaving(true);
-      try {
-        const response = await fetch(`${API_CONFIG.API_URL}/api/supply-chain/suppliers/${selectedSupplier.id}/audit`, {
-          method: 'PUT',
-          headers: authJsonHeaders(),
-          body: JSON.stringify({ score: totalScore }),
-        });
-        const data = await response.json();
-        if (!data.success) {
-          showToast(data.error || 'Failed to save audit', 'error');
-          setSaving(false);
-          return;
-        }
-      } catch (error) {
-        console.error('Error saving audit:', error);
-        showToast('Failed to save audit', 'error');
+    setSaving(true);
+    try {
+      const response = await fetch(`${API_CONFIG.API_URL}/api/supply-chain/suppliers/${selectedSupplier.id}/audit`, {
+        method: 'PUT',
+        headers: authJsonHeaders(),
+        body: JSON.stringify({ score: totalScore }),
+      });
+      const data = await response.json();
+      if (!data.success) {
+        showToast(data.error || 'Failed to save audit', 'error');
         setSaving(false);
         return;
       }
+    } catch (error) {
+      console.error('Error saving audit:', error);
+      showToast('Failed to save audit', 'error');
       setSaving(false);
+      return;
     }
+    setSaving(false);
 
     // Update supplier with audit results
     const updatedSuppliers = suppliers.map(s =>

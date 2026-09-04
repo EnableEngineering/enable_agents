@@ -1,12 +1,8 @@
 /**
- * Mode Storage Utility
+ * Agent Data Storage Utility
  *
- * Centralized storage for demo/live mode data segregation.
- * All agent data is stored under single keys to keep it organized:
- * - localStorage 'demoData': All demo mode data for all agents
- * - localStorage 'liveData': All live mode data for all agents
- *
- * Structure:
+ * Centralized localStorage persistence for per-agent UI state, keyed under
+ * a single 'enableAgentsLiveData' object so it stays organized:
  * {
  *   marketResearch: { results, savedLists, overview, ... },
  *   chatbot: { messages, history },
@@ -19,32 +15,14 @@
  * }
  */
 
-const DEMO_KEY = 'enableAgentsDemoData';
-const LIVE_KEY = 'enableAgentsLiveData';
+const STORAGE_KEY = 'enableAgentsLiveData';
 
 /**
- * Check if currently in demo mode. Default is Live when unset - was
- * `!== 'live'`, the opposite of the locked default. Same fix as
- * contexts/ModeContext.js and utils/demoApi.js, which duplicate this check.
+ * Get all stored agent data
  */
-export const isDemoMode = () => {
-  return localStorage.getItem('enableAgentsMode') === 'demo';
-};
-
-/**
- * Get the storage key based on mode
- */
-const getStorageKey = (isDemo = isDemoMode()) => {
-  return isDemo ? DEMO_KEY : LIVE_KEY;
-};
-
-/**
- * Get all data for current mode
- */
-export const getAllModeData = (isDemo = isDemoMode()) => {
+export const getAllModeData = () => {
   try {
-    const key = getStorageKey(isDemo);
-    const data = localStorage.getItem(key);
+    const data = localStorage.getItem(STORAGE_KEY);
     return data ? JSON.parse(data) : {};
   } catch {
     return {};
@@ -52,31 +30,24 @@ export const getAllModeData = (isDemo = isDemoMode()) => {
 };
 
 /**
- * Get agent-specific data for current mode
+ * Get agent-specific data
  * @param {string} agentKey - The agent identifier (e.g., 'marketResearch', 'chatbot')
- * @param {boolean} isDemo - Override demo mode check
  */
-export const getAgentData = (agentKey, isDemo = isDemoMode()) => {
-  const key = getStorageKey(isDemo);
-  const allData = getAllModeData(isDemo);
-  const result = allData[agentKey] || null;
-  console.log('[STORAGE_DEBUG] getAgentData:', agentKey, 'isDemo:', isDemo, 'storageKey:', key, 'hasData:', !!result);
-  return result;
+export const getAgentData = (agentKey) => {
+  const allData = getAllModeData();
+  return allData[agentKey] || null;
 };
 
 /**
- * Set agent-specific data for current mode
+ * Set agent-specific data
  * @param {string} agentKey - The agent identifier
  * @param {object} data - The data to store
- * @param {boolean} isDemo - Override demo mode check
  */
-export const setAgentData = (agentKey, data, isDemo = isDemoMode()) => {
+export const setAgentData = (agentKey, data) => {
   try {
-    const key = getStorageKey(isDemo);
-    console.log('[STORAGE_DEBUG] setAgentData:', agentKey, 'isDemo:', isDemo, 'storageKey:', key);
-    const allData = getAllModeData(isDemo);
+    const allData = getAllModeData();
     allData[agentKey] = data;
-    localStorage.setItem(key, JSON.stringify(allData));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(allData));
   } catch (e) {
     console.warn('Failed to save agent data:', e);
   }
@@ -86,55 +57,46 @@ export const setAgentData = (agentKey, data, isDemo = isDemoMode()) => {
  * Update specific fields within agent data (merge)
  * @param {string} agentKey - The agent identifier
  * @param {object} updates - Fields to update/merge
- * @param {boolean} isDemo - Override demo mode check
  */
-export const updateAgentData = (agentKey, updates, isDemo = isDemoMode()) => {
-  const current = getAgentData(agentKey, isDemo) || {};
-  setAgentData(agentKey, { ...current, ...updates }, isDemo);
+export const updateAgentData = (agentKey, updates) => {
+  const current = getAgentData(agentKey) || {};
+  setAgentData(agentKey, { ...current, ...updates });
 };
 
 /**
- * Clear agent data for specific mode
+ * Clear agent data
  * @param {string} agentKey - The agent identifier
- * @param {boolean} isDemo - Override demo mode check
  */
-export const clearAgentData = (agentKey, isDemo = isDemoMode()) => {
+export const clearAgentData = (agentKey) => {
   try {
-    const key = getStorageKey(isDemo);
-    const allData = getAllModeData(isDemo);
+    const allData = getAllModeData();
     delete allData[agentKey];
-    localStorage.setItem(key, JSON.stringify(allData));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(allData));
   } catch (e) {
     console.warn('Failed to clear agent data:', e);
   }
 };
 
 /**
- * Clear all data for specific mode
- * @param {boolean} isDemo - Override demo mode check
+ * Clear all stored agent data
  */
-export const clearAllModeData = (isDemo = isDemoMode()) => {
+export const clearAllModeData = () => {
   try {
-    const key = getStorageKey(isDemo);
-    localStorage.removeItem(key);
+    localStorage.removeItem(STORAGE_KEY);
   } catch (e) {
     console.warn('Failed to clear mode data:', e);
   }
 };
 
 /**
- * React hook for mode-aware storage
- * Returns current mode and functions to get/set agent data
+ * React hook for agent-scoped storage
  */
 export const useModeStorage = (agentKey) => {
-  const isDemo = isDemoMode();
-
   return {
-    isDemo,
-    getData: () => getAgentData(agentKey, isDemo),
-    setData: (data) => setAgentData(agentKey, data, isDemo),
-    updateData: (updates) => updateAgentData(agentKey, updates, isDemo),
-    clearData: () => clearAgentData(agentKey, isDemo),
+    getData: () => getAgentData(agentKey),
+    setData: (data) => setAgentData(agentKey, data),
+    updateData: (updates) => updateAgentData(agentKey, updates),
+    clearData: () => clearAgentData(agentKey),
   };
 };
 

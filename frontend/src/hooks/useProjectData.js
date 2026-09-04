@@ -3,41 +3,16 @@
  *
  * Manages project-scoped data persistence for agents.
  * - Loads data when project is selected
- * - Saves data to project context (localStorage in demo, API in live)
+ * - Saves data to project context via the API
  * - Provides shared data from other agents in the same project
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { getDemoProjectsWithData } from '../data/demo';
 import { showToast } from '../core/toast';
 import { authJsonHeaders, authOptionalHeaders } from '../core/authHeaders';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
-const PROJECTS_STORAGE_KEY = 'enableAgentsProjects';
-
-/**
- * Get projects from localStorage (demo mode)
- */
-const getStoredProjects = () => {
-  try {
-    const data = localStorage.getItem(PROJECTS_STORAGE_KEY);
-    return data ? JSON.parse(data) : [];
-  } catch {
-    return [];
-  }
-};
-
-/**
- * Save projects to localStorage (demo mode)
- */
-const saveStoredProjects = (projects) => {
-  try {
-    localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(projects));
-  } catch (e) {
-    console.warn('Failed to save projects:', e);
-  }
-};
 
 /**
  * Hook for managing project-scoped data
@@ -58,10 +33,6 @@ export function useProjectData(agentKey, options = {}) {
 
   const [searchParams] = useSearchParams();
   const projectId = searchParams.get('project');
-
-  const [isDemoMode] = useState(() => {
-    return localStorage.getItem('enableAgentsMode') === 'demo';
-  });
 
   const [project, setProject] = useState(null);
   const [agentData, setAgentData] = useState(() => defaultDataRef.current);
@@ -84,34 +55,6 @@ export function useProjectData(agentKey, options = {}) {
 
     setLoading(true);
 
-    if (isDemoMode) {
-      // Load from localStorage
-      const projects = getStoredProjects();
-      const proj = projects.find(p => p.id === id);
-
-      if (proj) {
-        setProject(proj);
-        // Load agent-specific data
-        const myData = proj.data?.[agentKey] || defaultDataRef.current;
-        setAgentData(myData);
-
-        // Load shared data from other agents
-        const shared = {};
-        Object.entries(proj.data || {}).forEach(([key, value]) => {
-          if (key !== agentKey) {
-            shared[key] = value;
-          }
-        });
-        setSharedData(shared);
-
-        onProjectLoadRef.current?.(proj, myData, shared);
-      }
-
-      setLoading(false);
-      return;
-    }
-
-    // Live mode - fetch from API
     try {
       const res = await fetch(`${API_URL}/api/projects/${id}`, {
         headers: authOptionalHeaders(),
@@ -141,7 +84,7 @@ export function useProjectData(agentKey, options = {}) {
     } finally {
       setLoading(false);
     }
-  }, [agentKey, isDemoMode, userEmail]);
+  }, [agentKey, userEmail]);
 
   /**
    * Save agent data to project
@@ -155,24 +98,6 @@ export function useProjectData(agentKey, options = {}) {
 
     setAgentData(newData);
 
-    if (isDemoMode) {
-      // Save to localStorage
-      const projects = getStoredProjects();
-      const idx = projects.findIndex(p => p.id === project.id);
-
-      if (idx >= 0) {
-        if (!projects[idx].data) {
-          projects[idx].data = {};
-        }
-        projects[idx].data[agentKey] = newData;
-        projects[idx].updatedAt = new Date().toISOString();
-        saveStoredProjects(projects);
-        setLastSaved(new Date());
-      }
-      return;
-    }
-
-    // Live mode - save to API
     try {
       const res = await fetch(`${API_URL}/api/projects/${project.id}/data`, {
         method: 'PUT',
@@ -194,7 +119,7 @@ export function useProjectData(agentKey, options = {}) {
       showToast('Failed to save - your changes were not stored', 'error');
       return false;
     }
-  }, [project, agentKey, isDemoMode, userEmail]);
+  }, [project, agentKey, userEmail]);
 
   /**
    * Update specific fields in agent data
@@ -246,29 +171,6 @@ export function useProjectData(agentKey, options = {}) {
     // Refresh
     refresh: () => loadProject(projectId),
   };
-}
-
-/**
- * Initialize demo projects in localStorage if not present
- * Uses demo data from JSON files in src/data/demo/
- */
-export function initializeDemoProjects() {
-  const existing = getStoredProjects();
-  if (existing.length > 0) return;
-
-  // Load demo projects with full agent data from JSON files
-  const demoProjects = getDemoProjectsWithData();
-  saveStoredProjects(demoProjects);
-}
-
-/**
- * Reset demo data to defaults from JSON files
- * Useful for "Reset Demo Data" button
- */
-export function resetDemoProjects() {
-  const demoProjects = getDemoProjectsWithData();
-  saveStoredProjects(demoProjects);
-  return demoProjects;
 }
 
 export default useProjectData;

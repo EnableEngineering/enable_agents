@@ -6,8 +6,7 @@
  */
 
 export {
-  // Mode storage (demo/live data segregation)
-  isDemoMode,
+  // Per-agent local UI state storage
   getAgentData,
   setAgentData,
   updateAgentData,
@@ -48,11 +47,3 @@ export {
   prefersReducedMotion,
   getAnimationDuration
 } from './accessibility';
-
-export {
-  // Demo mode API helpers
-  isDemoMode as isDemoModeApi,
-  demoFetch,
-  demoAiFetch,
-  showDemoWarning,
-} from './demoApi';

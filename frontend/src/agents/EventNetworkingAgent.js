@@ -12,25 +12,6 @@ import { authJsonHeaders } from '../core/authHeaders';
 // Storage key for persisting state
 const STATE_KEY = 'eventNetworkingState';
 
-// Demo mock data - comprehensive sample to showcase features
-const DEMO_EVENTS = [
-  { id: 'demo-event-1', name: 'Tech Summit 2026', description: 'Annual technology conference featuring keynotes from industry leaders', date: '2026-08-15', location: 'San Francisco, CA', attendee_count: 156, status: 'upcoming' },
-  { id: 'demo-event-2', name: 'AI & ML Meetup', description: 'Monthly AI practitioners gathering - deep learning focus', date: '2026-07-20', location: 'Austin, TX', attendee_count: 42, status: 'upcoming' },
-  { id: 'demo-event-3', name: 'SaaS Growth Conference', description: 'B2B SaaS strategies and networking', date: '2026-06-10', location: 'New York, NY', attendee_count: 89, status: 'past' },
-  { id: 'demo-event-4', name: 'Startup Pitch Night', description: 'Early-stage startups pitch to investors', date: '2026-07-25', location: 'Boston, MA', attendee_count: 34, status: 'upcoming' },
-];
-
-const DEMO_ATTENDEES = [
-  { id: 'att-1', name: 'Sarah Chen', email: 'sarah@techflow.io', company: 'TechFlow', role: 'CTO', interests: ['AI', 'Cloud', 'DevOps'], linkedin: 'linkedin.com/in/sarahchen', notes: 'Met at the keynote session. Very interested in our AI automation platform. She mentioned they are looking for solutions in Q3.', lastContact: '2026-07-15', followUpDate: '2026-07-20', priority: 'high' },
-  { id: 'att-2', name: 'Michael Roberts', email: 'michael@datawise.com', company: 'DataWise', role: 'VP Engineering', interests: ['Data', 'ML', 'Analytics'], linkedin: 'linkedin.com/in/mroberts', notes: 'Great conversation about data pipelines. He shared insights on their current ML stack. Wants a demo next month.', lastContact: '2026-07-14', followUpDate: '2026-07-18', priority: 'high' },
-  { id: 'att-3', name: 'Emily Watson', email: 'emily@startupco.io', company: 'StartupCo', role: 'Founder & CEO', interests: ['Startups', 'Fundraising', 'Product'], linkedin: 'linkedin.com/in/emilyw', notes: 'Founder of a promising startup. Discussed potential partnership opportunities. She is raising Series A.', lastContact: '2026-07-14', followUpDate: '', priority: 'medium' },
-  { id: 'att-4', name: 'David Kim', email: 'david@enterprise.com', company: 'Enterprise Corp', role: 'Director of IT', interests: ['Enterprise', 'Security', 'Cloud'], linkedin: 'linkedin.com/in/davidkim', notes: 'Enterprise buyer. Security is their top priority. Need to send case studies about our compliance features.', lastContact: '2026-07-13', followUpDate: '2026-07-16', priority: 'high' },
-  { id: 'att-5', name: 'Jessica Martinez', email: 'jessica@aiventures.co', company: 'AI Ventures', role: 'Partner', interests: ['AI', 'Investment', 'Startups'], linkedin: 'linkedin.com/in/jessicam', notes: 'Investor at AI-focused VC firm. Interested in learning more about our growth metrics. Could be valuable for future funding.', lastContact: '2026-07-12', followUpDate: '', priority: 'medium' },
-  { id: 'att-6', name: 'Alex Thompson', email: 'alex@cloudnative.dev', company: 'CloudNative', role: 'Principal Engineer', interests: ['Kubernetes', 'Cloud', 'Infrastructure'], linkedin: 'linkedin.com/in/alexthompson', notes: 'Deep technical background. Could be a great technical advisor or early adopter.', lastContact: '2026-07-15', followUpDate: '2026-07-22', priority: 'medium' },
-  { id: 'att-7', name: 'Rachel Green', email: 'rachel@innovatevc.com', company: 'Innovate VC', role: 'Associate', interests: ['Investing', 'B2B', 'SaaS'], linkedin: 'linkedin.com/in/rachelgreen', notes: 'Junior associate but very engaged. Her firm focuses on Series A/B investments.', lastContact: '2026-07-14', followUpDate: '', priority: 'low' },
-  { id: 'att-8', name: 'James Wilson', email: 'james@megacorp.com', company: 'MegaCorp', role: 'VP Product', interests: ['Product', 'Strategy', 'Enterprise'], linkedin: 'linkedin.com/in/jameswilson', notes: 'Leads product for their enterprise division. Potential large deal if we can meet their requirements.', lastContact: '2026-07-15', followUpDate: '2026-07-19', priority: 'high' },
-];
-
 function EventNetworkingAgent() {
   const selectedProjectId = useSelectedProjectId();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -44,11 +25,6 @@ function EventNetworkingAgent() {
       return {};
     }
   }, []);
-
-  // Demo mode detection
-  const [isDemoMode, setIsDemoMode] = useState(() => {
-    return localStorage.getItem('enableAgentsMode') === 'demo';
-  });
 
   // State with persistence from URL/sessionStorage
   const [activeTab, setActiveTab] = useState(() => {
@@ -116,31 +92,10 @@ function EventNetworkingAgent() {
       if (event) {
         // Inline restore logic (can't call handleSelectEvent yet)
         setSelectedEvent(event);
-        if (isDemoMode) {
-          setAttendees(DEMO_ATTENDEES);
-        }
         setPendingEventId(null);
       }
     }
-  }, [pendingEventId, events, selectedEvent, isDemoMode]);
-
-  // Listen for mode changes (storage event handles cross-tab changes)
-  useEffect(() => {
-    const handleModeChange = () => {
-      const newMode = localStorage.getItem('enableAgentsMode') === 'demo';
-      if (newMode !== isDemoMode) {
-        setIsDemoMode(newMode);
-        setEvents([]);
-        setSelectedEvent(null);
-        setAttendees([]);
-        setRecommendations([]);
-      }
-    };
-    window.addEventListener('storage', handleModeChange);
-    return () => {
-      window.removeEventListener('storage', handleModeChange);
-    };
-  }, [isDemoMode]);
+  }, [pendingEventId, events, selectedEvent]);
 
   // Helper: get upcoming follow-ups
   const getUpcomingFollowUps = () => {
@@ -180,18 +135,13 @@ function EventNetworkingAgent() {
       return;
     }
     fetchEvents();
-  }, [isDemoMode, selectedProjectId]);
+  }, [selectedProjectId]);
 
   const getCurrentUserId = () => {
     return localStorage.getItem('userEmail') || localStorage.getItem('username') || 'anonymous';
   };
 
   const fetchEvents = async () => {
-    if (isDemoMode) {
-      setEvents(DEMO_EVENTS);
-      return;
-    }
-
     try {
       setIsLoading(true);
       const response = await fetch(`${API_CONFIG.API_URL}/api/event-networking/events`, {
@@ -211,21 +161,6 @@ function EventNetworkingAgent() {
   const handleCreateEvent = async () => {
     if (!newEvent.name.trim()) {
       showToast('Please enter an event name', 'warning');
-      return;
-    }
-
-    if (isDemoMode) {
-      const demoEvent = {
-        id: `demo-${Date.now()}`,
-        ...newEvent,
-        attendee_count: 0,
-        created_at: new Date().toISOString(),
-      };
-      setEvents([...events, demoEvent]);
-      setSelectedEvent(demoEvent);
-      setShowCreateEvent(false);
-      setNewEvent({ name: '', description: '', date: '', location: '' });
-      showToast('Event created (Demo Mode)', 'info');
       return;
     }
 
@@ -257,11 +192,6 @@ function EventNetworkingAgent() {
   const handleSelectEvent = async (event) => {
     setSelectedEvent(event);
     setActiveTab('attendees');
-
-    if (isDemoMode) {
-      setAttendees(DEMO_ATTENDEES);
-      return;
-    }
 
     try {
       const response = await fetch(`${API_CONFIG.API_URL}/api/event-networking/events/${event.id}/attendees`, {
@@ -304,18 +234,6 @@ function EventNetworkingAgent() {
       return;
     }
 
-    if (isDemoMode) {
-      const newAttendees = attendeesToUpload.map((a, idx) => ({
-        ...a,
-        id: `att-new-${idx}`,
-      }));
-      setAttendees([...attendees, ...newAttendees]);
-      setShowUploadModal(false);
-      setCsvText('');
-      showToast(`${newAttendees.length} attendees added (Demo Mode)`, 'info');
-      return;
-    }
-
     try {
       setIsLoading(true);
       const response = await fetch(`${API_CONFIG.API_URL}/api/event-networking/events/${selectedEvent.id}/attendees`, {
@@ -347,18 +265,6 @@ function EventNetworkingAgent() {
     }
 
     const interests = userInterests.split(',').map(i => i.trim()).filter(Boolean);
-
-    if (isDemoMode) {
-      // Demo recommendations
-      const demoRecs = DEMO_ATTENDEES.slice(0, 3).map((a, idx) => ({
-        attendee: a,
-        score: 85 - idx * 10,
-        reasons: [`Shared interest in ${interests[0] || 'technology'}`, `Works at ${a.company}`],
-      }));
-      setRecommendations(demoRecs);
-      showToast('Recommendations generated (Demo Mode)', 'info');
-      return;
-    }
 
     try {
       setIsLoading(true);
@@ -392,13 +298,6 @@ function EventNetworkingAgent() {
 
     if (!followupBody.trim()) {
       showToast('Please enter a message', 'warning');
-      return;
-    }
-
-    if (isDemoMode) {
-      showToast(`Follow-up sent to ${selectedAttendees.length} attendees (Demo Mode)`, 'info');
-      setSelectedAttendees([]);
-      setFollowupBody('');
       return;
     }
 
@@ -455,13 +354,6 @@ function EventNetworkingAgent() {
       lastContact: new Date().toISOString().split('T')[0],
     };
 
-    if (isDemoMode) {
-      setAttendees(attendees.map(a => a.id === selectedContact.id ? updatedAttendee : a));
-      setSelectedContact(updatedAttendee);
-      showToast('Notes saved (Demo Mode)', 'info');
-      return;
-    }
-
     try {
       setIsLoading(true);
       const response = await fetch(`${API_CONFIG.API_URL}/api/event-networking/attendees/${selectedContact.id}/notes`, {
@@ -490,13 +382,6 @@ function EventNetworkingAgent() {
     if (!selectedContact) return;
 
     const updatedAttendee = { ...selectedContact, followUpDate: date };
-
-    if (isDemoMode) {
-      setAttendees(attendees.map(a => a.id === selectedContact.id ? updatedAttendee : a));
-      setSelectedContact(updatedAttendee);
-      showToast('Follow-up date set (Demo Mode)', 'info');
-      return;
-    }
 
     try {
       const response = await fetch(`${API_CONFIG.API_URL}/api/event-networking/attendees/${selectedContact.id}/followup-date`, {
@@ -871,29 +756,6 @@ Jane Smith,jane@startup.io,StartupIO,CTO,Product;Engineering"
                             <div className="timeline-text">{selectedContact.notes}</div>
                           </div>
                         </div>
-                      )}
-
-                      {/* Demo sample entries to show timeline concept */}
-                      {isDemoMode && selectedContact.id?.startsWith('att-') && (
-                        <>
-                          <div className="timeline-entry">
-                            <div className="timeline-marker" />
-                            <div className="timeline-content">
-                              <div className="timeline-date">2026-07-10</div>
-                              <div className="timeline-text">• Initial connection at event
-• Exchanged business cards
-• Discussed mutual interest in AI</div>
-                            </div>
-                          </div>
-                          <div className="timeline-entry">
-                            <div className="timeline-marker" />
-                            <div className="timeline-content">
-                              <div className="timeline-date">2026-07-08</div>
-                              <div className="timeline-text">• Pre-event research
-• Identified as key contact for {selectedContact.company}</div>
-                            </div>
-                          </div>
-                        </>
                       )}
                     </div>
 

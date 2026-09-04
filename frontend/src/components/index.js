@@ -29,7 +29,6 @@ export { default as BackButton } from './BackButton';
 export { default as SkipLink } from './SkipLink';
 export { default as ProjectSelector } from './ProjectSelector';
 export { default as ProjectGate } from './ProjectGate';
-export { default as DemoModeBadge } from './DemoModeBadge';
 export { default as LiveModeHint } from './LiveModeHint';
 export { default as AgentOutcomesStrip } from './AgentOutcomesStrip';
 export { default as AgentPlaceholderShell } from './AgentPlaceholderShell';

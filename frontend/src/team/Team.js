@@ -65,12 +65,6 @@ const ROLES = {
   viewer: { label: 'Viewer', cssClass: 'role-viewer' },
 };
 
-const DEMO_MEMBERS = [
-  { id: 'demo-1', email: 'you@company.com', name: 'You', role: 'owner' },
-  { id: 'demo-2', email: 'alex@company.com', name: 'Alex Chen', role: 'admin' },
-  { id: 'demo-3', email: 'sam@company.com', name: 'Sam Rivera', role: 'member' },
-];
-
 function Team() {
   const navigate = useNavigate();
   const userEmail = localStorage.getItem('userEmail') || '';
@@ -90,20 +84,6 @@ function Team() {
   }, []);
 
   const fetchTeam = async () => {
-    const isDemoMode = localStorage.getItem('enableAgentsMode') === 'demo';
-    if (isDemoMode) {
-      const demoMembers = DEMO_MEMBERS.map(m => ({
-        ...m,
-        email: m.id === 'demo-1' ? (userEmail || m.email) : m.email,
-        name: m.id === 'demo-1' ? (localStorage.getItem('firstName') || m.name) : m.name,
-      }));
-      setMembers(demoMembers);
-      setPendingInvites([]);
-      setCurrentUserRole('owner');
-      setLoading(false);
-      return;
-    }
-
     try {
       const res = await fetch(`${API_URL}/api/team`, {
         headers: authOptionalHeaders(),

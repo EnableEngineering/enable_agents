@@ -7,7 +7,6 @@ import { STRINGS } from '../constants/strings';
 import { authJsonHeaders } from '../core/authHeaders';
 import { showToast } from '../core/toast';
 import { useSelectedProjectId } from '../hooks/useSelectedProjectId';
-import { useMode } from '../contexts';
 import './WorkflowsPage.css';
 
 // Maps template.icon identifiers (from backend template config) to actual icon files
@@ -19,106 +18,6 @@ const TEMPLATE_ICON_MAP = {
   workflow: 'process',
 };
 
-// Demo data for showcasing workflows without backend
-const DEMO_TEMPLATES = [
-  {
-    id: 'supplier-qualification',
-    name: 'Supplier Qualification Pipeline',
-    description: 'End-to-end workflow for qualifying suppliers for OEM requirements. Covers requirement capture, supplier research, RFQ management, and final selection.',
-    category: 'procurement',
-    icon: 'truck',
-    stageCount: 6,
-    stages: [
-      { name: 'Requirement Capture' }, { name: 'Supplier Research' }, { name: 'Document Analysis' },
-      { name: 'RFQ Outreach' }, { name: 'Response Analysis' }, { name: 'Final Selection' },
-    ],
-    isSystem: true,
-  },
-  {
-    id: 'lead-nurture',
-    name: 'Lead Nurturing',
-    description: 'Multi-touch campaign to convert leads into customers through personalized outreach.',
-    category: 'marketing',
-    icon: 'users',
-    stageCount: 4,
-    stages: [
-      { name: 'Lead Research' }, { name: 'Content Personalization' }, { name: 'Outreach' }, { name: 'Follow-up' },
-    ],
-    isSystem: true,
-  },
-  {
-    id: 'market-launch',
-    name: 'New Market Launch',
-    description: 'Complete workflow for launching into a new market: research, content creation, and outreach.',
-    category: 'marketing',
-    icon: 'rocket',
-    stageCount: 3,
-    stages: [
-      { name: 'Market Research' }, { name: 'Content Creation' }, { name: 'Outreach' },
-    ],
-    isSystem: true,
-  },
-  {
-    id: 'vendor-evaluation',
-    name: 'Vendor Evaluation',
-    description: 'Research and evaluate potential vendors/suppliers for your business needs.',
-    category: 'procurement',
-    icon: 'clipboard-check',
-    stageCount: 4,
-    stages: [
-      { name: 'Vendor Discovery' }, { name: 'Document Review' }, { name: 'Comparison & Scoring' }, { name: 'Recommendation' },
-    ],
-    isSystem: true,
-  },
-];
-
-const DEMO_INSTANCES = [
-  {
-    id: 'demo-instance-1',
-    name: 'Apex Manufacturing - Aluminum Housing Sourcing',
-    templateId: 'supplier-qualification',
-    templateName: 'Supplier Qualification Pipeline',
-    status: 'completed',
-    currentStageIndex: 6,
-    totalStages: 6,
-    currentStage: null,
-    context: {
-      client_name: 'Apex Manufacturing Inc.',
-      selected_supplier: 'Bharat Precision Engineering',
-      quote: '$12.80/unit',
-    },
-    createdAt: '2026-07-15T10:00:00Z',
-    completedAt: '2026-07-20T14:30:00Z',
-  },
-  {
-    id: 'demo-instance-2',
-    name: 'TechCorp Q3 Lead Campaign',
-    templateId: 'lead-nurture',
-    templateName: 'Lead Nurturing',
-    status: 'running',
-    currentStageIndex: 2,
-    totalStages: 4,
-    currentStage: { id: 'outreach', name: 'Personalized Outreach', agent: 'content_marketing' },
-    context: {
-      total_leads: 156,
-      emails_sent: 89,
-    },
-    createdAt: '2026-07-18T09:00:00Z',
-  },
-  {
-    id: 'demo-instance-3',
-    name: 'Southeast Asia Market Entry',
-    templateId: 'market-launch',
-    templateName: 'New Market Launch',
-    status: 'pending',
-    currentStageIndex: 0,
-    totalStages: 3,
-    currentStage: { id: 'research', name: 'Market Research', agent: 'market_research' },
-    context: {},
-    createdAt: '2026-07-20T08:00:00Z',
-  },
-];
-
 function WorkflowsPage() {
   const navigate = useNavigate();
   const [templates, setTemplates] = useState([]);
@@ -127,9 +26,6 @@ function WorkflowsPage() {
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState('all');
   const selectedProjectId = useSelectedProjectId();
-
-  // Demo mode from shared context
-  const { isDemoMode } = useMode();
 
   // AI agent suggestions for the selected project, based on its business
   // context (set at project creation) - fetched on demand, not
@@ -187,12 +83,6 @@ function WorkflowsPage() {
   }, [selectedProjectId]);
 
   const fetchTemplates = useCallback(async () => {
-    // Use demo data in demo mode
-    if (isDemoMode) {
-      setTemplates(DEMO_TEMPLATES);
-      return;
-    }
-
     try {
       const res = await fetch(`${API_CONFIG.BASE_URL}/api/workflows/templates`, {
         headers: authJsonHeaders(),
@@ -204,15 +94,9 @@ function WorkflowsPage() {
     } catch (err) {
       console.error('Error fetching templates:', err);
     }
-  }, [isDemoMode]);
+  }, []);
 
   const fetchInstances = useCallback(async () => {
-    // Use demo data in demo mode
-    if (isDemoMode) {
-      setInstances(DEMO_INSTANCES);
-      return;
-    }
-
     try {
       const url = selectedProjectId
         ? `${API_CONFIG.BASE_URL}/api/workflows/instances?project_id=${selectedProjectId}`
@@ -225,7 +109,7 @@ function WorkflowsPage() {
     } catch (err) {
       console.error('Error fetching instances:', err);
     }
-  }, [selectedProjectId, isDemoMode]);
+  }, [selectedProjectId]);
 
   useEffect(() => {
     const load = async () => {
@@ -239,28 +123,6 @@ function WorkflowsPage() {
   const handleStartWorkflow = async (templateId) => {
     if (!selectedProjectId) {
       showToast('Pick a project from the dropdown above first (or create one if you don\'t have one yet)', 'warning');
-      return;
-    }
-
-    // Demo mode: simulate starting workflow, then go straight into it - a
-    // template card should feel like "enter this workflow", not "create a
-    // list item I then have to click again to actually begin."
-    if (isDemoMode) {
-      const template = templates.find((t) => t.id === templateId);
-      const newInstance = {
-        id: `demo-${Date.now()}`,
-        name: `${template?.name || 'New Workflow'} - Demo`,
-        templateId,
-        templateName: template?.name || 'Workflow',
-        status: 'pending',
-        currentStageIndex: 0,
-        totalStages: template?.stageCount || 3,
-        currentStage: { id: 'step-1', name: 'First Stage', agent: 'requirements_gathering' },
-        context: {},
-        createdAt: new Date().toISOString(),
-      };
-      setInstances((prev) => [newInstance, ...prev]);
-      navigate(`/workflows/${newInstance.id}`);
       return;
     }
 
@@ -288,13 +150,6 @@ function WorkflowsPage() {
   };
 
   const handleDeleteInstance = async (instanceId) => {
-    // Demo mode: just remove from state
-    if (isDemoMode) {
-      setInstances((prev) => prev.filter((i) => i.id !== instanceId));
-      showToast('Demo workflow deleted', 'success');
-      return;
-    }
-
     try {
       const res = await fetch(`${API_CONFIG.BASE_URL}/api/workflows/instances/${instanceId}`, {
         method: 'DELETE',
@@ -367,7 +222,7 @@ function WorkflowsPage() {
 
           {activeTab === 'templates' && (
             <div className="workflows-content">
-              {selectedProjectId && !isDemoMode && (
+              {selectedProjectId && (
                 <div className="agent-suggestions-bar">
                   <button
                     type="button"

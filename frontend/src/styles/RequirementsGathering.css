@@ -1006,30 +1006,6 @@
   font-weight: var(--font-medium);
 }
 
-/* Demo mode example button */
-.demo-example-btn {
-  margin-top: var(--space-6);
-  padding: var(--space-3) var(--space-6);
-  background: var(--gradient-accent);
-  color: var(--color-background);
-  border: none;
-  border-radius: var(--radius-lg);
-  font-size: var(--text-base);
-  font-weight: var(--font-semibold);
-  font-family: var(--font-body);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
-}
-
-.demo-example-btn:hover {
-  opacity: 0.9;
-}
-
-.demo-example-btn:active {
-  opacity: 0.95;
-}
-
 /* ═══════════════════════════════════════════════════════════════════════════════
    RESEARCH SUMMARY ROW
    ═══════════════════════════════════════════════════════════════════════════════ */

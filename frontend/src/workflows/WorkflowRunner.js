@@ -5,7 +5,6 @@ import { BackButton, EmptyState } from '../components';
 import { API_CONFIG } from '../config/apiConfig';
 import { authJsonHeaders } from '../core/authHeaders';
 import { showToast } from '../core/toast';
-import { useMode } from '../contexts';
 import './WorkflowRunner.css';
 
 // Task icons
@@ -163,121 +162,6 @@ const getAgentRoute = (agentId) => AGENT_CONFIG[agentId]?.route || null;
 const getAgentType = (agentId) => AGENT_CONFIG[agentId]?.type || 'form';
 const getAgentLabel = (agentId) => AGENT_CONFIG[agentId]?.label || formatLabel(agentId);
 
-// Demo stages - matches what each agent actually does
-const DEMO_STAGES = [
-  {
-    id: 'supplier_discovery',
-    name: 'Supplier Discovery',
-    description: 'Search and identify potential suppliers based on product/service criteria',
-    agent: 'requirements_gathering',
-  },
-  {
-    id: 'document_analysis',
-    name: 'Supplier Document Analysis',
-    description: 'Analyze supplier documents, catalogs, and market reports',
-    agent: 'data_insights',
-  },
-  {
-    id: 'rfq_outreach',
-    name: 'RFQ Outreach',
-    description: 'Send Request for Quotation emails to shortlisted suppliers',
-    agent: 'email_outreach',
-  },
-  {
-    id: 'response_analysis',
-    name: 'Response Analysis',
-    description: 'Track supplier responses and rank based on criteria',
-    agent: 'sales_helper',
-  },
-  {
-    id: 'qualification_audit',
-    name: 'Qualification Audit',
-    description: 'Audit shortlisted suppliers on facility, quality, capacity, and compliance',
-    agent: 'supply_chain',
-  },
-  {
-    id: 'selection_tasks',
-    name: 'Selection Tasks',
-    description: 'Manage final selection tasks and coordination',
-    agent: 'executive_assistant',
-  },
-];
-
-const DEMO_INSTANCE = {
-  id: 'demo-instance-1',
-  name: 'Apex Manufacturing - Aluminum Housing Sourcing',
-  templateId: 'supplier-qualification',
-  templateName: 'Supplier Qualification Pipeline',
-  status: 'completed',
-  currentStageIndex: 6,
-  totalStages: 6,
-  currentStage: null,
-  stages: DEMO_STAGES,
-  stageStates: {
-    supplier_discovery: {
-      status: 'completed',
-      completedAt: '2026-07-15T10:30:00Z',
-      data: {
-        search_query: 'CNC machined aluminum housing manufacturers',
-        location: 'United States, Germany, Japan',
-        industry: 'Industrial Manufacturing',
-        businesses_found: 47,
-        top_businesses: ['Precision Castparts Corp', 'Alcoa Corporation', 'Novelis Inc', 'Constellium SE', 'Kaiser Aluminum'],
-      },
-    },
-    document_analysis: {
-      status: 'completed',
-      completedAt: '2026-07-16T14:00:00Z',
-      data: {
-        documents_analyzed: 12,
-        key_findings: ['ISO 9001 certified suppliers identified', 'Lead times range 4-8 weeks', 'MOQ varies 100-500 units'],
-      },
-    },
-    rfq_outreach: {
-      status: 'completed',
-      completedAt: '2026-07-17T09:00:00Z',
-      data: {
-        emails_sent: 8,
-        suppliers_contacted: ['Precision Castparts Corp', 'Alcoa Corporation', 'Novelis Inc'],
-      },
-    },
-    response_analysis: {
-      status: 'completed',
-      completedAt: '2026-07-18T16:00:00Z',
-      data: {
-        responses_received: 5,
-        quotes_received: 3,
-        top_quote: { supplier: 'Precision Castparts Corp', price_per_unit: 24.50, lead_time: '6 weeks' },
-      },
-    },
-    qualification_audit: {
-      status: 'completed',
-      completedAt: '2026-07-19T11:00:00Z',
-      data: {
-        suppliers_audited: 3,
-        qualified_suppliers: 2,
-        audit_scores: { 'Precision Castparts Corp': 92, 'Alcoa Corporation': 88 },
-      },
-    },
-    selection_tasks: {
-      status: 'completed',
-      completedAt: '2026-07-20T14:30:00Z',
-      data: {
-        selected_supplier: 'Precision Castparts Corp',
-        contract_value: 125000,
-        initial_order_qty: 5000,
-      },
-    },
-  },
-  context: {
-    search_query: 'CNC machined aluminum housing manufacturers',
-    location: 'United States, Germany, Japan',
-    selected_supplier: 'Precision Castparts Corp',
-  },
-  createdAt: '2026-07-15T10:00:00Z',
-  completedAt: '2026-07-20T14:30:00Z',
-};
-
 function WorkflowRunner() {
   const { instanceId } = useParams();
   const navigate = useNavigate();
@@ -287,16 +171,7 @@ function WorkflowRunner() {
   const [completing, setCompleting] = useState(false);
   const [selectedStage, setSelectedStage] = useState(null);
 
-  // Demo mode from shared context
-  const { isDemoMode } = useMode();
-
   const fetchInstance = useCallback(async () => {
-    if (isDemoMode && instanceId.startsWith('demo-')) {
-      setInstance(DEMO_INSTANCE);
-      setLoading(false);
-      return;
-    }
-
     try {
       const res = await fetch(`${API_CONFIG.BASE_URL}/api/workflows/instances/${instanceId}`, {
         headers: authJsonHeaders(),
@@ -314,17 +189,13 @@ function WorkflowRunner() {
     } finally {
       setLoading(false);
     }
-  }, [instanceId, navigate, isDemoMode]);
+  }, [instanceId, navigate]);
 
   useEffect(() => {
     fetchInstance();
   }, [fetchInstance]);
 
   const handleStart = async () => {
-    if (isDemoMode) {
-      showToast('Switch to Live mode to run workflows', 'info');
-      return;
-    }
     try {
       const res = await fetch(`${API_CONFIG.BASE_URL}/api/workflows/instances/${instanceId}/start`, {
         method: 'POST',
@@ -413,7 +284,7 @@ function WorkflowRunner() {
     );
   }
 
-  const stages = (instance.stages || DEMO_STAGES).map(s => ({ ...s, id: s.id || s.stage_id }));
+  const stages = (instance.stages || []).map(s => ({ ...s, id: s.id || s.stage_id }));
   const stageStates = instance.stageStates || {};
   const currentStage = instance.currentStage;
 
@@ -626,7 +497,6 @@ function WorkflowRunner() {
                 stageState={stageStates[selectedStage.id]}
                 instance={instance}
                 onBack={() => setSelectedStage(null)}
-                isDemoMode={isDemoMode}
               />
             )}
           </div>
@@ -679,7 +549,7 @@ function WorkflowRunner() {
 }
 
 /* Stage Detail View - Shows inputs, outputs, tasks, and agent info */
-function StageDetailView({ stage, stageState, instance, onBack, onTasksChange, isDemoMode }) {
+function StageDetailView({ stage, stageState, instance, onBack, onTasksChange }) {
   const [tasks, setTasks] = useState([]);
   const [taskStats, setTaskStats] = useState({ total: 0, done: 0, required_pending: 0, can_complete: true });
   const [loadingTasks, setLoadingTasks] = useState(true);
@@ -698,7 +568,7 @@ function StageDetailView({ stage, stageState, instance, onBack, onTasksChange, i
   // if they're on that project's team, per get_accessible_instance's
   // owner-or-team-member access model on the backend).
   useEffect(() => {
-    if (isDemoMode || !instance.projectId) {
+    if (!instance.projectId) {
       setTeamMembers([]);
       return;
     }
@@ -706,22 +576,10 @@ function StageDetailView({ stage, stageState, instance, onBack, onTasksChange, i
       .then(res => res.json())
       .then(data => setTeamMembers(data.members || []))
       .catch(() => setTeamMembers([]));
-  }, [isDemoMode, instance.projectId]);
+  }, [instance.projectId]);
 
   // Fetch tasks for this stage
   useEffect(() => {
-    if (isDemoMode) {
-      // Demo tasks
-      setTasks([
-        { id: 't1', title: 'Confirm client specifications', status: 'done', is_required: true, assigned_to: null, created_by: 'demo@example.com' },
-        { id: 't2', title: 'Verify component dimensions', status: 'done', is_required: true, assigned_to: 'team@example.com', created_by: 'demo@example.com' },
-        { id: 't3', title: 'Check certification requirements', status: isCompleted ? 'done' : 'pending', is_required: false, assigned_to: null, created_by: 'demo@example.com' },
-      ]);
-      setTaskStats({ total: 3, done: isCompleted ? 3 : 2, required_pending: isCompleted ? 0 : 0, can_complete: true });
-      setLoadingTasks(false);
-      return;
-    }
-
     const fetchTasks = async () => {
       try {
         const res = await fetch(
@@ -740,14 +598,10 @@ function StageDetailView({ stage, stageState, instance, onBack, onTasksChange, i
       }
     };
     fetchTasks();
-  }, [instance.id, stage.id, isDemoMode, isCompleted]);
+  }, [instance.id, stage.id, isCompleted]);
 
   const handleAddTask = async () => {
     if (!newTaskTitle.trim()) return;
-    if (isDemoMode) {
-      showToast('Switch to Live mode to manage tasks', 'info');
-      return;
-    }
     setSavingTask(true);
     try {
       const res = await fetch(`${API_CONFIG.BASE_URL}/api/workflows/instances/${instance.id}/tasks`, {
@@ -784,10 +638,6 @@ function StageDetailView({ stage, stageState, instance, onBack, onTasksChange, i
   };
 
   const handleToggleTask = async (task) => {
-    if (isDemoMode) {
-      showToast('Switch to Live mode to manage tasks', 'info');
-      return;
-    }
     const newStatus = task.status === 'done' ? 'pending' : 'done';
     try {
       const res = await fetch(`${API_CONFIG.BASE_URL}/api/workflows/instances/${instance.id}/tasks/${task.id}`, {
@@ -820,10 +670,6 @@ function StageDetailView({ stage, stageState, instance, onBack, onTasksChange, i
   };
 
   const handleDeleteTask = async (taskId) => {
-    if (isDemoMode) {
-      showToast('Switch to Live mode to manage tasks', 'info');
-      return;
-    }
     try {
       const res = await fetch(`${API_CONFIG.BASE_URL}/api/workflows/instances/${instance.id}/tasks/${taskId}`, {
         method: 'DELETE',
@@ -851,10 +697,6 @@ function StageDetailView({ stage, stageState, instance, onBack, onTasksChange, i
   };
 
   const handleAssignTask = async (task, assignee) => {
-    if (isDemoMode) {
-      showToast('Switch to Live mode to manage tasks', 'info');
-      return;
-    }
     try {
       const res = await fetch(`${API_CONFIG.BASE_URL}/api/workflows/instances/${instance.id}/tasks/${task.id}`, {
         method: 'PATCH',

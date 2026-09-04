@@ -9,73 +9,9 @@ import { formatTime, getRelativeDateLabel, isSameDay } from '../utils/dateFormat
 import { useSelectedProjectId } from '../hooks/useSelectedProjectId';
 import { useWorkflowContext } from '../hooks';
 import { authJsonHeaders, authOptionalHeaders } from '../core/authHeaders';
-import { useMode } from '../contexts';
 
 // Storage key for state persistence
 const STATE_KEY = 'contentMarketingState';
-
-// Demo campaigns from Market Research
-const DEMO_CAMPAIGNS = [
-  { id: 'camp-1', name: 'Q2 Outreach', subject: 'Partnership Opportunity', lead_count: 45, status: 'draft' },
-  { id: 'camp-2', name: 'Product Launch', subject: 'New Features', lead_count: 32, status: 'draft' },
-  { id: 'camp-3', name: 'Enterprise Prospects', subject: 'Enterprise Solutions', lead_count: 28, status: 'active' },
-];
-
-// Demo content templates
-const DEMO_GENERATED_CONTENT = {
-  linkedin: {
-    post: `Excited to share our latest innovation in AI-powered business automation!
-
-At Enable Agents, we're transforming how businesses operate with intelligent automation that adapts to your needs.
-
-Key highlights:
-- 50% reduction in manual tasks
-- Real-time insights and analytics
-- Seamless integration with existing tools
-
-The future of work is here. Are you ready?
-
-#AI #Automation #BusinessInnovation #FutureOfWork`,
-    article: `# The Future of Business Automation: A Deep Dive
-
-In today's rapidly evolving business landscape, automation isn't just a luxury—it's a necessity. Here's how AI-powered automation is reshaping industries...
-
-## Key Benefits
-1. **Increased Efficiency**: Reduce manual tasks by up to 50%
-2. **Better Decision Making**: Real-time analytics and insights
-3. **Cost Savings**: Lower operational overhead
-
-## Getting Started
-The journey to automation begins with understanding your processes...`
-  },
-  twitter: {
-    post: `AI automation is changing the game for businesses.
-
-Our latest update brings:
-- 50% faster workflows
-- Smart task prioritization
-- Real-time collaboration
-
-The future is automated. #AI #BusinessTech`
-  },
-  email: {
-    post: `Subject: Transform Your Business with AI Automation
-
-Dear [Name],
-
-I hope this email finds you well. I wanted to share some exciting developments in business automation that could benefit your organization.
-
-Our AI-powered platform has helped companies achieve:
-- 50% reduction in manual tasks
-- 30% faster decision-making
-- Significant cost savings
-
-Would you be open to a brief call to explore how this could work for your team?
-
-Best regards,
-[Your Name]`
-  }
-};
 
 function ContentMarketingAgent() {
   const selectedProjectId = useSelectedProjectId();
@@ -91,9 +27,7 @@ function ContentMarketingAgent() {
     }
   }, []);
 
-  const { isDemoMode } = useMode();
   const { isInWorkflow, isHistoryView, stageData, saveStageData } = useWorkflowContext();
-  const prevModeRef = useRef(isDemoMode);
 
   const savedState = loadPersistedState();
   const [step, setStep] = useState(savedState.step || 'upload'); // upload | generate
@@ -160,11 +94,6 @@ function ContentMarketingAgent() {
 
   // Fetch available campaigns from Market Research
   const fetchCampaigns = async () => {
-    if (isDemoMode) {
-      setAvailableCampaigns(DEMO_CAMPAIGNS);
-      return;
-    }
-
     try {
       const response = await fetch(`${API_CONFIG.API_URL}/api/campaigns`, {
         headers: authOptionalHeaders(),
@@ -183,24 +112,12 @@ function ContentMarketingAgent() {
     if (generatedContent) {
       fetchCampaigns();
     }
-  }, [generatedContent, isDemoMode]);
+  }, [generatedContent]);
 
   // Send content to campaign
   const handleSendToCampaign = async () => {
     if (!selectedCampaignId || !generatedContent) {
       showToast('Please select a campaign', 'warning');
-      return;
-    }
-
-    if (isDemoMode) {
-      const campaign = availableCampaigns.find(c => c.id === selectedCampaignId);
-      showToast(`Content sent to "${campaign?.name}" campaign (Demo Mode)`, 'info');
-      addMessage(
-        `**Content linked to campaign:** ${campaign?.name}\n\nThe email content has been set for this campaign. You can now send it from the Market Research agent.`,
-        'agent'
-      );
-      setShowCampaignModal(false);
-      setSelectedCampaignId('');
       return;
     }
 
@@ -249,21 +166,6 @@ function ContentMarketingAgent() {
       return;
     }
 
-    if (isDemoMode) {
-      setAvailableCampaigns(DEMO_CAMPAIGNS);
-      setStep('generate');
-      setMessages([
-        {
-          id: 1,
-          text: 'Demo project loaded. Choose a channel and content type, then generate sample marketing content.',
-          sender: 'agent',
-          timestamp: new Date().toISOString(),
-          format: 'markdown',
-        },
-      ]);
-      return;
-    }
-
     setStep('upload');
     setCmProjectId(null);
     setMessages([
@@ -297,7 +199,7 @@ function ContentMarketingAgent() {
         console.error('Error resolving content-marketing project:', error);
       }
     })();
-  }, [isDemoMode, selectedProjectId]);
+  }, [selectedProjectId]);
 
   // Load workflow data when viewing a completed stage's history
   useEffect(() => {
@@ -326,22 +228,6 @@ function ContentMarketingAgent() {
     }]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isHistoryView, stageData]);
-
-  // Handle mode change side effects
-  useEffect(() => {
-    if (prevModeRef.current && !isDemoMode) {
-      // Switching from demo to live: reset content
-      setGeneratedContent(null);
-      setMessages([{
-        id: 1,
-        text: "Welcome to the Content Marketing Agent! I'll help you create marketing content across all channels using your documents and knowledge graphs.",
-        sender: 'agent',
-        timestamp: new Date().toISOString(),
-        format: 'markdown'
-      }]);
-    }
-    prevModeRef.current = isDemoMode;
-  }, [isDemoMode]);
 
   // ============= FILE UPLOAD =============
   const handleFileSelect = async (e) => {
@@ -404,41 +290,6 @@ function ContentMarketingAgent() {
   const handleGenerateContent = async () => {
     if (!selectedChannel || !contentType) {
       showToast('Please select channel and content type', 'warning');
-      return;
-    }
-
-    // Demo mode: use pre-generated content
-    if (isDemoMode) {
-      const demoContent = DEMO_GENERATED_CONTENT[selectedChannel]?.[contentType] ||
-        DEMO_GENERATED_CONTENT[selectedChannel]?.post ||
-        DEMO_GENERATED_CONTENT.linkedin.post;
-
-      const demoData = {
-        content: demoContent,
-        variations: [
-          'Variation 1: A more casual tone version',
-          'Variation 2: A formal business version',
-          'Variation 3: A storytelling approach'
-        ]
-      };
-
-      setGeneratedContent(demoData);
-      addMessage(
-        `Content generated for **${selectedChannel}** (${contentType})! (Demo Mode)\n\n` +
-        `---\n\n` +
-        `${demoData.content}\n\n` +
-        `---\n\n` +
-        `I also generated ${demoData.variations.length} variations. Type 'show variations' to see them.`,
-        'agent'
-      );
-      if (isInWorkflow) {
-        saveStageData({
-          personalized_content: demoData.content,
-          channel: selectedChannel,
-          content_type: contentType,
-          variations: demoData.variations,
-        });
-      }
       return;
     }
 

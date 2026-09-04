@@ -539,97 +539,6 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
-   MODE TOGGLE
-   ═══════════════════════════════════════════════════════════════════════════════ */
-
-.preference-toggle-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px;
-  background: var(--color-background);
-  border-radius: 10px;
-}
-
-.preference-toggle-row .setting-info {
-  margin-bottom: 0;
-}
-
-.preference-toggle-header {
-  display: flex;
-  flex-direction: column;
-}
-
-.preference-toggle-header .setting-label {
-  margin-bottom: 2px;
-}
-
-.preference-description {
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-}
-
-.mode-toggle-large {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 14px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: 20px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  font-family: inherit;
-}
-
-.mode-toggle-large:hover {
-  border-color: var(--color-text-muted);
-}
-
-.mode-toggle-large-track {
-  position: relative;
-  width: 36px;
-  height: 20px;
-  background: var(--color-border);
-  border-radius: 10px;
-  transition: background 0.15s ease;
-}
-
-.mode-toggle-large-thumb {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 16px;
-  height: 16px;
-  background: white;
-  border-radius: 50%;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.2);
-  transition: transform 0.15s ease;
-}
-
-.mode-toggle-large-label {
-  font-size: var(--text-body);
-  font-weight: 600;
-  min-width: 36px;
-}
-
-.mode-toggle-large--demo .mode-toggle-large-label {
-  color: var(--color-text-muted);
-}
-
-.mode-toggle-large--live .mode-toggle-large-track {
-  background: var(--color-success);
-}
-
-.mode-toggle-large--live .mode-toggle-large-thumb {
-  transform: translateX(16px);
-}
-
-.mode-toggle-large--live .mode-toggle-large-label {
-  color: var(--color-success-text);
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════════
    CONNECTOR CARDS - Horizontal Compact Design
    ═══════════════════════════════════════════════════════════════════════════════ */
 
@@ -927,12 +836,6 @@
 
   .connector-card-action button {
     width: 100%;
-  }
-
-  .preference-toggle-row {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
   }
 
   .section-actions {

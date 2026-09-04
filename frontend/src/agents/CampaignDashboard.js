@@ -12,21 +12,6 @@ import { authOptionalHeaders } from '../core/authHeaders';
 // Storage key for state persistence
 const STATE_KEY = 'campaignDashboardState';
 
-// Demo mock campaigns
-const DEMO_CAMPAIGNS = [
-  { id: 'demo-camp-1', name: 'Tech Startup Outreach', subject: 'Partnership Opportunity with Enable Agents', totalSent: 24, totalReplied: 8, replyRate: 33, createdAt: '2026-06-20T10:30:00Z' },
-  { id: 'demo-camp-2', name: 'HR Solutions Follow-up', subject: 'How Enable Agents Can Automate Your HR', totalSent: 18, totalReplied: 5, replyRate: 28, createdAt: '2026-06-22T14:15:00Z' },
-  { id: 'demo-camp-3', name: 'Enterprise Leads Q2', subject: 'Introducing AI-Powered Business Automation', totalSent: 32, totalReplied: 12, replyRate: 38, createdAt: '2026-06-25T09:00:00Z' },
-];
-
-const DEMO_RECIPIENTS = [
-  { name: 'TechFlow Solutions', email: 'contact@techflow.io', sentAt: '2026-06-25T09:05:00Z', replyStatus: 'Replied', repliedAt: '2026-06-25T14:30:00Z' },
-  { name: 'CloudHR Systems', email: 'info@cloudhr.com', sentAt: '2026-06-25T09:06:00Z', replyStatus: 'Replied', repliedAt: '2026-06-26T10:15:00Z' },
-  { name: 'PeopleFirst Inc', email: 'sales@peoplefirst.io', sentAt: '2026-06-25T09:07:00Z', replyStatus: 'No Reply', repliedAt: null },
-  { name: 'WorkStream AI', email: 'hello@workstream.ai', sentAt: '2026-06-25T09:08:00Z', replyStatus: 'Replied', repliedAt: '2026-06-25T16:45:00Z' },
-  { name: 'HRNova Solutions', email: 'contact@hrnova.com', sentAt: '2026-06-25T09:09:00Z', replyStatus: 'No Reply', repliedAt: null },
-];
-
 function CampaignDashboard() {
   const navigate = useNavigate();
   const selectedProjectId = useSelectedProjectId();
@@ -52,12 +37,6 @@ function CampaignDashboard() {
   const [loadError, setLoadError] = useState('');
   const [isRefreshingReplies, setIsRefreshingReplies] = useState(false);
 
-  // Demo mode detection
-  const [isDemoMode, setIsDemoMode] = useState(() => {
-    const stored = localStorage.getItem('enableAgentsMode');
-    return stored === 'demo';
-  });
-
   // Persist state
   useEffect(() => {
     const state = { selectedCampaign };
@@ -81,29 +60,11 @@ function CampaignDashboard() {
     }
   }, [selectedProjectId]);
 
-  // Listen for mode changes
-  useEffect(() => {
-    const handleModeChange = () => {
-      const stored = localStorage.getItem('enableAgentsMode');
-      const newMode = stored === 'demo';
-      if (newMode !== isDemoMode) {
-        setIsDemoMode(newMode);
-        setCampaigns([]);
-        setSelectedCampaign(null);
-        setRecipients([]);
-      }
-    };
-    window.addEventListener('storage', handleModeChange);
-    return () => window.removeEventListener('storage', handleModeChange);
-  }, [isDemoMode]);
-
   useEffect(() => {
     fetchCampaigns();
-    if (!isDemoMode) {
-      const intervalId = setInterval(fetchCampaigns, 30000);
-      return () => clearInterval(intervalId);
-    }
-  }, [isDemoMode]);
+    const intervalId = setInterval(fetchCampaigns, 30000);
+    return () => clearInterval(intervalId);
+  }, []);
 
   useEffect(() => {
     if (!selectedCampaign) return;
@@ -115,13 +76,6 @@ function CampaignDashboard() {
   const fetchCampaigns = async () => {
     setIsLoading(true);
     setLoadError('');
-
-    // In demo mode, use mock data
-    if (isDemoMode) {
-      setCampaigns(DEMO_CAMPAIGNS);
-      setIsLoading(false);
-      return;
-    }
 
     try {
       const res = await fetch(`${API_CONFIG.GET_CAMPAIGNS_STATS}`, { headers: authOptionalHeaders() });
@@ -168,13 +122,6 @@ function CampaignDashboard() {
   };
 
   const viewCampaign = async (campaignId) => {
-    // In demo mode, use mock recipients
-    if (isDemoMode) {
-      setRecipients(DEMO_RECIPIENTS);
-      setSelectedCampaign(campaignId);
-      return;
-    }
-
     try {
       const res = await fetch(API_CONFIG.GET_CAMPAIGN_RECIPIENTS.replace('{campaignId}', campaignId), { headers: authOptionalHeaders() });
       const data = await res.json();

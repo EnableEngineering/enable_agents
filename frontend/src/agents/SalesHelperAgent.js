@@ -8,35 +8,10 @@ import { authJsonHeaders, authOptionalHeaders } from '../core/authHeaders';
 import { useAgentChat } from '../hooks/useAgentChat';
 import MessageContent from '../components/MessageContent';
 import { formatTime, getRelativeDateLabel, isSameDay } from '../utils/dateFormat';
-import { useMode } from '../contexts';
 import { useWorkflowContext } from '../hooks';
-
-// Demo mock data for Sales Helper
-const DEMO_SAVED_PROJECTS = [
-  { id: 'demo-1', name: 'Enterprise Prospects Q2', query_used: 'Enterprise software buyers', lead_count: 45, created_at: '2026-06-10' },
-  { id: 'demo-2', name: 'SMB Tech Companies', query_used: 'Small business technology', lead_count: 32, created_at: '2026-06-15' },
-  { id: 'demo-3', name: 'Healthcare Leads', query_used: 'Healthcare technology', lead_count: 28, created_at: '2026-06-20' },
-];
-
-const DEMO_PROJECT_LEADS = [
-  { name: 'Acme Corp', website: 'https://acme.com', phone: '+1 (555) 123-4567', address: 'San Francisco, CA', email: 'sales@acme.com', summary: 'Enterprise software company' },
-  { name: 'TechStart Inc', website: 'https://techstart.io', phone: '+1 (555) 234-5678', address: 'Austin, TX', email: 'info@techstart.io', summary: 'B2B SaaS platform' },
-  { name: 'DataFlow Systems', website: 'https://dataflow.com', phone: '+1 (555) 345-6789', address: 'Seattle, WA', email: 'contact@dataflow.com', summary: 'Data analytics provider' },
-];
-
-const DEMO_CAMPAIGNS = [
-  { id: 'demo-camp-1', name: 'Q2 Outreach Campaign', subject: 'Partnership Opportunity', totalSent: 45, totalReplied: 12, replyRate: 27, createdAt: '2026-06-12' },
-  { id: 'demo-camp-2', name: 'Product Launch Follow-up', subject: 'New Features Available', totalSent: 32, totalReplied: 8, replyRate: 25, createdAt: '2026-06-18' },
-];
-
-const DEMO_DOCUMENTS = [
-  { id: 'doc-1', name: 'Product Catalog 2026.pdf', type: 'product_catalog', size: '2.4 MB', uploadedAt: '2026-06-10', status: 'processed' },
-  { id: 'doc-2', name: 'Enterprise Features.pdf', type: 'product_info', size: '1.1 MB', uploadedAt: '2026-06-15', status: 'processed' },
-];
 
 function SalesHelperAgent() {
   const selectedProjectId = useSelectedProjectId();
-  const { isDemoMode } = useMode();
   const { isInWorkflow, isHistoryView, stageData, stageId, saveStageData, getContext } = useWorkflowContext();
   const {
     messages, inputMessage, setInputMessage,
@@ -99,13 +74,11 @@ function SalesHelperAgent() {
     setSelectedSavedProject(null);
     setSelectedSavedProjectLeads([]);
     setRankedVendors([]);
-    setUploadedDocuments(isDemoMode ? DEMO_DOCUMENTS : []);
+    setUploadedDocuments([]);
     fetchSavedProjects();
     fetchCampaigns();
-    if (!isDemoMode) {
-      fetchUploadedDocuments();
-    }
-  }, [isDemoMode, selectedProjectId]);
+    fetchUploadedDocuments();
+  }, [selectedProjectId]);
 
   const fetchUploadedDocuments = async () => {
     try {
@@ -183,21 +156,6 @@ function SalesHelperAgent() {
       return;
     }
 
-    if (isDemoMode) {
-      const newDoc = {
-        id: `doc-${Date.now()}`,
-        name: file.name,
-        type: 'product_catalog',
-        size: `${(file.size / 1024 / 1024).toFixed(1)} MB`,
-        uploadedAt: new Date().toISOString().split('T')[0],
-        status: 'processed',
-      };
-      setUploadedDocuments([...uploadedDocuments, newDoc]);
-      setShowDocUploadModal(false);
-      addMessage(`**Document uploaded:** ${file.name}\n\nI can now use this document to match prospects with your products and services. (Demo Mode)`, 'agent', null, 'markdown');
-      return;
-    }
-
     try {
       setIsUploadingDoc(true);
       const formData = new FormData();
@@ -230,12 +188,6 @@ function SalesHelperAgent() {
 
   // Remove document
   const handleRemoveDocument = async (docId) => {
-    if (isDemoMode) {
-      setUploadedDocuments(uploadedDocuments.filter(d => d.id !== docId));
-      addMessage('Document removed (Demo Mode)', 'agent', null, 'markdown');
-      return;
-    }
-
     try {
       const response = await fetch(`${API_CONFIG.API_URL}/api/sales-helper/documents/${docId}?user_id=${encodeURIComponent(getCurrentUserIdentifier())}`, {
         method: 'DELETE',
@@ -262,30 +214,6 @@ function SalesHelperAgent() {
       return;
     }
 
-    if (isDemoMode) {
-      // Generate match results from actual demo leads data
-      const demoLeads = selectedSavedProjectLeads.slice(0, 3);
-      const matchResults = demoLeads.map((lead, idx) => ({
-        name: lead.name,
-        matchScore: Math.round(95 - (idx * 7)), // Decreasing scores based on order
-        needs: lead.summary || 'General business needs',
-      }));
-
-      addMessage(`**Prospect Matching Results**\n\nBased on your product catalog, here are the best matches from **${selectedSavedProject?.name}**:\n\n${matchResults.map((m, i) => `${i + 1}. **${m.name}** - ${m.matchScore}% match\n   - Needs: ${m.needs}`).join('\n\n')}\n\n(Demo Mode)`, 'agent', null, 'markdown');
-
-      // Save to workflow if in workflow context - use actual computed data
-      if (isInWorkflow) {
-        saveStageData({
-          leads_analyzed: selectedSavedProjectLeads.length,
-          matched_prospects: matchResults.length,
-          top_match: matchResults[0] ? `${matchResults[0].name} - ${matchResults[0].matchScore}%` : 'N/A',
-          project_name: selectedSavedProject?.name,
-          match_scores: matchResults.map(m => ({ name: m.name, score: m.matchScore })),
-        });
-      }
-      return;
-    }
-
     try {
       setIsLoading(true);
       const response = await fetch(`${API_CONFIG.API_URL}/api/sales-helper/match-prospects`, {
@@ -301,6 +229,14 @@ function SalesHelperAgent() {
       const result = await response.json();
       if (result.success) {
         addMessage(result.analysis || 'Matching complete. See results above.', 'agent', null, 'markdown');
+
+        if (isInWorkflow) {
+          saveStageData({
+            leads_analyzed: selectedSavedProjectLeads.length,
+            project_name: selectedSavedProject?.name,
+            analysis: result.analysis,
+          });
+        }
       } else {
         addMessage(`Matching failed: ${result.error || 'Unknown error'}`, 'agent', null, 'markdown');
       }
@@ -332,15 +268,6 @@ function SalesHelperAgent() {
   }, [rankedVendors.length]);
 
   const fetchCampaigns = async () => {
-    // Demo mode: use mock campaigns
-    if (isDemoMode) {
-      setCampaigns(DEMO_CAMPAIGNS);
-      if (!selectedRankingCampaignId && DEMO_CAMPAIGNS.length > 0) {
-        setSelectedRankingCampaignId(String(DEMO_CAMPAIGNS[0].id));
-      }
-      return;
-    }
-
     try {
       setIsLoadingCampaigns(true);
       const userId = getCurrentUserIdentifier();
@@ -397,15 +324,6 @@ function SalesHelperAgent() {
   };
 
   const fetchSavedProjects = async () => {
-    // Demo mode: use mock projects
-    if (isDemoMode) {
-      setSavedProjects(DEMO_SAVED_PROJECTS);
-      if (DEMO_SAVED_PROJECTS.length > 0 && !savedProjectSelection) {
-        setSavedProjectSelection(String(DEMO_SAVED_PROJECTS[0].id));
-      }
-      return;
-    }
-
     try {
       setIsLoadingSavedProjects(true);
       const userId = getCurrentUserIdentifier();
@@ -432,21 +350,6 @@ function SalesHelperAgent() {
 
   const loadSavedProjectLeads = async (projectId) => {
     if (!projectId) return;
-
-    // Demo mode: use mock leads
-    if (isDemoMode) {
-      const demoProject = DEMO_SAVED_PROJECTS.find(p => p.id === projectId);
-      setSelectedSavedProject(demoProject);
-      setSelectedSavedProjectLeads(DEMO_PROJECT_LEADS);
-      setSavedProjectSelection(String(projectId));
-      addMessage(
-        `**Loaded saved leads list:** ${demoProject?.name || 'Demo List'}\n\nI can now answer questions about these ${DEMO_PROJECT_LEADS.length} leads. (Demo Mode)`,
-        'agent',
-        null,
-        'markdown'
-      );
-      return;
-    }
 
     try {
       setIsLoadingSavedProjectLeads(true);
@@ -521,32 +424,6 @@ function SalesHelperAgent() {
     try {
       setIsRankingVendors(true);
       addMessage('Ranking vendor replies by your criteria...', 'agent', null, 'markdown');
-
-      if (isDemoMode) {
-        const campaign = DEMO_CAMPAIGNS.find(c => c.id === selectedRankingCampaignId) || DEMO_CAMPAIGNS[0];
-        const demoVendors = [
-          { rank: 1, vendor_name: 'Precision Circuits Inc.', score: 94, reason: 'Best price/quality balance, fastest reply turnaround' },
-          { rank: 2, vendor_name: 'Wuxi Precision Manufacturing', score: 87, reason: 'Strong capacity, slightly higher cost' },
-          { rank: 3, vendor_name: 'Chennai Automotive Components', score: 76, reason: 'Good compliance record, longer lead time' },
-        ];
-        setRankedVendors(demoVendors);
-        addMessage(
-          `**Vendor ranking completed for ${campaign.name}:** (Demo Mode)\n\n${demoVendors.map(v => `${v.rank}. ${v.vendor_name} - ${v.score}/100\n${v.reason}`).join('\n\n')}`,
-          'agent',
-          null,
-          'markdown'
-        );
-        if (isInWorkflow) {
-          saveStageData({
-            campaign_name: campaign.name,
-            vendors_ranked: demoVendors.length,
-            top_vendor: demoVendors[0].vendor_name,
-            top_score: demoVendors[0].score,
-            shortlisted_count: demoVendors.filter(v => v.score >= 70).length,
-          });
-        }
-        return;
-      }
 
       const userId = getCurrentUserIdentifier();
       const response = await fetch(API_CONFIG.RANK_CAMPAIGN_VENDORS.replace('{campaignId}', selectedRankingCampaignId), {

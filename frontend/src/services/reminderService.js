@@ -55,24 +55,15 @@ export function getAvailableChannels(recipient) {
  * @param {Object} options.recipient - { name, email?, phone? }
  * @param {string} options.subject - Subject/title of reminder
  * @param {string} options.message - Body of reminder
- * @param {boolean} options.isDemoMode - If true, simulate sending
  * @returns {Promise<{ success: boolean, message: string, fallback?: boolean }>}
  */
-export async function sendReminder({ channel, recipient, subject, message, isDemoMode = false }) {
+export async function sendReminder({ channel, recipient, subject, message }) {
   // Validate recipient has required contact info
   const requiredField = CHANNEL_INFO[channel]?.requiresField;
   if (!recipient?.[requiredField]) {
     return {
       success: false,
       message: `Recipient has no ${requiredField} on file`,
-    };
-  }
-
-  // Demo mode - simulate success
-  if (isDemoMode) {
-    return {
-      success: true,
-      message: `${CHANNEL_INFO[channel].label} reminder sent to ${recipient.name}`,
     };
   }
 

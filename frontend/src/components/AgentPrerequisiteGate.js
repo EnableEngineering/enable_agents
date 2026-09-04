@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { API_CONFIG } from '../config/apiConfig';
 import { authJsonHeaders } from '../core/authHeaders';
-import { useMode } from '../contexts';
 import './AgentPrerequisiteGate.css';
 
 /**
@@ -19,7 +18,6 @@ import './AgentPrerequisiteGate.css';
  *   </AgentPrerequisiteGate>
  */
 function AgentPrerequisiteGate({ agentId, children, onReady }) {
-  const { isDemo } = useMode();
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [dismissed, setDismissed] = useState(false);
@@ -48,11 +46,6 @@ function AgentPrerequisiteGate({ agentId, children, onReady }) {
   useEffect(() => {
     checkDependencies();
   }, [checkDependencies]);
-
-  // In demo mode, always allow through
-  if (isDemo) {
-    return <>{children}</>;
-  }
 
   // While loading, show nothing (brief flash)
   if (loading) {

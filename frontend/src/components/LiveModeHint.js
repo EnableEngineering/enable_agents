@@ -1,44 +1,32 @@
 import React, { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useMode } from '../contexts';
 import './LiveModeHint.css';
 
 const DISMISS_KEY = 'enableAgentsLiveHintDismissed';
 
 function LiveModeHint({ message, requireProject = false }) {
-  const { isDemoMode, setMode } = useMode();
   const [searchParams] = useSearchParams();
   const [dismissed, setDismissed] = useState(
     () => localStorage.getItem(DISMISS_KEY) === 'true'
   );
 
-  // Show only in Live mode without a project
-  if (isDemoMode || dismissed) return null;
+  if (dismissed) return null;
 
-  // If requireProject is true, only show when no project is selected
+  // Only shown when requireProject is set and no project is selected
+  if (!requireProject) return null;
   const hasProject = searchParams.get('project');
-  if (requireProject && hasProject) return null;
-  if (!requireProject) return null; // Only show when requireProject is set
+  if (hasProject) return null;
 
   const handleDismiss = () => {
     localStorage.setItem(DISMISS_KEY, 'true');
     setDismissed(true);
   };
 
-  const switchToDemo = () => {
-    setMode(true); // true = demo mode
-  };
-
   return (
     <div className="live-mode-hint-wrapper">
       <div className="live-mode-hint" role="status">
-        <p>
-          {message || 'Select a project or try Demo mode for sample data'}
-        </p>
+        <p>{message || 'Select a project to get started'}</p>
         <div className="live-mode-hint-actions">
-          <button type="button" className="btn btn-primary btn-sm" onClick={switchToDemo}>
-            Demo
-          </button>
           <button type="button" className="btn btn-ghost btn-sm" onClick={handleDismiss}>
             ✕
           </button>

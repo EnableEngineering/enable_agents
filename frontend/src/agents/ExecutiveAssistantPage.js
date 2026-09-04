@@ -10,44 +10,7 @@ import { useProjectData } from '../hooks/useProjectData';
 import { useSelectedProjectId } from '../hooks/useSelectedProjectId';
 import { useWorkflowContext } from '../hooks';
 
-// Demo data for Executive Assistant - comprehensive sample to showcase features
-const DEMO_PROJECTS = [
-  { id: 'demo-p1', name: 'Q3 Product Launch', description: 'Launch new product features', status: 'Active', dueDate: '2026-09-15' },
-  { id: 'demo-p2', name: 'Marketing Campaign', description: 'Summer marketing initiative', status: 'Active', dueDate: '2026-08-01' },
-  { id: 'demo-p3', name: 'Team Expansion', description: 'Hire 5 new engineers', status: 'Active', dueDate: '2026-07-30' },
-];
-
-const DEMO_TASKS = [
-  // Pending tasks
-  { id: 'demo-t1', projectId: 'demo-p1', title: 'Write release notes', description: 'Document all new features', assignedTo: 'demo-pe1', dueDate: '2026-07-25', priority: 'Medium', status: 'Pending' },
-  { id: 'demo-t2', projectId: 'demo-p1', title: 'Design review meeting', description: 'Review UI/UX designs with team', assignedTo: 'demo-pe2', dueDate: '2026-07-20', priority: 'High', status: 'Pending' },
-  { id: 'demo-t3', projectId: 'demo-p2', title: 'Plan social media posts', description: 'Create content calendar', assignedTo: 'demo-pe3', dueDate: '2026-07-22', priority: 'Medium', status: 'Pending' },
-  { id: 'demo-t4', projectId: 'demo-p3', title: 'Post job listings', description: 'Publish on LinkedIn and Indeed', assignedTo: 'demo-pe4', dueDate: '2026-07-18', priority: 'High', status: 'Pending' },
-  // In Progress tasks
-  { id: 'demo-t5', projectId: 'demo-p1', title: 'Finalize feature specs', description: 'Complete technical specifications', assignedTo: 'demo-pe1', dueDate: '2026-07-15', priority: 'High', status: 'In Progress' },
-  { id: 'demo-t6', projectId: 'demo-p1', title: 'Build landing page', description: 'Create product launch page', assignedTo: 'demo-pe2', dueDate: '2026-07-28', priority: 'High', status: 'In Progress' },
-  { id: 'demo-t7', projectId: 'demo-p2', title: 'Create ad copy', description: 'Write marketing copy for ads', assignedTo: 'demo-pe3', dueDate: '2026-07-19', priority: 'High', status: 'In Progress' },
-  { id: 'demo-t8', projectId: 'demo-p3', title: 'Screen resumes', description: 'Review initial applications', assignedTo: 'demo-pe4', dueDate: '2026-07-21', priority: 'Medium', status: 'In Progress' },
-  // Completed tasks
-  { id: 'demo-t9', projectId: 'demo-p1', title: 'Define MVP scope', description: 'Finalize feature list for launch', assignedTo: 'demo-pe1', dueDate: '2026-07-10', priority: 'High', status: 'Completed' },
-  { id: 'demo-t10', projectId: 'demo-p1', title: 'Create wireframes', description: 'Design initial mockups', assignedTo: 'demo-pe2', dueDate: '2026-07-08', priority: 'Medium', status: 'Completed' },
-  { id: 'demo-t11', projectId: 'demo-p2', title: 'Competitor analysis', description: 'Research competitor campaigns', assignedTo: 'demo-pe3', dueDate: '2026-07-05', priority: 'Low', status: 'Completed' },
-  { id: 'demo-t12', projectId: 'demo-p3', title: 'Define job requirements', description: 'Write job descriptions', assignedTo: 'demo-pe4', dueDate: '2026-07-12', priority: 'High', status: 'Completed' },
-];
-
-const DEMO_PEOPLE = [
-  { id: 'demo-pe1', name: 'John Smith', email: 'john@company.com', phone: '+1 555-0101', role: 'Product Manager', projects: ['demo-p1'] },
-  { id: 'demo-pe2', name: 'Sarah Johnson', email: 'sarah@company.com', phone: '+1 555-0102', role: 'Designer', projects: ['demo-p1', 'demo-p2'] },
-  { id: 'demo-pe3', name: 'Mike Wilson', email: 'mike@company.com', phone: '+1 555-0103', role: 'Marketing Lead', projects: ['demo-p2'] },
-  { id: 'demo-pe4', name: 'Emily Chen', email: 'emily@company.com', phone: '+1 555-0104', role: 'HR Manager', projects: ['demo-p3'] },
-];
-
 function ExecutiveAssistantPage() {
-  // Demo mode detection with change listener
-  const [isDemoMode, setIsDemoMode] = useState(() => {
-    return localStorage.getItem('enableAgentsMode') === 'demo';
-  });
-
   // Workflow context - for saving results back to workflow
   const { isInWorkflow, isHistoryView, stageData, stageId, saveStageData, getContext, context: workflowContext } = useWorkflowContext();
 
@@ -69,10 +32,6 @@ function ExecutiveAssistantPage() {
         setProjects(data.localProjects || []);
         setTasks(data.tasks || []);
         setPeople(data.people || []);
-      } else if (isDemoMode) {
-        setProjects(DEMO_PROJECTS);
-        setTasks(DEMO_TASKS);
-        setPeople(DEMO_PEOPLE);
       } else {
         setProjects([]);
         setTasks([]);
@@ -90,12 +49,9 @@ function ExecutiveAssistantPage() {
 
   const [activeTab, setActiveTab] = useState('projects-tasks');
 
-  // Initialize with demo data if in demo mode
-  const initialDemoMode = localStorage.getItem('enableAgentsMode') === 'demo';
-
-  const [projects, setProjects] = useState(() => initialDemoMode ? DEMO_PROJECTS : []);
-  const [tasks, setTasks] = useState(() => initialDemoMode ? DEMO_TASKS : []);
-  const [people, setPeople] = useState(() => initialDemoMode ? DEMO_PEOPLE : []);
+  const [projects, setProjects] = useState([]);
+  const [tasks, setTasks] = useState([]);
+  const [people, setPeople] = useState([]);
   const [showPersonForm, setShowPersonForm] = useState(false);
 
   // Form states
@@ -127,32 +83,14 @@ function ExecutiveAssistantPage() {
   const [reminderTask, setReminderTask] = useState(null);
   const [reminderPerson, setReminderPerson] = useState(null);
 
-  // Listen for mode changes (storage event handles cross-tab changes)
-  useEffect(() => {
-    const handleModeChange = () => {
-      const newMode = localStorage.getItem('enableAgentsMode') === 'demo';
-      setIsDemoMode(newMode);
-    };
-    window.addEventListener('storage', handleModeChange);
-    return () => {
-      window.removeEventListener('storage', handleModeChange);
-    };
-  }, []);
-
-  // Load demo data on mount if in demo mode, or clear if live mode with no project
+  // Clear local state when no project is selected
   useEffect(() => {
     if (!selectedProjectId) {
-      if (isDemoMode) {
-        setProjects(DEMO_PROJECTS);
-        setTasks(DEMO_TASKS);
-        setPeople(DEMO_PEOPLE);
-      } else {
-        setProjects([]);
-        setTasks([]);
-        setPeople([]);
-      }
+      setProjects([]);
+      setTasks([]);
+      setPeople([]);
     }
-  }, [selectedProjectId, isDemoMode]);
+  }, [selectedProjectId]);
 
   // Debounced save to prevent flicker from rapid re-renders
   const saveTimeoutRef = useRef(null);
@@ -171,7 +109,7 @@ function ExecutiveAssistantPage() {
       // Debounce save by 300ms
       saveTimeoutRef.current = setTimeout(() => {
         // Save to agent-specific storage
-        setAgentData(AGENT_KEYS.EXECUTIVE_ASSISTANT, { projects, tasks, people }, isDemoMode);
+        setAgentData(AGENT_KEYS.EXECUTIVE_ASSISTANT, { projects, tasks, people });
 
         // Also save to global project if one is selected
         if (hasGlobalProject) {
@@ -190,7 +128,7 @@ function ExecutiveAssistantPage() {
         clearTimeout(saveTimeoutRef.current);
       }
     };
-  }, [projects, tasks, people, isDemoMode, hasGlobalProject, selectedProjectId]);
+  }, [projects, tasks, people, hasGlobalProject, selectedProjectId]);
 
   // Add Task
   const quickAddTextareaRef = useRef(null);
@@ -698,7 +636,6 @@ function ExecutiveAssistantPage() {
               dueDate: reminderTask.dueDate ? formatDate(reminderTask.dueDate) : null,
             },
           } : null}
-          isDemoMode={isDemoMode}
         />
 
         {/* Reminder Modal - Multi-channel (Person) */}
@@ -710,7 +647,6 @@ function ExecutiveAssistantPage() {
             taskTitle: null,
             taskDetails: null,
           } : null}
-          isDemoMode={isDemoMode}
         />
 
         {activeTab === 'people' && (

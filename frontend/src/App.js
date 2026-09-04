@@ -1,9 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 
-// Contexts
-import { ModeProvider } from './contexts';
-
 // Shared UI
 import Login from './core/Login';
 import SkipLink from './components/SkipLink';
@@ -57,11 +54,10 @@ function App() {
   });
 
   // isLoggedIn() reads localStorage, which doesn't trigger a React re-render
-  // on its own - listen for the same custom event ModeContext.js already
-  // uses for same-tab localStorage sync (Login/RegisterUser dispatch it on
-  // sign-in, Settings on sign-out) plus the native storage event for
-  // cross-tab sign-in/out, so the panel appears/disappears without a
-  // full page reload.
+  // on its own - listen for the same custom event used for same-tab
+  // localStorage sync (Login/RegisterUser dispatch it on sign-in, Settings
+  // on sign-out) plus the native storage event for cross-tab sign-in/out,
+  // so the panel appears/disappears without a full page reload.
   useEffect(() => {
     const handleAuthChange = () => setLoggedIn(isLoggedIn());
     window.addEventListener('authChange', handleAuthChange);
@@ -78,11 +74,10 @@ function App() {
   };
 
   return (
-    <ModeProvider>
-      <Router>
-        <SkipLink />
-        <div className="App">
-          <ErrorBoundary>
+    <Router>
+      <SkipLink />
+      <div className="App">
+        <ErrorBoundary>
           <main id="main-content" className={loggedIn && panelOpen ? 'main-content--panel-open' : ''}>
           <Routes>
           <Route path="/" element={<RootRedirect />} />
@@ -117,10 +112,9 @@ function App() {
           </Routes>
           </main>
           {loggedIn && <AiAssistantPanel open={panelOpen} onToggle={handlePanelToggle} />}
-          </ErrorBoundary>
-        </div>
-      </Router>
-    </ModeProvider>
+        </ErrorBoundary>
+      </div>
+    </Router>
   );
 }
 

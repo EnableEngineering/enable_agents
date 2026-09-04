@@ -7,10 +7,9 @@ import { authJsonHeaders } from './authHeaders';
 import { showToast } from './toast';
 import { Modal, ModalTabs } from '../components/Modal';
 import { Card, CardGrid } from '../components/Card';
-import { useMode } from '../contexts';
 
 
-function Header({ onProcessClick, onModeChange }) {
+function Header({ onProcessClick }) {
   const [uploadedFile, setUploadedFile] = useState(null);
   const [dataSource, setDataSource] = useState('');
   const [isConnected, setIsConnected] = useState(false);
@@ -22,8 +21,6 @@ function Header({ onProcessClick, onModeChange }) {
   const location = useLocation();
   const [selectedSystemTab, setSelectedSystemTab] = useState('tools');
 
-  // Mode from context - toggle moved to Settings, but still needed for demo data logic
-  const { isDemoMode } = useMode();
   const userDropdownRef = useRef(null);
 
   const handleUserIconClick = () => {
@@ -310,15 +307,6 @@ function Header({ onProcessClick, onModeChange }) {
 
   // Fetch notifications
   const fetchNotifications = useCallback(async () => {
-    if (isDemoMode) {
-      // Demo notifications
-      setNotifications([
-        { id: 'n1', type: 'task_assigned', title: 'New task assigned', message: 'Verify component dimensions', link: '/workflows/demo-instance-1', is_read: false, created_at: new Date().toISOString() },
-        { id: 'n2', type: 'task_completed', title: 'Task completed', message: 'Confirm client specifications', link: '/workflows/demo-instance-1', is_read: true, created_at: new Date(Date.now() - 3600000).toISOString() },
-      ]);
-      setUnreadCount(1);
-      return;
-    }
     try {
       const res = await fetch(`${API_CONFIG.BASE_URL}/api/notifications?unread_only=false`, {
         headers: authJsonHeaders(),
@@ -331,7 +319,7 @@ function Header({ onProcessClick, onModeChange }) {
     } catch (err) {
       console.error('Error fetching notifications:', err);
     }
-  }, [isDemoMode]);
+  }, []);
 
   useEffect(() => {
     fetchNotifications();
@@ -354,11 +342,6 @@ function Header({ onProcessClick, onModeChange }) {
   }, [showNotifDropdown]);
 
   const handleMarkNotifRead = async (notifId) => {
-    if (isDemoMode) {
-      setNotifications(notifications.map(n => n.id === notifId ? { ...n, is_read: true } : n));
-      setUnreadCount(Math.max(0, unreadCount - 1));
-      return;
-    }
     try {
       await fetch(`${API_CONFIG.BASE_URL}/api/notifications/${notifId}/read`, {
         method: 'POST',
@@ -372,11 +355,6 @@ function Header({ onProcessClick, onModeChange }) {
   };
 
   const handleMarkAllRead = async () => {
-    if (isDemoMode) {
-      setNotifications(notifications.map(n => ({ ...n, is_read: true })));
-      setUnreadCount(0);
-      return;
-    }
     try {
       await fetch(`${API_CONFIG.BASE_URL}/api/notifications/read-all`, {
         method: 'POST',

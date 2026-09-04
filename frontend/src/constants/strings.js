@@ -75,15 +75,6 @@ export const STRINGS = {
   // ═══════════════════════════════════════════════════════════════════════════
   // DEMO MODE — Demo/Live mode messages
   // ═══════════════════════════════════════════════════════════════════════════
-  DEMO: {
-    EMAIL_DATA_POPULATED: 'Demo mode: Email data is already populated in the sample data.',
-    LINKEDIN_DATA_POPULATED: 'Demo mode: LinkedIn data is already populated in the sample data.',
-    LIST_SAVED: 'Demo mode: List saved to local view.',
-    LIST_REMOVED: 'Demo mode: List removed from view.',
-    EMAIL_SIMULATED: 'Demo mode: Email sending simulated. In live mode, emails would be sent via your connected account.',
-    SCORES_VISIBLE: 'Demo mode: Match scores are already visible in the demo data. In live mode, AI would re-score based on your criteria.',
-  },
-
   // ═══════════════════════════════════════════════════════════════════════════
   // MARKET RESEARCH — RequirementsGathering module
   // ═══════════════════════════════════════════════════════════════════════════

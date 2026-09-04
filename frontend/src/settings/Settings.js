@@ -6,7 +6,6 @@ import { showConfirm } from '../components/ConfirmDialog';
 import Header from '../core/Header';
 import FormField from '../components/FormField';
 import Skeleton from '../components/SkeletonLoader';
-import { useMode } from '../contexts';
 import { authJsonHeaders, authOptionalHeaders } from '../core/authHeaders';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
@@ -18,13 +17,6 @@ const FRONTEND_TABS = {
     label: 'Account',
     icon: 'user',
     description: 'Your profile and authentication settings',
-    isFrontend: true,
-  },
-  preferences: {
-    id: 'preferences',
-    label: 'Preferences',
-    icon: 'sliders',
-    description: 'App behavior and display preferences',
     isFrontend: true,
   },
   business: {
@@ -166,10 +158,6 @@ function Settings() {
     lastName: lastName,
     email: userEmail,
   });
-
-  // Preferences state - using shared context
-  const { isDemoMode, setMode } = useMode();
-  const isLiveMode = !isDemoMode;
 
   // Business context state (persisted to localStorage for now, can move to API later)
   const [businessContext, setBusinessContext] = useState(() => {
@@ -325,13 +313,6 @@ function Settings() {
     sessionStorage.clear();
     window.dispatchEvent(new Event('authChange'));
     navigate('/login');
-  };
-
-  // Preferences handlers
-  const handleModeToggle = () => {
-    const newIsLive = !isLiveMode;
-    setMode(!newIsLive); // setMode takes isDemoMode (opposite of isLiveMode)
-    showToast(newIsLive ? 'Switched to Live mode' : 'Switched to Demo mode', 'info');
   };
 
   // Business context handlers
@@ -696,41 +677,6 @@ function Settings() {
                   <Icons.Logout />
                   Sign Out
                 </button>
-              </div>
-            </section>
-          )}
-
-          {/* Preferences Tab */}
-          {activeCategory === 'preferences' && (
-            <section className="settings-section">
-              <div className="section-header">
-                <div className="section-icon">{getIcon('sliders')}</div>
-                <div>
-                  <h2>Preferences</h2>
-                  <p>App behavior and display preferences</p>
-                </div>
-              </div>
-
-              <div className="settings-list">
-                <div className="setting-item preference-toggle-row">
-                  <div className="preference-toggle-header">
-                    <div className="setting-label">Data Mode</div>
-                    <button
-                      className={`mode-toggle-large ${isLiveMode ? 'mode-toggle-large--live' : 'mode-toggle-large--demo'}`}
-                      onClick={handleModeToggle}
-                      aria-pressed={isLiveMode}
-                    >
-                      <span className="mode-toggle-large-track">
-                        <span className="mode-toggle-large-thumb" />
-                      </span>
-                      <span className="mode-toggle-large-label">{isLiveMode ? 'Live' : 'Demo'}</span>
-                    </button>
-                  </div>
-                  <div className="setting-description preference-description">
-                    <strong>Live:</strong> Real data and AI interactions.<br/>
-                    <strong>Demo:</strong> Sample data only, safe for exploration.
-                  </div>
-                </div>
               </div>
             </section>
           )}

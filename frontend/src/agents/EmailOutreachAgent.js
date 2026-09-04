@@ -5,31 +5,22 @@ import { BackButton, ProjectGate, ProjectSelector, WorkflowExecutionBanner, Work
 import { API_CONFIG } from '../config/apiConfig';
 import { authJsonHeaders, authOptionalHeaders } from '../core/authHeaders';
 import { showToast } from '../core/toast';
-import { useMode } from '../contexts';
 import { useWorkflowContext } from '../hooks';
 import './EmailOutreachAgent.css';
 
-// Demo email templates
-const DEMO_TEMPLATES = [
+// Built-in starter email templates
+const EMAIL_TEMPLATES = [
   { id: 1, name: 'RFQ Request', subject: 'Request for Quotation - {{component}}', body: 'Dear {{supplier_name}},\n\nWe are seeking quotations for {{component}}...' },
   { id: 2, name: 'Follow-up', subject: 'Following Up - {{company}}', body: 'Hi {{contact_name}},\n\nI wanted to follow up on our previous conversation...' },
   { id: 3, name: 'Introduction', subject: 'Introduction from {{company}}', body: 'Hello {{recipient_name}},\n\nI\'m reaching out to introduce {{company}}...' },
 ];
 
-const DEMO_RECIPIENTS = [
-  { id: 1, name: 'Bharat Precision Engineering', email: 'sales@bharatprecision.com', status: 'pending' },
-  { id: 2, name: 'Gujarat Metal Works', email: 'info@gujaratmetal.in', status: 'pending' },
-  { id: 3, name: 'Shenzhen MFG Co.', email: 'export@szmfg.cn', status: 'sent' },
-];
-
 function EmailOutreachAgent() {
-  const { isDemoMode } = useMode();
-
   // Workflow context - for saving results back to workflow
   const { isInWorkflow, isHistoryView, stageData, stageId, saveStageData, getContext, context: workflowContext } = useWorkflowContext();
 
-  const [templates, setTemplates] = useState(DEMO_TEMPLATES);
-  const [recipients, setRecipients] = useState(isDemoMode ? DEMO_RECIPIENTS : []);
+  const [templates, setTemplates] = useState(EMAIL_TEMPLATES);
+  const [recipients, setRecipients] = useState([]);
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [emailSubject, setEmailSubject] = useState('');
   const [emailBody, setEmailBody] = useState('');
@@ -90,13 +81,8 @@ function EmailOutreachAgent() {
   };
 
   useEffect(() => {
-    if (!isDemoMode) {
-      fetchSavedProjects();
-    } else {
-      setRecipients(DEMO_RECIPIENTS);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isDemoMode]);
+    fetchSavedProjects();
+  }, []);
 
   // Load workflow data when viewing completed stage history
   useEffect(() => {
@@ -128,7 +114,6 @@ function EmailOutreachAgent() {
         }));
         setRecipients(savedRecipients);
       } else {
-        // Mark all demo recipients as sent
         setRecipients(prev => prev.map(r => ({ ...r, status: 'sent' })));
       }
 
@@ -151,31 +136,6 @@ function EmailOutreachAgent() {
   };
 
   const handleSendEmails = async () => {
-    if (isDemoMode) {
-      // In demo mode, simulate sending and save to workflow
-      const pendingCount = recipients.filter(r => r.status === 'pending').length;
-      const totalRecipients = recipients.length;
-      setRecipients(recipients.map(r =>
-        r.status === 'pending' ? { ...r, status: 'sent' } : r
-      ));
-      showToast(`Demo: Simulated sending ${pendingCount} emails`, 'success');
-
-      if (isInWorkflow) {
-        // For demo, use actual counts; rates will be updated when real tracking is available
-        saveStageData({
-          emails_sent: pendingCount,
-          total_recipients: totalRecipients,
-          template_used: selectedTemplate?.name || 'Default Template',
-          email_subject: emailSubject,
-          email_body: emailBody,
-          recipients: recipients.map(r => r.email),
-          recipient_names: recipients.map(r => r.name),
-          status: 'sent',
-        });
-      }
-      return;
-    }
-
     const pendingRecipients = recipients.filter(r => r.status === 'pending');
     if (pendingRecipients.length === 0) return;
 
@@ -322,7 +282,7 @@ function EmailOutreachAgent() {
                 <img src="/assets/icons/users.png" alt="" />
                 Recipients ({recipients.length})
               </h2>
-              {!isDemoMode && !isHistoryView && (
+              {!isHistoryView && (
                 <div className="form-field" style={{ marginBottom: 'var(--space-3)' }}>
                   <label>Load a saved lead list (from Market Research)</label>
                   <select

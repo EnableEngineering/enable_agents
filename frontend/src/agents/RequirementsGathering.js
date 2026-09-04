@@ -11,7 +11,6 @@ import { authJsonHeaders, authOptionalHeaders } from '../core/authHeaders';
 import { getAgentData, setAgentData, AGENT_KEYS } from '../utils';
 import { formatDate } from '../utils/dateFormat';
 import { showToast } from '../core/toast';
-import { useMode } from '../contexts';
 import { useWorkflowContext } from '../hooks';
 import { STRINGS } from '../constants';
 
@@ -82,65 +81,12 @@ const RESEARCH_TYPE_OPTIONS = [
   { value: 'Competitive Research', kind: 'report', description: 'A competitor landscape: feature & pricing comparison, differentiation gaps, SWOT, positioning.' },
 ];
 
-// Demo mode mock data - realistic examples (persisted in sessionStorage)
-const DEMO_MOCK_DATA = {
-  overview: 'B2B SaaS platform for HR automation',
-  industries: 'Technology',
-  countries: 'North America',
-  responseFormat: 'Customer Research',
-  results: {
-    query: 'B2B SaaS platform for HR automation',
-    location: 'North America',
-    industry: 'Technology',
-    totalResults: 8,
-    researchType: 'Customer Research',
-    businesses: [
-      { name: 'TechFlow Solutions', address: 'San Francisco, CA', website: 'https://techflow.io', phone: '+1 (415) 555-0123', email: 'contact@techflow.io', linkedin: 'https://linkedin.com/company/techflow', match_score: 92, summary: 'Leading HR automation platform' },
-      { name: 'CloudHR Systems', address: 'Austin, TX', website: 'https://cloudhr.com', phone: '+1 (512) 555-0456', email: 'info@cloudhr.com', linkedin: 'https://linkedin.com/company/cloudhr', match_score: 88, summary: 'Cloud-based HR solutions' },
-      { name: 'PeopleFirst Inc', address: 'Seattle, WA', website: 'https://peoplefirst.io', phone: '+1 (206) 555-0789', email: 'sales@peoplefirst.io', linkedin: 'https://linkedin.com/company/peoplefirst', match_score: 85, summary: 'Employee experience platform' },
-      { name: 'WorkStream AI', address: 'New York, NY', website: 'https://workstream.ai', phone: '+1 (212) 555-0321', email: 'hello@workstream.ai', linkedin: 'https://linkedin.com/company/workstream', match_score: 91, summary: 'AI-powered workforce management' },
-      { name: 'HRNova Solutions', address: 'Boston, MA', website: 'https://hrnova.com', phone: '+1 (617) 555-0654', email: 'contact@hrnova.com', linkedin: 'https://linkedin.com/company/hrnova', match_score: 94, summary: 'Enterprise HR transformation' },
-      { name: 'Talent Dynamics', address: 'Denver, CO', website: 'https://talentdynamics.co', phone: '+1 (303) 555-0987', email: 'info@talentdynamics.co', linkedin: 'https://linkedin.com/company/talentdynamics', match_score: 79, summary: 'Recruiting and talent acquisition' },
-      { name: 'PayrollPro Systems', address: 'Chicago, IL', website: 'https://payrollpro.io', phone: '+1 (312) 555-0147', email: 'sales@payrollpro.io', linkedin: 'https://linkedin.com/company/payrollpro', match_score: 82, summary: 'Payroll and benefits automation' },
-      { name: 'BenefitHub Corp', address: 'Atlanta, GA', website: 'https://benefithub.com', phone: '+1 (404) 555-0258', email: 'team@benefithub.com', linkedin: 'https://linkedin.com/company/benefithub', match_score: 77, summary: 'Employee benefits management' },
-    ],
-    summary: {
-      totalLeads: 8,
-      topIndustries: ['HR Technology', 'Enterprise Software', 'AI/ML'],
-      avgRating: 4.6,
-      region: 'North America'
-    }
-  },
-  savedLists: [
-    { id: 'demo-1', name: 'Tech Startups Q1', query_used: 'B2B SaaS startups', created_at: '2026-06-15', lead_count: 24, status: 'active' },
-    { id: 'demo-2', name: 'Enterprise HR Leads', query_used: 'Enterprise HR software', created_at: '2026-06-20', lead_count: 18, status: 'active' },
-    { id: 'demo-3', name: 'West Coast Prospects', query_used: 'Tech companies California', created_at: '2026-06-25', lead_count: 32, status: 'active' },
-  ]
-};
-
-// Note: Demo state now handled by centralized ModeContext
-
 function RequirementsGathering() {
-  // Demo mode from context (no polling needed)
-  const { isDemoMode } = useMode();
-
   // Workflow context - for loading/saving workflow data
   const { isInWorkflow, isHistoryView, stageData, context: workflowContext, saveStageData } = useWorkflowContext();
 
   // Track if initial load is done (don't save during initial load or mode transitions)
   const isInitialLoadRef = React.useRef(true);
-  const lastSavedModeRef = React.useRef(null);
-
-  // Reset initial load flag when mode changes
-  useEffect(() => {
-    isInitialLoadRef.current = true;
-    // Mark initial load complete after state updates
-    const timer = setTimeout(() => {
-      isInitialLoadRef.current = false;
-      lastSavedModeRef.current = isDemoMode;
-    }, 100);
-    return () => clearTimeout(timer);
-  }, [isDemoMode]);
 
   const [overview, setOverview] = useState('');
   const [context, setContext] = useState('');
@@ -174,14 +120,12 @@ function RequirementsGathering() {
   const [isAddingNewCampaign, setIsAddingNewCampaign] = useState(false);
   const [emailImages, setEmailImages] = useState([]);
 
-  // Save market research data to centralized mode storage
-  // Only save after initial load is complete and mode matches last saved mode
+  // Save market research data to local storage
+  // Only save after initial load is complete
   useEffect(() => {
-    // Skip saving during initial load or mode transitions
     if (isInitialLoadRef.current) return;
 
-    // Only save if we have results and mode matches what we last loaded
-    if (customerResearchResults !== null && lastSavedModeRef.current === isDemoMode) {
+    if (customerResearchResults !== null) {
       setAgentData(AGENT_KEYS.MARKET_RESEARCH, {
         results: customerResearchResults,
         showTable: showCustomerResearchTable,
@@ -190,33 +134,15 @@ function RequirementsGathering() {
         industries,
         countries,
         responseFormat,
-      }, isDemoMode);
+      });
     }
-  }, [customerResearchResults, showCustomerResearchTable, minimizedCustomerResearch, overview, industries, countries, responseFormat, isDemoMode]);
+  }, [customerResearchResults, showCustomerResearchTable, minimizedCustomerResearch, overview, industries, countries, responseFormat]);
 
-  // Load data when mode changes
+  // Load saved data on mount
   useEffect(() => {
-    // Clear state first
-    setCustomerResearchResults(null);
-    setShowCustomerResearchTable(false);
-    setMinimizedCustomerResearch(false);
-    setOverview('');
-    setIndustries('');
-    setCountries('');
-    setResponseFormat('');
+    const savedData = getAgentData(AGENT_KEYS.MARKET_RESEARCH);
 
-    // Load data for current mode
-    const savedData = getAgentData(AGENT_KEYS.MARKET_RESEARCH, isDemoMode);
-
-    if (isDemoMode && !savedData?.results) {
-      // Demo mode with no saved data - load demo defaults
-      setCustomerResearchResults(DEMO_MOCK_DATA.results);
-      setShowCustomerResearchTable(true);
-      setOverview(DEMO_MOCK_DATA.overview);
-      setIndustries(DEMO_MOCK_DATA.industries);
-      setCountries(DEMO_MOCK_DATA.countries);
-      setResponseFormat(DEMO_MOCK_DATA.responseFormat);
-    } else if (savedData?.results) {
+    if (savedData?.results) {
       setCustomerResearchResults(savedData.results);
       setShowCustomerResearchTable(savedData.showTable || false);
       setMinimizedCustomerResearch(savedData.minimized || false);
@@ -229,9 +155,8 @@ function RequirementsGathering() {
     // Mark initial load as complete after state updates
     setTimeout(() => {
       isInitialLoadRef.current = false;
-      lastSavedModeRef.current = isDemoMode;
     }, 100);
-  }, [isDemoMode]);
+  }, []);
 
   // Load workflow data when viewing completed stage history
   useEffect(() => {
@@ -480,34 +405,6 @@ function RequirementsGathering() {
         // A search result should never render alongside a leftover result of any kind.
         clearResearchResults();
 
-        // In demo mode, use mock data instead of API call
-        if (isDemoMode) {
-          const demoResults = {
-            query: overview,
-            location: countries,
-            industry: industries,
-            totalResults: DEMO_MOCK_DATA.results.businesses.length,
-            researchType: responseFormat,
-            businesses: DEMO_MOCK_DATA.results.businesses
-          };
-          setCustomerResearchResults(demoResults);
-          setShowCustomerResearchTable(true);
-
-          // Save to workflow if in workflow context
-          if (isInWorkflow) {
-            saveStageData({
-              client_name: overview,
-              component_type: responseFormat,
-              search_query: overview,
-              location: countries,
-              industry: industries,
-              businesses_found: demoResults.totalResults,
-              top_businesses: demoResults.businesses.slice(0, 5).map(b => b.name),
-            });
-          }
-          return;
-        }
-
         setIsLoadingResearch(true);
 
         // Call the search-google-businesses API
@@ -632,12 +529,6 @@ function RequirementsGathering() {
       return;
     }
 
-    // In demo mode, data already has emails
-    if (isDemoMode) {
-      showToast('Demo mode: Email data is already populated in the sample data.', 'info');
-      return;
-    }
-
     setIsLoadingEmails(true);
 
     try {
@@ -699,12 +590,6 @@ function RequirementsGathering() {
 
   const handleExtractLinkedInForBusiness = async (business, index) => {
     if (!business) return;
-
-    // In demo mode, data already has LinkedIn
-    if (isDemoMode) {
-      showToast('Demo mode: LinkedIn data is already populated in the sample data.', 'info');
-      return;
-    }
 
     setExtractingLinkedInRows((prev) => ({ ...prev, [index]: true }));
     console.log(`[LINKEDIN_EXTRACTION] Starting extraction for ${business.name}`);
@@ -789,12 +674,6 @@ function RequirementsGathering() {
   const handleExtractEmailForBusiness = async (business, index) => {
     if (!business || !business.website) {
       showToast('Website not available for this business.', 'warning');
-      return;
-    }
-
-    // In demo mode, data already has emails
-    if (isDemoMode) {
-      showToast('Demo mode: Email data is already populated in the sample data.', 'info');
       return;
     }
 
@@ -992,27 +871,6 @@ function RequirementsGathering() {
       return;
     }
 
-    // In demo mode, simulate saving
-    if (isDemoMode) {
-      if (!saveListName.trim() && saveListMode !== 'append') {
-        showToast('Please provide a name for the list.', 'warning');
-        return;
-      }
-      const newList = {
-        id: `demo-${Date.now()}`,
-        name: saveListName || 'New Demo List',
-        query_used: customerResearchResults?.query || '',
-        created_at: new Date().toISOString(),
-        lead_count: rows.length,
-        status: 'active'
-      };
-      setSavedLists(prev => [newList, ...prev]);
-      setShowSaveListModal(false);
-      setSaveListName('');
-      showToast('Demo mode: List saved to local view.', 'info');
-      return;
-    }
-
     const payloadLeads = (customerResearchResults?.businesses || []).map((business) => ({
       name: business.name || 'N/A',
       website: business.website || '',
@@ -1117,13 +975,6 @@ function RequirementsGathering() {
       return;
     }
 
-    // In demo mode, scores are already populated
-    if (isDemoMode) {
-      showToast('Demo mode: Match scores are already visible in the demo data. In live mode, AI would re-score based on your criteria.', 'info');
-      setShowScoreModal(false);
-      return;
-    }
-
     setIsScoring(true);
     try {
       const payload = sourceBusinesses.map(b => ({
@@ -1207,17 +1058,6 @@ function RequirementsGathering() {
     });
     if (!confirmed) return;
 
-    // In demo mode, just remove from local state
-    if (isDemoMode) {
-      setSavedLists(prev => prev.filter(l => l.id !== projectId));
-      if (activeSavedList && activeSavedList.id === projectId) {
-        setActiveSavedList(null);
-        setActiveSavedListLeads([]);
-      }
-      showToast('Demo mode: List removed from view.', 'info');
-      return;
-    }
-
     setDeletingListId(projectId);
     try {
       const response = await fetch(`${API_CONFIG.DELETE_SAVED_PROJECT}/${projectId}?username=${encodeURIComponent(getCurrentUsername())}`, {
@@ -1247,18 +1087,6 @@ function RequirementsGathering() {
   const fetchSavedLists = async () => {
      setIsLoadingSavedLists(true);
 
-     // In demo mode, use mock data
-     if (isDemoMode) {
-       const savedData = getAgentData(AGENT_KEYS.MARKET_RESEARCH, true);
-       if (savedData && savedData.savedLists) {
-         setSavedLists(savedData.savedLists);
-       } else {
-         setSavedLists(DEMO_MOCK_DATA.savedLists);
-       }
-       setIsLoadingSavedLists(false);
-       return;
-     }
-
      try {
        const userIdentifier = getCurrentUsername();
        const res = await fetch(`${API_CONFIG.GET_SAVED_PROJECTS}?username=${encodeURIComponent(userIdentifier)}`, {
@@ -1286,31 +1114,6 @@ function RequirementsGathering() {
   }, [showSaveListModal]);
 
   const loadSavedListDetails = async (projectId) => {
-     // In demo mode, use mock leads
-     if (isDemoMode) {
-       const demoList = DEMO_MOCK_DATA.savedLists.find(l => l.id === projectId);
-       if (demoList) {
-         // Use the main demo businesses as the leads for any demo list
-         const leads = DEMO_MOCK_DATA.results.businesses;
-
-         setCustomerResearchResults({
-           query: demoList.query_used || demoList.name,
-           location: 'North America',
-           industry: 'Technology',
-           totalResults: leads.length,
-           researchType: 'Customer Research',
-           businesses: leads
-         });
-
-         setActiveSavedList(demoList);
-         setActiveSavedListLeads(leads);
-         setShowSavedListsView(false);
-         setShowCustomerResearchTable(true);
-         setMinimizedCustomerResearch(false);
-       }
-       return;
-     }
-
      try {
         const userIdentifier = getCurrentUsername();
         const res = await fetch(`${API_CONFIG.GET_SAVED_PROJECT_LEADS}/${projectId}/leads?username=${encodeURIComponent(userIdentifier)}`, {
@@ -1519,26 +1322,6 @@ function RequirementsGathering() {
         return;
       }
 
-      // In demo mode, use sample email content
-      if (isDemoMode) {
-        setEmailSubject(`Partnership Opportunity - ${business.name || 'Your Company'}`);
-        setEmailBody(`Hi ${business.name ? business.name.split(' ')[0] : 'there'},
-
-I came across ${business.name || 'your company'} and was impressed by your work in ${business.summary || 'your industry'}.
-
-We at Enable Agents specialize in AI-powered business automation, and I believe there's potential for a valuable partnership.
-
-Would you be open to a brief call this week to explore how we might work together?
-
-Best regards,
-${getCurrentUsername() || 'Your Name'}`);
-        setCampaignName('Personalized: ' + (business.name || 'Company'));
-        setSelectedLead(business);
-        setShowEmailModal(true);
-        setIsGeneratingEmail(prev => ({ ...prev, [index]: false }));
-        return;
-      }
-
       const response = await fetch(API_CONFIG.GENERATE_EMAIL, {
         method: 'POST',
         headers: authJsonHeaders(),
@@ -1593,15 +1376,6 @@ ${getCurrentUsername() || 'Your Name'}`);
       return;
     }
 
-    // In demo mode, simulate sending
-    if (isDemoMode) {
-      showToast('Demo mode: Email sending simulated. In live mode, emails would be sent via your connected account.', 'info');
-      setShowEmailModal(false);
-      setEmailSubject('');
-      setEmailBody('');
-      setSelectedLead(null);
-      return;
-    }
 
     const registeredEmail = getCurrentUserEmail();
     if (!registeredEmail) {
@@ -2185,22 +1959,6 @@ ${getCurrentUsername() || 'Your Name'}`);
                           <span className="step-text">Get AI-powered insights</span>
                         </div>
                       </div>
-                      {isDemoMode && (
-                        <button
-                          className="demo-example-btn"
-                          onClick={() => {
-                            // Load demo data (auto-saved by centralized storage useEffect)
-                            setOverview(DEMO_MOCK_DATA.overview);
-                            setIndustries(DEMO_MOCK_DATA.industries);
-                            setCountries(DEMO_MOCK_DATA.countries);
-                            setResponseFormat(DEMO_MOCK_DATA.responseFormat);
-                            setCustomerResearchResults(DEMO_MOCK_DATA.results);
-                            setShowCustomerResearchTable(true);
-                          }}
-                        >
-                          Try Example (Demo Mode)
-                        </button>
-                      )}
                     </div>
                   )}
                 </>

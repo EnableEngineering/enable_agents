@@ -11,14 +11,6 @@ import '../styles/Chatbot.css';
 // Storage key for state persistence
 const STATE_KEY = 'chatbotState';
 
-const DEMO_RESPONSES = [
-  "Based on the document, the main themes are organizational efficiency and process optimization. The key recommendations include streamlining workflows and implementing automated reporting systems.",
-  "The document highlights three critical success factors: stakeholder alignment, clear communication channels, and measurable KPIs. Section 3.2 specifically addresses implementation timelines.",
-  "I found relevant information in pages 12-15. The projected ROI is estimated at 150% over 18 months, with initial investments primarily in technology infrastructure.",
-  "The analysis shows a 23% increase in operational efficiency when implementing the proposed changes. Key metrics include reduced processing time and improved customer satisfaction scores.",
-  "According to the document summary, the primary objectives are: 1) Enhance data security protocols, 2) Streamline user authentication, and 3) Implement real-time monitoring dashboards.",
-];
-
 function Chatbot() {
   const selectedProjectId = useSelectedProjectId();
 
@@ -31,10 +23,6 @@ function Chatbot() {
       return {};
     }
   }, []);
-
-  const [isDemoMode, setIsDemoMode] = useState(() => {
-    return localStorage.getItem('enableAgentsMode') === 'demo';
-  });
 
   // Load messages from sessionStorage or default
   const [messages, setMessages] = useState(() => {
@@ -63,19 +51,6 @@ function Chatbot() {
     }
   }, [selectedProjectId]);
 
-  useEffect(() => {
-    const handleModeChange = () => {
-      const newMode = localStorage.getItem('enableAgentsMode') === 'demo';
-      if (isDemoMode !== newMode) {
-        setMessages([{ sender: 'ai', text: 'Hi! Ask me anything about your documents.' }]);
-        setChatHistory([{ subject: 'Welcome', summary: 'Introduction to the chatbot.' }]);
-        setIsDemoMode(newMode);
-      }
-    };
-    window.addEventListener('storage', handleModeChange);
-    return () => window.removeEventListener('storage', handleModeChange);
-  }, [isDemoMode]);
-
   const botProps = {
     description: "This AI chatbot helps you query and analyze your uploaded documents.",
     expertise: "Document Q&A, Data Extraction, Summarization",
@@ -93,22 +68,6 @@ function Chatbot() {
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setLoading(true);
-
-    if (isDemoMode) {
-      setTimeout(() => {
-        const randomResponse = DEMO_RESPONSES[Math.floor(Math.random() * DEMO_RESPONSES.length)];
-        setMessages(prev => [
-          ...prev,
-          { sender: 'ai', text: `${randomResponse}\n\n*(Demo Mode - connect to live for real AI responses)*` }
-        ]);
-        setChatHistory(prev => [
-          { subject: input.slice(0, 30) + (input.length > 30 ? '...' : ''), summary: 'Demo response generated' },
-          ...prev
-        ]);
-        setLoading(false);
-      }, 1000);
-      return;
-    }
 
     try {
       const response = await fetch(`${API_CONFIG.API_URL}/api/document-intelligence/chat`, {
