@@ -979,6 +979,30 @@ const handleEnterpriseChat = async (userInput) => {
         {(() => {
           const term = searchTerm.trim().toLowerCase();
 
+          // Relevance score for a search term against a module - higher
+          // weight for a name match, then keywords, then the looser
+          // useCases/businessContext fields, so e.g. searching "lead"
+          // surfaces Sales Helper Agent (via its "lead management" keyword)
+          // ahead of a module that only mentions it in a use case. 0 = no
+          // match. A whole-word name match (e.g. "Market" in "Market
+          // Research") outweighs a substring-of-a-longer-word match (e.g.
+          // "market" inside "marketing") so a query like "market" doesn't
+          // rank Content Marketing Agent above Market Research just
+          // because "marketing" happens to appear in more of its fields.
+          const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const scoreModule = (module, searchTerm) => {
+            let score = 0;
+            const name = module.name.toLowerCase();
+            if (name.includes(searchTerm)) {
+              const wordBoundary = new RegExp(`\\b${escapeRegExp(searchTerm)}\\b`);
+              score += wordBoundary.test(name) ? 25 : 10;
+            }
+            if (module.keywords?.some(k => k.toLowerCase().includes(searchTerm))) score += 5;
+            if (module.useCases?.some(u => u.toLowerCase().includes(searchTerm))) score += 2;
+            if (module.businessContext?.some(c => c.toLowerCase().includes(searchTerm))) score += 2;
+            return score;
+          };
+
           const displayModules = filteredModules
             .filter(module => {
               // Filter by tab (business/technical)
@@ -1004,16 +1028,16 @@ const handleEnterpriseChat = async (userInput) => {
                 ));
                 if (!processMatch) return false;
               }
-              // Filter by search term
-              if (term) {
-                const searchMatch =
-                  module.name.toLowerCase().includes(term) ||
-                  (module.keywords && module.keywords.some(k => k.toLowerCase().includes(term)));
-                if (!searchMatch) return false;
-              }
+              // Filter by search term - relevance score, not just presence
+              if (term && scoreModule(module, term) === 0) return false;
               return true;
             })
             .sort((a, b) => {
+              // While searching, rank by relevance first
+              if (term) {
+                const scoreDiff = scoreModule(b, term) - scoreModule(a, term);
+                if (scoreDiff !== 0) return scoreDiff;
+              }
               if (a.status === 'ready' && b.status !== 'ready') return -1;
               if (a.status !== 'ready' && b.status === 'ready') return 1;
               return 0;
