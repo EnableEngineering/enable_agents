@@ -414,6 +414,16 @@ function WorkflowRunner() {
   const stages = (instance.stages || DEMO_STAGES).map(s => ({ ...s, id: s.id || s.stage_id }));
   const stageStates = instance.stageStates || {};
   const currentStage = instance.currentStage;
+
+  // Find which earlier stage's `outputs` produces a given `required_inputs`
+  // key, so the current stage's form can show where a value is expected to
+  // come from instead of a bare field label. Purely informational - stage
+  // agents are fixed per template today, there's no UI to add/remove a
+  // stage, so this can't gate anything, only surface the relationship.
+  const getInputSourceStage = (inputKey) => {
+    const priorStages = stages.slice(0, instance.currentStageIndex);
+    return priorStages.find((s) => s.outputs?.includes(inputKey)) || null;
+  };
   const isCompleted = instance.status === 'completed';
   const isPending = instance.status === 'pending';
   const progress = instance.totalStages > 0
@@ -549,17 +559,27 @@ function WorkflowRunner() {
 
                     {currentStage.required_inputs?.length > 0 && (
                       <div className="wf-form">
-                        {currentStage.required_inputs.map((input) => (
-                          <div key={input} className="wf-form-field">
-                            <label>{formatLabel(input)}</label>
-                            <input
-                              type="text"
-                              value={stageData[input] || instance.context[input] || ''}
-                              onChange={(e) => setStageData({ ...stageData, [input]: e.target.value })}
-                              placeholder={`Enter ${formatLabel(input).toLowerCase()}`}
-                            />
-                          </div>
-                        ))}
+                        {currentStage.required_inputs.map((input) => {
+                          const sourceStage = getInputSourceStage(input);
+                          return (
+                            <div key={input} className="wf-form-field">
+                              <label>
+                                {formatLabel(input)}
+                                {sourceStage && (
+                                  <span className="wf-input-source">
+                                    {' '}&middot; from {sourceStage.name}
+                                  </span>
+                                )}
+                              </label>
+                              <input
+                                type="text"
+                                value={stageData[input] || instance.context[input] || ''}
+                                onChange={(e) => setStageData({ ...stageData, [input]: e.target.value })}
+                                placeholder={`Enter ${formatLabel(input).toLowerCase()}`}
+                              />
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
 
