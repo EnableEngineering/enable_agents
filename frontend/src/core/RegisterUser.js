@@ -3,6 +3,7 @@ import '../styles/Login.css';
 import { useNavigate } from 'react-router-dom';
 import { API_CONFIG } from '../config/apiConfig';
 import { showToast } from './toast';
+import { navigateAfterLogin } from './authHeaders';
 import FormField from '../components/FormField';
 import useValidation, { validators } from '../hooks/useValidation';
 
@@ -100,7 +101,7 @@ function RegisterUser() {
         localStorage.setItem('firstName', values.firstName || values.email.trim().split('@')[0] || 'User');
         showToast('Account created. You are signed in.', 'success');
         window.dispatchEvent(new Event('authChange'));
-        navigate('/agents');
+        navigateAfterLogin(navigate);
       } else {
         showToast(data.error || 'Registration failed. Please try again.', 'error');
       }

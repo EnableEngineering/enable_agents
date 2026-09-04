@@ -1,3 +1,5 @@
+import { API_CONFIG } from '../config/apiConfig';
+
 /** Merge JSON headers with optional Bearer session token from login/register/OAuth */
 
 export function authJsonHeaders(extra = {}) {
@@ -21,6 +23,28 @@ export function authJsonHeaders(extra = {}) {
   }
 
   return headers;
+}
+
+/**
+ * Post-login/register routing: returning users (already have a project) go
+ * straight to the Dashboard; first-time users land on the agent catalog.
+ * Fails open to /agents if the check itself fails, rather than blocking on
+ * a broken state.
+ */
+export async function navigateAfterLogin(navigate) {
+  try {
+    const res = await fetch(`${API_CONFIG.BASE_URL}/api/projects`, {
+      headers: authJsonHeaders(),
+    });
+    const data = await res.json();
+    if (Array.isArray(data.projects) && data.projects.length > 0) {
+      navigate('/dashboard');
+      return;
+    }
+  } catch {
+    // fall through to /agents
+  }
+  navigate('/agents');
 }
 
 /** For GET requests: only add Authorization when logged in. */
