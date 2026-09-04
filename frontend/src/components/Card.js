@@ -84,25 +84,28 @@ export function CardGrid({
  *
  * @param {string} icon - Icon URL
  * @param {string} title - Module title
+ * @param {string} description - Short module description (optional)
  * @param {string} status - 'ready' | 'in-progress' | 'unavailable'
  * @param {string} price - Price string (e.g., '$29/month')
  * @param {function} onTry - Try button handler
  * @param {function} onBuy - Buy button handler
  * @param {boolean} locked - If true, card is not interactive (Live mode stub)
+ * @param {string} badge - Optional small label chip (e.g. "Recommended")
  */
 export function ModuleCard({
   icon,
   title,
+  description,
   status = 'ready',
   price,
   onTry,
   onBuy,
   locked = false,
+  badge,
   className = '',
   ...props
 }) {
   const isReady = status === 'ready';
-  const isProgress = status === 'in-progress';
   const isUnavailable = status === 'unavailable' || locked;
 
   const classes = [
@@ -116,8 +119,12 @@ export function ModuleCard({
       <div className="module-card-header">
         {icon && <img src={icon} alt="" className="module-card-icon" />}
         <span className="module-card-title">{title}</span>
+        {badge && <span className="module-card-badge">{badge}</span>}
         <StatusIndicator status={status} />
       </div>
+
+      {description && <p className="module-card-description">{description}</p>}
+      {price && <div className="module-card-price">{price}</div>}
 
       <div className="module-card-footer">
         <button
@@ -126,13 +133,12 @@ export function ModuleCard({
           disabled={isUnavailable}
           title={isUnavailable ? 'Not available yet' : `Try ${title}`}
         >
-          Try
+          {isUnavailable ? 'Not Available' : 'Try'}
         </button>
         <button
           className="btn btn-primary btn-sm"
           onClick={onBuy}
-          disabled={isUnavailable}
-          title={isUnavailable ? 'Not available yet' : `Buy ${title} - ${price}`}
+          title={`Buy ${title}${price ? ` - ${price}` : ''}`}
         >
           Buy
         </button>

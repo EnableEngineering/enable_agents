@@ -8,7 +8,7 @@ import { getRouteByModuleName } from '../config/agentsConfig';
 import { fetchAgents } from '../agents/agentRegistry';
 import { showConfirm, showAlert } from './ConfirmDialog';
 import { Modal, ModalTabs } from './Modal';
-import { CardGrid, StatusIndicator } from './Card';
+import { CardGrid, ModuleCard } from './Card';
 import Select from './Select';
 import LiveModeHint from './LiveModeHint';
 import { STRINGS } from '../constants/strings';
@@ -74,19 +74,6 @@ function AgentsAssembly() {
 
   const navigate = useNavigate();
   const chatHistoryRef = useRef(null);
-  const carouselRef = useRef(null);
-
-  // Carousel state - persist selected agent
-  const [carouselIndex, setCarouselIndex] = useState(() => {
-    const saved = sessionStorage.getItem('agentsAssemblySelectedAgent');
-    return saved ? parseInt(saved, 10) : 0;
-  });
-  const cardsPerView = 4; // Number of cards visible at once
-
-  // Persist carousel index when it changes
-  useEffect(() => {
-    sessionStorage.setItem('agentsAssemblySelectedAgent', carouselIndex.toString());
-  }, [carouselIndex]);
 
   // Persist module tab when it changes
   useEffect(() => {
@@ -333,50 +320,21 @@ function AgentsAssembly() {
     const allModules = [...businessModules, ...technicalModules];
     setFilteredModules(allModules);
 
-    // Sort function (same as displayModules sort)
-    const sortByStatus = (a, b) => {
-      if (a.status === 'ready' && b.status !== 'ready') return -1;
-      if (a.status !== 'ready' && b.status === 'ready') return 1;
-      return 0;
-    };
-
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
       const matchesSearch = (module) =>
         module.name.toLowerCase().includes(term) ||
         (module.keywords && module.keywords.some(k => k.toLowerCase().includes(term)));
 
-      // Sort business modules same as carousel
-      const sortedBusiness = [...businessModules].sort(sortByStatus);
-      const businessIdx = sortedBusiness.findIndex(matchesSearch);
-
-      if (businessIdx !== -1) {
-        setModuleTab('business');
-        setCarouselIndex(businessIdx);
-        return;
-      }
-
-      // Sort technical modules same as carousel
-      const sortedTech = [...technicalModules].sort(sortByStatus);
-      const techIdx = sortedTech.findIndex(matchesSearch);
-
-      if (techIdx !== -1) {
+      // Switch to whichever tab actually has a match, so the grid isn't
+      // left showing "no results" on a tab that was never searched
+      if (!businessModules.some(matchesSearch) && technicalModules.some(matchesSearch)) {
         setModuleTab('technical');
-        setCarouselIndex(techIdx);
-        return;
+      } else if (businessModules.some(matchesSearch) && !technicalModules.some(matchesSearch)) {
+        setModuleTab('business');
       }
     }
-
-    // No search - preserve sessionStorage index (don't reset)
   }, [searchTerm, selectedIndustry, selectedProcess, businessPage]);
-
-  // Rest of your handlers remain the same...
-  const handleCardClick = (moduleName) => {
-    const route = getRouteByModuleName(moduleName);
-    if (route) {
-      navigate(route);
-    }
-  };
 
   const handleTryModule = (moduleName) => {
     const route = getRouteByModuleName(moduleName);
@@ -795,41 +753,24 @@ const handleEnterpriseChat = async (userInput) => {
               </button>
             </h3>
             <CardGrid columns="auto" gap="md" className="modules-container recommended">
-              {recommendedModules.map((name, idx) => {
+              {recommendedModules.map((name) => {
                 // Find module details from businessModules or technicalModules
                 const module = businessModules.find(m => m.name === name) || technicalModules.find(m => m.name === name);
                 if (!module) return null;
+                const isReady = module.status === 'ready';
                 return (
-                  <div
-                    key={idx}
-                    className={`module-card recommended-card ${businessModules.some(b => b.name === name) ? 'business-module' : 'technical-module'}`}
-                  >
-                    <img src={module.icon} alt={module.name} />
-                    <p>{module.name}</p>
-                    <span className="recommended-tag">Recommended</span>
-                    <div className="card-buttons">
-                      <button
-                        className="try-button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleTryModule(module.name);
-                        }}
-                        title={`Try ${module.name} for free`}
-                      >
-                        Try
-                      </button>
-                      <button
-                        className="buy-button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleBuyModule(module);
-                        }}
-                        title={`Buy ${module.name} - ${module.price}`}
-                      >
-                        Buy
-                      </button>
-                    </div>
-                  </div>
+                  <ModuleCard
+                    key={name}
+                    icon={module.icon}
+                    title={module.name}
+                    description={module.description}
+                    price={module.price}
+                    status={isReady ? 'ready' : 'in-progress'}
+                    locked={!isReady}
+                    badge="Recommended"
+                    onTry={() => { if (isReady) handleTryModule(module.name); }}
+                    onBuy={() => handleBuyModule(module)}
+                  />
                 );
               })}
             </CardGrid>
@@ -956,7 +897,7 @@ const handleEnterpriseChat = async (userInput) => {
               role="tab"
               className={`module-tab module-tab--business ${moduleTab === 'business' ? 'module-tab--active' : ''}`}
               aria-selected={moduleTab === 'business'}
-              onClick={() => { setModuleTab('business'); setCarouselIndex(0); }}
+              onClick={() => setModuleTab('business')}
             >
               Business ({businessModules.length})
             </button>
@@ -964,7 +905,7 @@ const handleEnterpriseChat = async (userInput) => {
               role="tab"
               className={`module-tab module-tab--technical ${moduleTab === 'technical' ? 'module-tab--active' : ''}`}
               aria-selected={moduleTab === 'technical'}
-              onClick={() => { setModuleTab('technical'); setCarouselIndex(0); }}
+              onClick={() => setModuleTab('technical')}
             >
               Technical ({technicalModules.length})
             </button>
@@ -1034,8 +975,10 @@ const handleEnterpriseChat = async (userInput) => {
           </div>
         </div>
 
-        {/* Modules Section - Infinite 3D Carousel */}
+        {/* Modules Section - Responsive grid of shared ModuleCards */}
         {(() => {
+          const term = searchTerm.trim().toLowerCase();
+
           const displayModules = filteredModules
             .filter(module => {
               // Filter by tab (business/technical)
@@ -1061,6 +1004,13 @@ const handleEnterpriseChat = async (userInput) => {
                 ));
                 if (!processMatch) return false;
               }
+              // Filter by search term
+              if (term) {
+                const searchMatch =
+                  module.name.toLowerCase().includes(term) ||
+                  (module.keywords && module.keywords.some(k => k.toLowerCase().includes(term)));
+                if (!searchMatch) return false;
+              }
               return true;
             })
             .sort((a, b) => {
@@ -1069,162 +1019,35 @@ const handleEnterpriseChat = async (userInput) => {
               return 0;
             });
 
-          const total = displayModules.length;
-          if (total === 0) {
+          if (displayModules.length === 0) {
             return (
               <div className="no-results">
-                <h3>{moduleTab === 'technical' ? 'Technical Tools' : 'No modules found'}</h3>
-                <p>
-                  {moduleTab === 'technical'
-                    ? 'Data Insights is available now. Additional technical tools are currently in beta.'
-                    : 'Try adjusting your search or browse all available modules.'}
-                </p>
-                {moduleTab !== 'technical' && (
-                  <button type="button" onClick={() => setSearchTerm('')}>Clear Search</button>
-                )}
+                <h3>No modules found</h3>
+                <p>Try adjusting your search or browse all available modules.</p>
+                <button type="button" onClick={() => setSearchTerm('')}>Clear Search</button>
               </div>
             );
           }
 
-          // Infinite circular navigation
-          const scrollCarousel = (direction) => {
-            if (direction === 'left') {
-              setCarouselIndex(prev => (prev - 1 + total) % total);
-            } else {
-              setCarouselIndex(prev => (prev + 1) % total);
-            }
-          };
-
-          // Get circular offset from center (-2, -1, 0, 1, 2)
-          const getCircularOffset = (index) => {
-            const activeIndex = carouselIndex;
-            let offset = index - activeIndex;
-            // Wrap around for circular effect
-            if (offset > total / 2) offset -= total;
-            if (offset < -total / 2) offset += total;
-            return offset;
-          };
-
-          // Calculate 3D card style based on offset from center
-          const getCardStyle = (index) => {
-            const offset = getCircularOffset(index);
-            const absOffset = Math.abs(offset);
-
-            // Only show 5 cards: -2, -1, 0, 1, 2
-            if (absOffset > 2) {
-              return { visible: false };
-            }
-
-            // Scale: center = 1, ±1 = 0.85, ±2 = 0.7
-            const scale = absOffset === 0 ? 1 : absOffset === 1 ? 0.85 : 0.7;
-
-            // Opacity: center = 1, ±1 = 0.6, ±2 = 0.3
-            const opacity = absOffset === 0 ? 1 : absOffset === 1 ? 0.6 : 0.3;
-
-            // Z-index: center highest
-            const zIndex = 100 - absOffset * 10;
-
-            // X translation: consistent visual gap between scaled cards
-            const cardWidth = Math.min(360, window.innerWidth * 0.20);
-            const gap = 12; // Visual gap between cards
-            // Calculate position accounting for scaled widths
-            let translateX = 0;
-            if (absOffset === 1) {
-              translateX = offset * (cardWidth * 0.925 + gap);
-            } else if (absOffset === 2) {
-              translateX = offset * (cardWidth * 0.925 + gap) + offset * (cardWidth * 0.775 + gap);
-            }
-
-            // Slight Y offset for depth
-            const translateY = absOffset * 8;
-
-            return { visible: true, scale, opacity, zIndex, translateX, translateY, offset };
-          };
-
           return (
-            <div className="carousel-3d-container">
-              <button
-                type="button"
-                className="carousel-nav carousel-nav--left"
-                onClick={() => scrollCarousel('left')}
-                aria-label="Previous agent"
-              />
-
-              <div className="carousel-3d-viewport">
-                <div className="carousel-3d-stage">
-                  {displayModules.map((module, index) => {
-                    const style = getCardStyle(index);
-                    if (!style.visible) return null;
-
-                    const isReady = module.status === 'ready';
-                    const isNotReady = !isReady;
-                    const isActive = style.offset === 0;
-
-                    return (
-                      <div
-                        key={module.name}
-                        className={`carousel-3d-card ${isActive ? 'carousel-3d-card--active' : ''} ${isNotReady ? 'carousel-3d-card--locked' : ''}`}
-                        onClick={() => {
-                          if (isActive) {
-                            if (isReady) handleCardClick(module.name);
-                          } else {
-                            setCarouselIndex(index);
-                          }
-                        }}
-                        style={{
-                          transform: `translateX(${style.translateX}px) translateY(${style.translateY}px) scale(${style.scale})`,
-                          opacity: style.opacity,
-                          zIndex: style.zIndex,
-                        }}
-                      >
-                        <div className="card-inner">
-                          <div className="card-header">
-                            <img src={module.icon} alt={module.name} />
-                            <StatusIndicator status={isReady ? 'ready' : 'in-progress'} />
-                          </div>
-                          <p className="card-title">{module.name}</p>
-                          <p className="card-description">
-                            {module.description || 'AI-powered agent to help automate and optimize your workflows.'}
-                          </p>
-                          <div className="card-price">{module.price}</div>
-                          <div className="card-buttons">
-                            <button
-                              type="button"
-                              className="try-button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (isReady && isActive) handleTryModule(module.name);
-                              }}
-                              disabled={isNotReady || !isActive}
-                            >
-                              {isNotReady ? 'Not Available' : 'Try Free'}
-                            </button>
-                            <button
-                              type="button"
-                              className="buy-button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (isReady && isActive) handleBuyModule(module);
-                              }}
-                              disabled={isNotReady || !isActive}
-                            >
-                              Buy
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <button
-                type="button"
-                className="carousel-nav carousel-nav--right"
-                onClick={() => scrollCarousel('right')}
-                aria-label="Next agent"
-              />
-            </div>
+            <CardGrid columns="auto" gap="md" className="catalog-grid">
+              {displayModules.map((module) => {
+                const isReady = module.status === 'ready';
+                return (
+                  <ModuleCard
+                    key={module.name}
+                    icon={module.icon}
+                    title={module.name}
+                    description={module.description}
+                    price={module.price}
+                    status={isReady ? 'ready' : 'in-progress'}
+                    locked={!isReady}
+                    onTry={() => { if (isReady) handleTryModule(module.name); }}
+                    onBuy={() => handleBuyModule(module)}
+                  />
+                );
+              })}
+            </CardGrid>
           );
         })()}
       </div>

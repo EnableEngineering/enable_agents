@@ -149,6 +149,32 @@
   min-width: 0;
 }
 
+.module-card-badge {
+  font-size: var(--text-small);
+  font-weight: var(--font-semibold);
+  color: var(--color-accent);
+  background: var(--color-warning-bg);
+  border-radius: var(--radius-full);
+  padding: 2px var(--space-2);
+  flex-shrink: 0;
+}
+
+.module-card-description {
+  font-size: var(--text-small);
+  color: var(--color-text-muted);
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.module-card-price {
+  font-size: var(--text-body);
+  font-weight: var(--font-semibold);
+  color: var(--color-accent);
+}
+
 .module-card-footer {
   display: flex;
   gap: var(--space-2);
