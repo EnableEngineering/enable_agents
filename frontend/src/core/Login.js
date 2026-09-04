@@ -3,6 +3,7 @@ import '../styles/Login.css';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { API_CONFIG } from '../config/apiConfig';
 import { showToast } from './toast';
+import { navigateAfterLogin } from './authHeaders';
 import FormField from '../components/FormField';
 import useValidation, { validators } from '../hooks/useValidation';
 
@@ -59,7 +60,7 @@ function Login() {
       if (sess) {
         localStorage.setItem('sessionToken', sess);
       }
-      navigate('/agents');
+      navigateAfterLogin(navigate);
     }
   }, [location, navigate]);
 
@@ -104,7 +105,7 @@ function Login() {
         }
         localStorage.setItem('firstName', data.username || data.first_name || 'User');
         localStorage.setItem('userEmail', values.email);
-        navigate('/agents');
+        navigateAfterLogin(navigate);
       } else {
         showToast(data.error || 'Login failed. Please check your credentials.', 'error');
       }
