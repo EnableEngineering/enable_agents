@@ -49,7 +49,7 @@
 }
 
 .toast-success .toast-icon {
-  color: var(--color-success);
+  color: var(--color-success-text);
 }
 
 .toast-error {
@@ -65,7 +65,7 @@
 }
 
 .toast-warning .toast-icon {
-  color: var(--color-warning);
+  color: var(--color-accent-dark);
 }
 
 .toast-info {

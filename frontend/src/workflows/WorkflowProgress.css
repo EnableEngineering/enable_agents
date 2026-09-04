@@ -120,7 +120,7 @@
 }
 
 .stage-completed .stage-name {
-  color: var(--color-success);
+  color: var(--color-success-text);
 }
 
 .stage-current .stage-name {

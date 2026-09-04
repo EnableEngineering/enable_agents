@@ -55,7 +55,7 @@
 }
 
 .supply-chain-page .stat-card.highlight .stat-value {
-  color: var(--color-success);
+  color: var(--color-success-text);
 }
 
 .supply-chain-page .stat-label {
@@ -148,7 +148,7 @@
 
 .supply-chain-page .status-badge.passed {
   background: var(--color-success-bg);
-  color: var(--color-success);
+  color: var(--color-success-text);
 }
 
 .supply-chain-page .status-badge.failed {
@@ -158,7 +158,7 @@
 
 .supply-chain-page .status-badge.scheduled {
   background: var(--color-warning-bg);
-  color: var(--color-warning);
+  color: var(--color-accent-dark);
 }
 
 .supply-chain-page .status-badge.pending {
@@ -366,7 +366,7 @@
 }
 
 .supply-chain-page .total-score.pass {
-  color: var(--color-success);
+  color: var(--color-success-text);
 }
 
 .supply-chain-page .total-score.fail {

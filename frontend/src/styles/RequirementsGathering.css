@@ -307,7 +307,7 @@
 
 .research-type-kind--search {
   background: var(--color-success-bg);
-  color: var(--color-success);
+  color: var(--color-success-text);
 }
 
 .research-type-kind--report {
@@ -740,7 +740,7 @@
 }
 
 .table-na {
-  color: var(--color-grey-muted);
+  color: var(--color-text-subtle);
   font-style: italic;
   font-size: var(--text-body);
 }
@@ -752,7 +752,7 @@
 }
 
 .match-score--high {
-  color: var(--color-success);
+  color: var(--color-success-text);
 }
 
 .match-score--medium {
@@ -829,7 +829,7 @@
 }
 
 .summary-badge.emails-badge .badge-value {
-  color: var(--color-success);
+  color: var(--color-success-text);
 }
 
 /* Table cell specific styles */
@@ -1948,7 +1948,7 @@ label.image-upload-button:hover {
 
 .status-success {
   background-color: var(--color-success-bg);
-  color: var(--color-success);
+  color: var(--color-success-text);
 }
 
 .status-pending {
@@ -2005,11 +2005,11 @@ label.image-upload-button:hover {
 }
 
 .match-score--high {
-  color: var(--color-success);
+  color: var(--color-success-text);
 }
 
 .match-score--medium {
-  color: var(--color-warning);
+  color: var(--color-accent-dark);
 }
 
 .match-score--low {

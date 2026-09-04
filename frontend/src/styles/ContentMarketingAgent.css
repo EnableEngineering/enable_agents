@@ -743,7 +743,7 @@
 
 .file-card-status {
   font-size: var(--text-caption);
-  color: var(--color-success);
+  color: var(--color-success-text);
 }
 
 /* ========== CHANNEL SELECTION CARDS ========== */

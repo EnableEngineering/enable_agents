@@ -503,7 +503,7 @@
 
 .no-tasks-hint {
   padding: var(--space-3) 0;
-  color: var(--color-grey-muted);
+  color: var(--color-text-subtle);
   font-size: var(--text-small);
 }
 
@@ -764,8 +764,8 @@
   color: var(--color-text-muted);
 }
 
-.priority-pill.low { border-color: var(--color-success); color: var(--color-success); }
-.priority-pill.medium { border-color: var(--color-warning); color: var(--color-warning); }
+.priority-pill.low { border-color: var(--color-success); color: var(--color-success-text); }
+.priority-pill.medium { border-color: var(--color-warning); color: var(--color-accent-dark); }
 .priority-pill.high { border-color: var(--color-error); color: var(--color-error); }
 
 .priority-pill.active.low { background: var(--color-success); color: var(--color-text-inverse); }
@@ -1180,7 +1180,7 @@
 
 .status-pill.completed {
   background: var(--color-success-bg);
-  color: var(--color-success);
+  color: var(--color-success-text);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
@@ -1337,7 +1337,7 @@
 .status-badge.active,
 .status-badge.low {
   background: var(--color-success-bg);
-  color: var(--color-success);
+  color: var(--color-success-text);
 }
 
 .status-badge.completed,
@@ -1355,7 +1355,7 @@
 .status-badge.on\ hold,
 .status-badge.medium {
   background: var(--color-warning-bg);
-  color: var(--color-warning);
+  color: var(--color-accent-dark);
 }
 
 .description {

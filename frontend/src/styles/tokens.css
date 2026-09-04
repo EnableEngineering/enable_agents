@@ -50,6 +50,7 @@
 
   /* Status */
   --color-success: #16A34A;
+  --color-success-text: #166534;
   --color-success-bg: #DCFCE7;
   --color-success-bg-hover: #D1FAE5;
   --color-error: #DC2626;
@@ -59,7 +60,7 @@
   --color-warning-bg: #FEF3C7;
 
   /* Team role badge colors */
-  --role-owner: #CA8A04;
+  --role-owner: #92660A;
   --role-admin: #7C3AED;
   --role-member: #2563EB;
   --role-viewer: #64748B;
@@ -364,7 +365,7 @@
 
 .badge-success {
   background: var(--color-success-bg);
-  color: var(--color-success);
+  color: var(--color-success-text);
 }
 
 .badge-error {
@@ -374,7 +375,7 @@
 
 .badge-warning {
   background: var(--color-warning-bg);
-  color: var(--color-warning);
+  color: var(--color-accent-dark);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════

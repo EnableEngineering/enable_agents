@@ -247,7 +247,7 @@
 
 .event-status-badge.upcoming {
   background: var(--color-success-bg);
-  color: var(--color-success);
+  color: var(--color-success-text);
 }
 
 .event-status-badge.past {
@@ -1551,7 +1551,7 @@
 .match-score-ring span {
   font-size: var(--text-page-title);
   font-weight: var(--font-bold);
-  color: var(--color-success);
+  color: var(--color-success-text);
 }
 
 .match-card-body {
@@ -1590,7 +1590,7 @@
 .match-reason {
   padding: 4px 10px;
   background: var(--color-success-bg);
-  color: var(--color-success);
+  color: var(--color-success-text);
   font-size: var(--text-caption);
   font-weight: var(--font-medium);
   border-radius: var(--radius-full);
