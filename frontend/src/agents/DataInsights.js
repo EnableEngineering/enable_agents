@@ -10,6 +10,7 @@ import { showToast } from '../core/toast';
 import { useSelectedProjectId } from '../hooks/useSelectedProjectId';
 import { useWorkflowContext } from '../hooks';
 import { authJsonHeaders, authOptionalHeaders } from '../core/authHeaders';
+import { STRINGS } from '../constants/strings';
 
 // Document Intelligence API
 const DOC_API = `${API_CONFIG.API_URL}/api/document-intelligence`;
@@ -1586,7 +1587,7 @@ function DataInsights() {
                     className={`di-send-btn-icon ${inputPrompt.trim() && !isLoading ? 'di-send-btn-active' : ''}`}
                     onClick={handleAskQuestion}
                     disabled={isLoading || !inputPrompt.trim()}
-                    title={isLoading ? 'Processing...' : 'Send message (Enter)'}
+                    title={isLoading ? STRINGS.COMMON.PROCESSING : 'Send message (Enter)'}
                   >
                     {isLoading ? (
                       <svg className="di-send-spinner" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
