@@ -873,12 +873,7 @@ function Settings() {
                               Remove
                             </button>
                           ) : (
-                            <button
-                              className="btn-primary"
-                              onClick={() => {/* TODO: show input modal */}}
-                            >
-                              Configure
-                            </button>
+                            renderSettingInput(activeCategory, key, setting)
                           )
                         )}
                       </div>
