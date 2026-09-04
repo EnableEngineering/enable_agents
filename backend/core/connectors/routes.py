@@ -11,6 +11,7 @@ Endpoints:
 """
 
 import logging
+from datetime import datetime
 from flask import Blueprint, request, jsonify, g
 
 from core.auth import require_auth
@@ -37,15 +38,24 @@ def list_all_connectors():
 @bp.route("/<connector_id>/status", methods=["GET"])
 @require_auth
 def get_connector_status(connector_id: str):
-    """Check if a connector is connected/authenticated."""
+    """
+    Check whether a connector is actually working right now.
+
+    Runs health_check() rather than just connect() - for connector types
+    where a stored credential doesn't guarantee it still works (e.g. an
+    API key that was revoked), this does a real, minimal live call instead
+    of reporting "connected" just because a value is present in settings.
+    """
     try:
         user_id = get_user_id()
         connector = get_connector(connector_id, user_id=user_id)
-        is_connected = connector.connect()
+        result = connector.health_check()
 
         return jsonify({
             "connector_id": connector_id,
-            "connected": is_connected,
+            "connected": result["ok"],
+            "error": result["error"],
+            "checked_at": datetime.utcnow().isoformat(),
             "connector_type": connector.connector_type,
             "supported_resources": connector.supported_resources,
         }), 200

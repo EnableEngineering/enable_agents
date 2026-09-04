@@ -120,6 +120,24 @@ class BaseConnector(ABC):
         """
         pass
 
+    def health_check(self) -> Dict[str, Any]:
+        """
+        Verify the connector actually works right now, not just that
+        credentials are present. Default falls back to connect() - fine for
+        connector types where connect() already does a real check (OAuth
+        token validity/refresh, an open HTTP session). Override in
+        subclasses where connect() only checks that a value is present
+        (e.g. an API key) without confirming it's still valid.
+
+        Returns:
+            {"ok": bool, "error": str | None}
+        """
+        try:
+            ok = self.connect()
+            return {"ok": ok, "error": None if ok else "Not configured"}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
     @abstractmethod
     def fetch(
         self,
