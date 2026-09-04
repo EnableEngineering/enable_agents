@@ -298,6 +298,9 @@ def complete_stage(instance_id: str):
     if instance.status != "running":
         return jsonify({"error": "Instance is not running"}), 400
 
+    data = request.get_json() or {}
+    stage_data = data.get("data", {})
+
     # Get current stage ID from template
     template = WorkflowTemplate.query.filter_by(template_id=instance.template_id).first()
     if template and template.stages:
@@ -317,8 +320,22 @@ def complete_stage(instance_id: str):
                 "pending_tasks": [t.to_dict() for t in pending_required]
             }), 400
 
-    data = request.get_json() or {}
-    stage_data = data.get("data", {})
+        # Check the stage's required_inputs are actually present - either
+        # already in context (e.g. produced by an earlier stage), persisted
+        # mid-stage via save_stage_data, or submitted in this request. This
+        # was never checked before: the frontend renders required_inputs as
+        # form fields, but nothing stopped completing the stage with them
+        # left blank.
+        required_inputs = current_stage.get("required_inputs") or []
+        if required_inputs:
+            existing_stage_data = instance.stage_states.get(stage_id, {}).get("data") or {}
+            available = {**instance.context, **existing_stage_data, **stage_data}
+            missing_inputs = [key for key in required_inputs if not available.get(key)]
+            if missing_inputs:
+                return jsonify({
+                    "error": "Missing required input(s) for this stage",
+                    "missing_inputs": missing_inputs,
+                }), 400
 
     instance.advance_stage(stage_data)
     db.session.commit()
