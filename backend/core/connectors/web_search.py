@@ -109,6 +109,27 @@ class WebSearchConnector(APIKeyConnector):
         self._connected = True
         return True
 
+    def health_check(self) -> Dict[str, Any]:
+        """
+        connect() only checks that an API key string is present, so a
+        revoked/invalid key or a wrong Custom Search Engine ID would still
+        report "connected". Issue one real, minimal search to confirm the
+        credentials actually work against the live API.
+        """
+        if not self.connect():
+            return {"ok": False, "error": "Not configured - add an API key in Settings"}
+
+        try:
+            if self.provider == "google":
+                self._search_google("test", "search", num_results=1, page=1)
+            elif self.provider == "bing":
+                self._search_bing("test", "search", num_results=1, page=1)
+            elif self.provider == "serpapi":
+                self._search_serpapi("test", "search", num_results=1, page=1)
+            return {"ok": True, "error": None}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
     def fetch(
         self,
         resource: str,
