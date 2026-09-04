@@ -167,16 +167,19 @@ export const AGENTS = {
     features: ['Performance Tracking', 'Team Analytics', 'Goal Management'],
   },
 
-  // Hidden - placeholder only
   aiChatbot: {
     id: 'aiChatbot',
     name: 'AI Chatbot',
-    route: '/ai-chatbot',
+    // Was '/ai-chatbot' - doesn't exist; the real route (App.js) is
+    // '/aichatbot'. Was also marked hidden/coming_soon despite Chatbot.js
+    // being a complete, working page - fixed both, since the only current
+    // consumer of getAllAgents()/hidden (Dashboard's "available agents"
+    // count) was undercounting a real feature, not gating a real link.
+    route: '/aichatbot',
     icon: 'ai-chatbots.png',
     description: 'Deploy intelligent chatbots for customer support and lead qualification.',
     category: AGENT_CATEGORIES.TECHNICAL,
-    status: AGENT_STATUS.COMING_SOON,
-    hidden: true,
+    status: AGENT_STATUS.READY,
     price: '$40/month',
     features: ['Customer Support', 'Lead Qualification', 'Multi-channel'],
   },
@@ -240,22 +243,21 @@ export const ROUTE_TO_AGENT_NAME = Object.values(AGENTS).reduce((acc, agent) => 
   return acc;
 }, {});
 
-// Legacy route redirects (old path -> new path)
-export const ROUTE_REDIRECTS = {
-  '/requirements': '/market-research',
-  '/requirements-gathering': '/market-research',
-  '/campaign-dashboard': '/market-research/campaigns',
-  '/datainsights': '/data-insights',
-  '/aichatbot': '/ai-chatbot',
-  '/event-networking-agent': '/event-networking',
-  '/supply-chain-agent': '/supply-chain',
-};
-
 /**
  * Module display name to route mapping
  * Used for navigation from module cards
  * Maps the exact display names used in the UI to their routes
  */
+// Entries removed here (2026-09-04 cleanup) pointed at routes that don't
+// exist anywhere in App.js and don't correspond to any AGENTS entry either
+// - not "future roadmap" placeholders, just orphaned from an earlier,
+// abandoned broader-catalog draft: Travel Agent, the duplicate/wrong
+// 'Supply Chain Agent' -> /supply-chain (real route is /supply-chain-agent,
+// already correct under 'Supply Chain Audit' below), Hiring & Onboarding,
+// Documents, Supplier Tracking, Invoices, Inventory, Orders, Reports,
+// Testing AI, LLM Benchmarking. 'Team Performance' -> /team-performance is
+// kept despite the route not existing yet, since it mirrors AGENTS.teamPerformance
+// (a real, still-pending COMING_SOON feature, not dead weight).
 export const MODULE_NAME_TO_ROUTE = {
   // Business modules
   'Market Research': '/market-research',
@@ -266,23 +268,12 @@ export const MODULE_NAME_TO_ROUTE = {
   'Event Networking Agent': '/event-networking',
   'Email Outreach': '/email-outreach',
   'Supply Chain Audit': '/supply-chain-agent',
-  'Travel Agent': '/travel-agent',
   'Invest Agent': '/invest-agent',
-  'Supply Chain Agent': '/supply-chain',
-  'Hiring & Onboarding': '/hiring',
-  'Documents': '/documents',
-  'Supplier Tracking': '/supplier-tracking',
-  'Invoices': '/invoices',
-  'Inventory': '/inventory',
-  'Orders': '/orders',
-  'Reports': '/reports',
   'Team Performance': '/team-performance',
 
   // Technical modules
   'Data Discovery': '/data-insights',
-  'AI Chatbot': '/ai-chatbot',
-  'Testing AI': '/testing-ai',
-  'LLM Benchmarking': '/llm-benchmarking',
+  'AI Chatbot': '/aichatbot',
   'Data Insights': '/data-insights',
 };
 
