@@ -299,7 +299,6 @@ function DataInsights() {
 
   // Query state
   const [inputPrompt, setInputPrompt] = useState('');
-  const [insightsEngine, setInsightsEngine] = useState('Contextual Insights with RAG');
 
   // Results
   const [currentInsight, setCurrentInsight] = useState(null);
@@ -493,6 +492,16 @@ function DataInsights() {
     return 'low';
   };
 
+  // Business-friendly label instead of a raw percentage - a "confidence
+  // score" reads as ML/data-science jargon to a non-technical user, and the
+  // exact number implies a precision the underlying model doesn't actually
+  // have. Same high/medium/low buckets getConfidenceColor already uses.
+  const getConfidenceLabel = (confidence) => {
+    if (confidence >= 0.9) return 'High';
+    if (confidence >= 0.7) return 'Medium';
+    return 'Low';
+  };
+
   const getTotalStats = () => {
     const completed = documents.filter(d => d.status === 'completed');
     return {
@@ -502,7 +511,7 @@ function DataInsights() {
       totalEntities: completed.reduce((sum, d) => sum + (d.entities || 0), 0),
       totalRelationships: completed.reduce((sum, d) => sum + (d.relationships || 0), 0),
       avgConfidence: completed.length > 0
-        ? (completed.reduce((sum, d) => sum + (d.confidence || 0), 0) / completed.length * 100).toFixed(0)
+        ? completed.reduce((sum, d) => sum + (d.confidence || 0), 0) / completed.length
         : 0,
     };
   };
@@ -1100,7 +1109,7 @@ function DataInsights() {
                   <img src="/assets/icons/search-analysis.png" alt="" width={20} height={20} />
                 </div>
                 <div className="di-stat-content">
-                  <span className="di-stat-value">{stats.avgConfidence}%</span>
+                  <span className="di-stat-value">{getConfidenceLabel(stats.avgConfidence)}</span>
                   <span className="di-stat-label">Confidence</span>
                 </div>
               </div>
@@ -1235,7 +1244,7 @@ function DataInsights() {
                             <div className="di-doc-stats">
                               <span>{doc.entities} entities</span>
                               <span>•</span>
-                              <span>{Math.round(doc.confidence * 100)}% conf</span>
+                              <span>{getConfidenceLabel(doc.confidence)} confidence</span>
                             </div>
                           )}
                           {doc.status === 'completed' && (
@@ -1267,7 +1276,7 @@ function DataInsights() {
                   <span className="di-badge di-badge--entities">{selectedDocument.entities} entities</span>
                   <span className="di-badge di-badge--relations">{selectedDocument.relationships} relations</span>
                   <span className={`di-badge di-badge--confidence di-badge--${getConfidenceColor(selectedDocument.confidence)}`}>
-                    {Math.round(selectedDocument.confidence * 100)}% confidence
+                    {getConfidenceLabel(selectedDocument.confidence)} confidence
                   </span>
                 </div>
                 <button className="di-change-doc" onClick={() => setActiveView('library')}>Change Document</button>
@@ -1332,7 +1341,7 @@ function DataInsights() {
                             <span className="di-fact-text">{kf.fact}</span>
                             <div className="di-fact-meta">
                               <span className={`di-fact-confidence di-fact-confidence--${getConfidenceColor(kf.confidence)}`}>
-                                {Math.round(kf.confidence * 100)}%
+                                {getConfidenceLabel(kf.confidence)}
                               </span>
                               <span className="di-fact-source">{kf.source}</span>
                             </div>
@@ -1369,7 +1378,7 @@ function DataInsights() {
                             <div className="di-entity-header">
                               <span className="di-entity-type">{entity.type}</span>
                               <span className={`di-entity-confidence di-entity-confidence--${getConfidenceColor(entity.confidence)}`}>
-                                {Math.round(entity.confidence * 100)}%
+                                {getConfidenceLabel(entity.confidence)}
                               </span>
                             </div>
                             <div className="di-entity-name">{entity.name}</div>
@@ -1481,7 +1490,7 @@ function DataInsights() {
                             <div className="di-source-header">
                               <span className="di-source-page">Page {source.page}</span>
                               <span className={`di-source-relevance di-source-relevance--${getConfidenceColor(source.relevance)}`}>
-                                {Math.round(source.relevance * 100)}% relevant
+                                {getConfidenceLabel(source.relevance)} relevance
                               </span>
                             </div>
                             <p className="di-source-text">"{source.text}"</p>
@@ -1544,7 +1553,7 @@ function DataInsights() {
                       </div>
                     )}
                     {msg.confidence && (
-                      <span className="di-message-confidence">{Math.round(msg.confidence * 100)}% confidence</span>
+                      <span className="di-message-confidence">{getConfidenceLabel(msg.confidence)} confidence</span>
                     )}
                   </div>
                 ))}
