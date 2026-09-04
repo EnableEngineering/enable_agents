@@ -6,6 +6,7 @@ import { API_CONFIG } from '../config/apiConfig';
 import { authJsonHeaders } from './authHeaders';
 import { showToast } from './toast';
 import { Modal, ModalTabs } from '../components/Modal';
+import { Card, CardGrid } from '../components/Card';
 import { useMode } from '../contexts';
 
 
@@ -293,15 +294,13 @@ function Header({ onProcessClick, onModeChange }) {
     }
   };
 
-  const handleCreateConnection = () => {
-    // Implement your create connection logic here
-    showToast('Connection setup coming soon.', 'info');
-  };
-
   const [showSystemModal, setShowSystemModal] = useState(false);
   const [systemTools, setSystemTools] = useState([]);
   const [toolsSortAsc, setToolsSortAsc] = useState(true);
-  const [recommendedAgents, setRecommendedAgents] = useState('');
+  // Holds the parsed `recommendations` object from /recommend_agents (not a
+  // stringified blob) so the modal can render formatted cards instead of
+  // raw JSON. null = not loaded yet; { error: '...' } = fetch/parse failed.
+  const [recommendedAgents, setRecommendedAgents] = useState(null);
 
   // Notifications state
   const [notifications, setNotifications] = useState([]);
@@ -392,6 +391,7 @@ function Header({ onProcessClick, onModeChange }) {
 
   const handleSystemClick = async () => {
     setShowSystemModal(true);
+    setRecommendedAgents(null);
     try {
       // Both endpoints require @require_auth - this was previously
       // sending no Authorization header at all, so every call silently
@@ -430,13 +430,13 @@ function Header({ onProcessClick, onModeChange }) {
       const agentsResult = await agentsRes.json();
       const recs = agentsResult.recommendations;
       if (recs && typeof recs === 'object') {
-        setRecommendedAgents(JSON.stringify(recs, null, 2));
+        setRecommendedAgents(recs);
       } else {
-        setRecommendedAgents(recs || 'No recommendations found.');
+        setRecommendedAgents({ error: 'No recommendations found.' });
       }
     } catch (error) {
       setSystemTools([]);
-      setRecommendedAgents('Error fetching recommendations.');
+      setRecommendedAgents({ error: 'Error fetching recommendations.' });
     }
   };
   const handleCloseSystemModal = () => {
@@ -709,15 +709,75 @@ function Header({ onProcessClick, onModeChange }) {
               label: 'Recommended Agents',
               content: (
                 <div className="system-agents-content">
-                  {recommendedAgents ? (
-                    <div className="recommendations-display">
-                      <pre className="recommendations-json">{recommendedAgents}</pre>
-                    </div>
-                  ) : (
+                  {!recommendedAgents && (
                     <div className="system-empty-state">
                       <p>Loading recommendations...</p>
                       <p className="system-empty-hint">Set up your business context to get personalized agent recommendations.</p>
                     </div>
+                  )}
+                  {recommendedAgents?.error && (
+                    <div className="system-empty-state">
+                      <p>{recommendedAgents.error}</p>
+                    </div>
+                  )}
+                  {recommendedAgents && !recommendedAgents.error && (
+                    <>
+                      {(recommendedAgents.recommended_tools?.length > 0) && (
+                        <div className="recommendations-section">
+                          <h4 className="recommendations-section-title">Recommended Tools</h4>
+                          <CardGrid columns="auto" gap="sm">
+                            {recommendedAgents.recommended_tools.map((tool, idx) => (
+                              <Card key={idx} padding="sm">
+                                <div className="recommendation-card-title">{tool.name || tool.tool_name}</div>
+                                {tool.description && <p className="recommendation-card-desc">{tool.description}</p>}
+                                {tool.why_recommended && (
+                                  <p className="recommendation-card-why">{tool.why_recommended}</p>
+                                )}
+                              </Card>
+                            ))}
+                          </CardGrid>
+                        </div>
+                      )}
+                      {(recommendedAgents.integration_pairs?.length > 0) && (
+                        <div className="recommendations-section">
+                          <h4 className="recommendations-section-title">Integration Opportunities</h4>
+                          <CardGrid columns="auto" gap="sm">
+                            {recommendedAgents.integration_pairs.map((pair, idx) => (
+                              <Card key={idx} padding="sm">
+                                <div className="recommendation-card-title">
+                                  {(pair.tools || pair.pair || [pair.tool_1, pair.tool_2]).filter(Boolean).join(' + ')}
+                                </div>
+                                {(pair.integration || pair.integration_description) && (
+                                  <p className="recommendation-card-desc">{pair.integration || pair.integration_description}</p>
+                                )}
+                                {pair.data_shared && <p className="recommendation-card-why">Shares: {pair.data_shared}</p>}
+                              </Card>
+                            ))}
+                          </CardGrid>
+                        </div>
+                      )}
+                      {(recommendedAgents.additional_tools?.length > 0) && (
+                        <div className="recommendations-section">
+                          <h4 className="recommendations-section-title">Other Useful Tools</h4>
+                          <CardGrid columns="auto" gap="sm">
+                            {recommendedAgents.additional_tools.map((tool, idx) => (
+                              <Card key={idx} padding="sm">
+                                <div className="recommendation-card-title">{tool.name || tool.tool_name}</div>
+                                {tool.description && <p className="recommendation-card-desc">{tool.description}</p>}
+                                {tool.why_needed && <p className="recommendation-card-why">{tool.why_needed}</p>}
+                              </Card>
+                            ))}
+                          </CardGrid>
+                        </div>
+                      )}
+                      {!recommendedAgents.recommended_tools?.length &&
+                        !recommendedAgents.integration_pairs?.length &&
+                        !recommendedAgents.additional_tools?.length && (
+                        <div className="system-empty-state">
+                          <p>No recommendations found.</p>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               )
