@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Header from '../core/Header';
 import { BackButton, EmptyState, ProjectSelector } from '../components';
 import { API_CONFIG } from '../config/apiConfig';
+import { STRINGS } from '../constants/strings';
 import { authJsonHeaders } from '../core/authHeaders';
 import { showToast } from '../core/toast';
 import { useSelectedProjectId } from '../hooks/useSelectedProjectId';
@@ -322,7 +323,7 @@ function WorkflowsPage() {
       <>
         <Header />
         <div className="workflows-page">
-          <div className="workflows-loading">Loading workflows...</div>
+          <div className="workflows-loading">{STRINGS.LOADING.WORKFLOWS}</div>
         </div>
       </>
     );

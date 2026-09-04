@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import Header from '../core/Header';
 import { BackButton, Input, Textarea, ConfirmDialog, ProjectSelector, LiveModeHint, AgentOutcomesStrip, ProjectGate, NetworkSearchResults } from '../components';
 import '../styles/CommunityNetworkAgent.css';
+import { STRINGS } from '../constants/strings';
 import { API_CONFIG } from '../config/apiConfig';
 import { useAgentChat } from '../hooks/useAgentChat';
 import { authJsonHeaders, authOptionalHeaders } from '../core/authHeaders';
@@ -737,7 +738,7 @@ function CommunityNetworkAgent() {
               className="upload-btn csv-btn"
               disabled={isLoading}
             >
-              {isLoading ? 'Processing...' : 'Connect Dataset'}
+              {isLoading ? STRINGS.COMMON.PROCESSING : 'Connect Dataset'}
             </button>
             <input
               type="file"
@@ -802,7 +803,7 @@ function CommunityNetworkAgent() {
               className="upload-btn cv-btn"
               disabled={isAnalyzing}
             >
-              {isAnalyzing ? 'Analyzing...' : 'Upload Your Profile'}
+              {isAnalyzing ? STRINGS.COMMON.ANALYZING : 'Upload Your Profile'}
             </button>
             <input
               type="file"

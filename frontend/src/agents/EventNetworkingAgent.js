@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import Header from '../core/Header';
 import { BackButton, ProjectSelector, LiveModeHint, AgentOutcomesStrip, ProjectGate } from '../components';
 import '../styles/EventNetworkingAgent.css';
+import { STRINGS } from '../constants/strings';
 import { API_CONFIG } from '../config/apiConfig';
 import { showToast } from '../core/toast';
 import { useSelectedProjectId } from '../hooks/useSelectedProjectId';
@@ -1021,7 +1022,7 @@ Jane Smith,jane@startup.io,StartupIO,CTO,Product;Engineering"
                   onClick={handleGetRecommendations}
                   disabled={isLoading || attendees.length === 0}
                 >
-                  {isLoading ? 'Analyzing...' : 'Find Matches'}
+                  {isLoading ? STRINGS.COMMON.ANALYZING : 'Find Matches'}
                 </button>
               </div>
             </div>
