@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Navigate } from 'react-router-dom';
 import { API_CONFIG } from '../config/apiConfig';
 import { authJsonHeaders } from '../core/authHeaders';
 import { showToast } from '../core/toast';
@@ -23,10 +23,7 @@ function ChatRoutingPage() {
   const [starting, setStarting] = useState(false);
 
   useEffect(() => {
-    if (!task) {
-      navigate('/home', { replace: true });
-      return;
-    }
+    if (!task) return;
     (async () => {
       try {
         const res = await fetch(`${API_CONFIG.BASE_URL}/api/projects`, { headers: authJsonHeaders() });
@@ -142,7 +139,11 @@ function ChatRoutingPage() {
     navigate('/home');
   };
 
-  if (!task) return null;
+  // No task in flight (e.g. this URL was visited directly rather than
+  // reached via Home's chat box or the Agents "Find agent" bar, both of
+  // which stash the task in sessionStorage before navigating here) -
+  // redirect declaratively so there's no blank frame first.
+  if (!task) return <Navigate to="/home" replace />;
 
   return (
     <div className="chatroute-page">
