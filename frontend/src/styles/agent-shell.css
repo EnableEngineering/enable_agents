@@ -779,16 +779,6 @@
   white-space: nowrap;
 }
 
-.btn-primary {
-  background: var(--color-primary);
-  color: var(--color-text-inverse);
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: var(--color-primary-dark);
-  color: var(--color-text-inverse);
-}
-
 .btn-accent {
   background: linear-gradient(135deg, var(--color-accent), var(--color-accent-dark));
   color: var(--color-text-inverse);
@@ -798,17 +788,6 @@
 .btn-accent:hover:not(:disabled) {
   opacity: 0.9;
   color: var(--color-text-inverse);
-}
-
-.btn-secondary {
-  background: var(--color-surface);
-  color: var(--color-text);
-  border: 1.5px solid var(--color-border);
-}
-
-.btn-secondary:hover:not(:disabled) {
-  border-color: var(--color-accent);
-  color: var(--color-accent);
 }
 
 .btn:disabled {
