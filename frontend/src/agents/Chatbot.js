@@ -132,7 +132,7 @@ function Chatbot() {
         ]}
       />
 
-      <LiveModeHint message="Upload documents in Live mode, or switch to Demo for sample responses." requireProject={true} />
+      <LiveModeHint message="Upload documents to get started." requireProject={true} />
 
       <ProjectGate agentLabel="AI Chatbot">
         <div className="chatbot-page">

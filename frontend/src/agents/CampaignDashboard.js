@@ -165,7 +165,7 @@ function CampaignDashboard() {
 
         <LiveModeHint
           requireProject
-          message="Choose a project from the header dropdown, or create one with + New Project. Switch to Demo for sample campaigns."
+          message="Choose a project from the header dropdown, or create one with + New Project."
         />
 
         <ProjectGate agentLabel="Campaign data">

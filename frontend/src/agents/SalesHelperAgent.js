@@ -552,7 +552,7 @@ function SalesHelperAgent() {
 
       <LiveModeHint
         requireProject
-        message="Choose a project from the header dropdown, or create one with + New Project. Switch to Demo for sample leads."
+        message="Choose a project from the header dropdown, or create one with + New Project."
       />
 
       <div className="main-container">

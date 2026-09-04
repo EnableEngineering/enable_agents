@@ -667,7 +667,7 @@ function CommunityNetworkAgent() {
 
       <LiveModeHint
         requireProject
-        message="Choose a project from the header dropdown, or create one with + New Project. Switch to Demo for a sample network dataset."
+        message="Choose a project from the header dropdown, or create one with + New Project."
       />
 
       <ProjectGate agentLabel="Community Network workspace">

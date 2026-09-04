@@ -1151,7 +1151,7 @@ Jane Smith,jane@startup.io,StartupIO,CTO,Product;Engineering"
 
       <LiveModeHint
         requireProject
-        message="Select a project, then create events in Live mode or switch to Demo for sample events."
+        message="Select a project, then create events to get started."
       />
 
       <ProjectGate agentLabel="Event Networking data">

@@ -128,7 +128,7 @@ function AgentsAssembly() {
       <Header onProcessClick={handleProcessClick} />
       <div className="agents-assembly">
         <div className="agents-hub-banner">
-          <LiveModeHint message="Browse agents below. Switch to Demo to explore sample data, or Live to connect your own." />
+          <LiveModeHint message="Browse agents below to get started." />
         </div>
         {/* Process Map Modal */}
         <Modal

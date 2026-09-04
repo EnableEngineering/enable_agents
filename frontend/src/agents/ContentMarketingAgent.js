@@ -566,7 +566,7 @@ function ContentMarketingAgent() {
 
       <LiveModeHint
         requireProject
-        message="Choose a project from the header dropdown, or create one with + New Project. Switch to Demo to explore a sample campaign."
+        message="Choose a project from the header dropdown, or create one with + New Project."
       />
 
       <ProjectGate agentLabel="Content Marketing workspace">

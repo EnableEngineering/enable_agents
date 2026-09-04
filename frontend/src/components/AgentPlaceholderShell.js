@@ -31,7 +31,7 @@ function AgentPlaceholderShell({
 
       {outcomes.length > 0 && <AgentOutcomesStrip items={outcomes} />}
 
-      <LiveModeHint message="This agent is in preview. Switch to Demo to explore other ready agents from the catalog." />
+      <LiveModeHint message="This agent is in preview. More ready agents are available from the catalog." />
 
       <div className="agent-placeholder-body">
         {children}

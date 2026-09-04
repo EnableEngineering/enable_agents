@@ -1465,7 +1465,7 @@ function RequirementsGathering() {
 
         <LiveModeHint
           requireProject
-          message="Choose a project from the header dropdown, or create one with + New Project. Switch to Demo for sample research outputs."
+          message="Choose a project from the header dropdown, or create one with + New Project."
         />
 
         <ProjectGate agentLabel="Market Research workspace">

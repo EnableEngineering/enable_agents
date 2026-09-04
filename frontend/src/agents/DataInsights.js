@@ -717,7 +717,7 @@ function DataInsights() {
 
       <LiveModeHint
         requireProject
-        message="Choose a project, then upload documents or switch to Demo for sample data."
+        message="Choose a project, then upload documents to get started."
       />
 
       <ProjectGate agentLabel="Data Insights workspace">
