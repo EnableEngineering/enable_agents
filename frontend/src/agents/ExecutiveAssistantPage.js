@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import Header from '../core/Header';
 import '../styles/ExecutiveAssistantPage.css';
 import { showToast } from '../core/toast';
 import { Input, Textarea, BackButton, ProjectSelector, LiveModeHint, AgentOutcomesStrip, EmptyState, ProjectGate, WorkflowExecutionBanner, WorkflowContextCard } from '../components';
@@ -257,7 +256,6 @@ function ExecutiveAssistantPage() {
 
   return (
     <div className="executive-assistant-page">
-      <Header />
 
       <div className="agent-page-header">
         <div className="agent-header-left">
@@ -293,7 +291,7 @@ function ExecutiveAssistantPage() {
 
       <LiveModeHint
         requireProject
-        message="Choose a project from the header dropdown, or create one with + New Project."
+        message="Choose a project above, or create one with + New Project."
       />
 
       <div className="ea-container">

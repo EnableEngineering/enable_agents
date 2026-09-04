@@ -1,7 +1,6 @@
 import axios from 'axios';
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Header from '../core/Header';
 import '../styles/AgentsAssembly.css';
 import { API_CONFIG } from '../config/apiConfig';
 import { getRouteByModuleName } from '../config/agentsConfig';
@@ -125,7 +124,6 @@ function AgentsAssembly() {
 
   return (
     <div className="agents-page">
-      <Header onProcessClick={handleProcessClick} />
       <div className="agents-assembly">
         <div className="agents-hub-banner">
           <LiveModeHint message="Browse agents below to get started." />

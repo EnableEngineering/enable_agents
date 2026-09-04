@@ -10,6 +10,7 @@ import Settings from './settings/Settings';
 import Team from './team/Team';
 import Projects from './projects/Projects';
 import Usage from './usage/Usage';
+import Sidebar from './core/Sidebar';
 import AiAssistantPanel from './components/AiAssistantPanel';
 import './App.css';
 
@@ -78,7 +79,14 @@ function App() {
       <SkipLink />
       <div className="App">
         <ErrorBoundary>
-          <main id="main-content" className={loggedIn && panelOpen ? 'main-content--panel-open' : ''}>
+          {loggedIn && <Sidebar />}
+          <main
+            id="main-content"
+            className={[
+              loggedIn ? 'main-content--sidebar-open' : '',
+              loggedIn && panelOpen ? 'main-content--panel-open' : '',
+            ].filter(Boolean).join(' ')}
+          >
           <Routes>
           <Route path="/" element={<RootRedirect />} />
           <Route path="/login" element={<Login />} />

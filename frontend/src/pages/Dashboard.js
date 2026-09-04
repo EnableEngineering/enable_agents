@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Header from '../core/Header';
 import { API_CONFIG } from '../config/apiConfig';
 import { authJsonHeaders } from '../core/authHeaders';
 import { getAllAgents } from '../config/agentsConfig';
@@ -172,7 +171,6 @@ function Dashboard() {
   if (loading) {
     return (
       <>
-        <Header />
         <div className="dashboard-page">
           <div className="dashboard-loading">
             <div className="loading-spinner"></div>
@@ -185,7 +183,6 @@ function Dashboard() {
 
   return (
     <>
-      <Header />
       <div className="dashboard-page">
         {/* Page Header */}
         <div className="dashboard-header">

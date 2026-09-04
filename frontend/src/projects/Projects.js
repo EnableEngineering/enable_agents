@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import './Projects.css';
 import { showToast } from '../core/toast';
-import Header from '../core/Header';
 import { authJsonHeaders, authOptionalHeaders } from '../core/authHeaders';
 import { BackButton, showConfirm } from '../components';
 import { AGENTS } from '../config/agentsConfig';
@@ -369,7 +368,6 @@ function Projects() {
 
   return (
     <div className="projects-page">
-      <Header />
       <div className="projects-container">
         <header className="projects-header">
           <BackButton />

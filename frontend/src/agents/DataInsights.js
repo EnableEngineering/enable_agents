@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
-import Header from '../core/Header';
 import { BackButton, Textarea, Select, ProjectSelector, LiveModeHint, AgentOutcomesStrip, ProjectGate, EmptyState, WorkflowExecutionBanner, WorkflowContextCard } from '../components';
 import '../styles/DataInsights.css';
 import { PDFDocument } from 'pdf-lib';
@@ -686,7 +685,6 @@ function DataInsights() {
 
   return (
     <div className="data-insights-page">
-      <Header />
 
       <div className="agent-page-header">
         <div className="agent-header-left">

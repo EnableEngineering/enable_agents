@@ -1,7 +1,6 @@
 import { API_CONFIG } from '../config/apiConfig';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
-import Header from '../core/Header';
 import { BackButton, LiveModeHint, AgentOutcomesStrip, ProjectSelector, ProjectGate } from '../components';
 import { useSelectedProjectId } from '../hooks/useSelectedProjectId';
 import { authJsonHeaders } from '../core/authHeaders';
@@ -108,7 +107,6 @@ function Chatbot() {
 
   return (
     <div className="chatbot-agent-page">
-      <Header />
       <div className="agent-page-header">
         <div className="agent-header-left">
           <BackButton />

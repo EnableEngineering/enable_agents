@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import Header from '../core/Header';
 import BackButton from '../components/BackButton';
 import { LiveModeHint, AgentOutcomesStrip, ProjectSelector, ProjectGate, EmptyState } from '../components';
 import '../styles/RequirementsGathering.css';
@@ -136,7 +135,6 @@ function CampaignDashboard() {
 
   return (
     <div className="requirements-page">
-      <Header />
       <div className="requirements-container">
         <div className="agent-page-header">
           <div className="agent-header-left">
@@ -165,7 +163,7 @@ function CampaignDashboard() {
 
         <LiveModeHint
           requireProject
-          message="Choose a project from the header dropdown, or create one with + New Project."
+          message="Choose a project above, or create one with + New Project."
         />
 
         <ProjectGate agentLabel="Campaign data">

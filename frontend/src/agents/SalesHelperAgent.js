@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect } from 'react';
-import Header from '../core/Header';
 import { BackButton, ProjectSelector, LiveModeHint, ProjectGate, AgentOutcomesStrip, WorkflowExecutionBanner, WorkflowContextCard } from '../components';
 import '../styles/SalesHelperAgent.css';
 import { useSelectedProjectId } from '../hooks/useSelectedProjectId';
@@ -516,7 +515,6 @@ function SalesHelperAgent() {
 
   return (
     <div className="sales-helper-agent">
-      <Header />
 
       <div className="agent-page-header">
         <div className="agent-header-left">
@@ -552,7 +550,7 @@ function SalesHelperAgent() {
 
       <LiveModeHint
         requireProject
-        message="Choose a project from the header dropdown, or create one with + New Project."
+        message="Choose a project above, or create one with + New Project."
       />
 
       <div className="main-container">

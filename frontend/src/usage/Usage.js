@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './Usage.css';
-import Header from '../core/Header';
 import { authOptionalHeaders } from '../core/authHeaders';
 import { API_CONFIG } from '../config/apiConfig';
 
@@ -184,7 +183,6 @@ function Usage() {
 
   return (
     <div className="usage-page">
-      <Header />
       <div className="usage-container">
         <header className="usage-header">
           <button className="back-btn" onClick={() => navigate(-1)} aria-label="Go back">

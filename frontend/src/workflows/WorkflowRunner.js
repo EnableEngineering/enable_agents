@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import Header from '../core/Header';
 import { BackButton, EmptyState } from '../components';
 import { API_CONFIG } from '../config/apiConfig';
 import { authJsonHeaders } from '../core/authHeaders';
@@ -257,7 +256,6 @@ function WorkflowRunner() {
   if (loading) {
     return (
       <>
-        <Header />
         <div className="workflow-runner">
           <div className="workflow-loading">
             <div className="loading-spinner" />
@@ -271,7 +269,6 @@ function WorkflowRunner() {
   if (!instance) {
     return (
       <>
-        <Header />
         <div className="workflow-runner">
           <EmptyState
             iconType="search"
@@ -305,7 +302,6 @@ function WorkflowRunner() {
 
   return (
     <>
-      <Header />
       <div className="workflow-runner">
         {/* Header */}
         <div className="wf-header">

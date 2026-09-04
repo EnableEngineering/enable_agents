@@ -3,7 +3,6 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import './Settings.css';
 import { showToast } from '../core/toast';
 import { showConfirm } from '../components/ConfirmDialog';
-import Header from '../core/Header';
 import FormField from '../components/FormField';
 import Skeleton from '../components/SkeletonLoader';
 import { authJsonHeaders, authOptionalHeaders } from '../core/authHeaders';
@@ -475,7 +474,6 @@ function Settings() {
   if (loading) {
     return (
       <div className="settings-page">
-        <Header />
         <div className="settings-page-header">
           <Skeleton.Button width="40px" />
           <div className="header-text">
@@ -511,7 +509,6 @@ function Settings() {
 
   return (
     <div className="settings-page">
-      <Header />
 
       <div className="settings-page-header">
         <button className="back-button" onClick={() => navigate(-1)} title="Go back">

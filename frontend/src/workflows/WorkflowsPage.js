@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Header from '../core/Header';
 import { BackButton, EmptyState, ProjectSelector } from '../components';
 import { API_CONFIG } from '../config/apiConfig';
 import { STRINGS } from '../constants/strings';
@@ -176,7 +175,6 @@ function WorkflowsPage() {
   if (loading) {
     return (
       <>
-        <Header />
         <div className="workflows-page">
           <div className="workflows-loading">{STRINGS.LOADING.WORKFLOWS}</div>
         </div>
@@ -186,7 +184,6 @@ function WorkflowsPage() {
 
   return (
     <>
-      <Header />
       <div className="workflows-page">
         <div className="workflows-header">
           <div className="workflows-header-left">

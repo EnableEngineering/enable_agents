@@ -1,5 +1,4 @@
 import React from 'react';
-import Header from '../core/Header';
 import BackButton from './BackButton';
 import LiveModeHint from './LiveModeHint';
 import AgentOutcomesStrip from './AgentOutcomesStrip';
@@ -18,7 +17,6 @@ function AgentPlaceholderShell({
 }) {
   return (
     <div className="agent-placeholder-page">
-      <Header />
       <div className="agent-page-header">
         <BackButton />
         <div className="agent-header-content">

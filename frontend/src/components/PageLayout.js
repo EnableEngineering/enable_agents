@@ -1,5 +1,4 @@
 import React from 'react';
-import Header from '../core/Header';
 import './PageLayout.css';
 
 /**
@@ -27,7 +26,6 @@ export function PageLayout({
 }) {
   return (
     <div className={`page-layout ${className}`} {...props}>
-      <Header />
       <main className="page-main">
         {(title || actions) && (
           <div className="page-header">

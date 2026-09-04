@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import Header from '../core/Header';
 import { BackButton, ProjectSelector, LiveModeHint, AgentOutcomesStrip, ProjectGate } from '../components';
 import '../styles/EventNetworkingAgent.css';
 import { STRINGS } from '../constants/strings';
@@ -1116,7 +1115,6 @@ Jane Smith,jane@startup.io,StartupIO,CTO,Product;Engineering"
 
   return (
     <div className="agent-page event-networking-agent">
-      <Header />
       <div className="agent-page-header">
         <div className="agent-header-left">
           <BackButton />

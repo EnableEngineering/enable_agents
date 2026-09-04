@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import Header from '../core/Header';
 import { BackButton, ProjectGate, ProjectSelector, WorkflowExecutionBanner, WorkflowContextCard } from '../components';
 import { API_CONFIG } from '../config/apiConfig';
 import { authJsonHeaders, authOptionalHeaders } from '../core/authHeaders';
@@ -194,7 +193,6 @@ function EmailOutreachAgent() {
 
   return (
     <>
-      <Header />
 
       <div className="agent-page-header">
         <div className="agent-header-left">

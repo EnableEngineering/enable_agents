@@ -17,7 +17,7 @@ function ProjectGate({ children, agentLabel = 'agent' }) {
         <EmptyState
           iconType="document"
           title="Select a project to begin"
-          description={`Use the project dropdown in the header, or click + New Project to create one. Each project keeps its own ${agentLabel} data across agents.`}
+          description={`Use the project dropdown above, or click + New Project to create one. Each project keeps its own ${agentLabel} data across agents.`}
         />
       </div>
     );

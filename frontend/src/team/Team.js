@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './Team.css';
 import { showToast } from '../core/toast';
-import Header from '../core/Header';
 import { authJsonHeaders, authOptionalHeaders } from '../core/authHeaders';
 import { Modal } from '../components';
 
@@ -214,7 +213,6 @@ function Team() {
 
   return (
     <div className="team-page">
-      <Header />
       <div className="team-container">
         <header className="team-header">
           <button className="back-btn" onClick={() => navigate(-1)} aria-label="Go back">

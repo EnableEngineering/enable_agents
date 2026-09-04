@@ -1,7 +1,6 @@
 import { API_CONFIG } from '../config/apiConfig';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
-import Header from '../core/Header';
 import { BackButton, Textarea, ProjectSelector, LiveModeHint, AgentOutcomesStrip, ProjectGate, Modal } from '../components';
 import '../styles/ContentMarketingAgent.css';
 import { showToast } from '../core/toast';
@@ -530,7 +529,6 @@ function ContentMarketingAgent() {
   // ============= MAIN RENDER =============
   return (
     <div className="content-marketing-agent">
-      <Header />
 
       <div className="agent-page-header">
         <div className="agent-header-left">
@@ -566,7 +564,7 @@ function ContentMarketingAgent() {
 
       <LiveModeHint
         requireProject
-        message="Choose a project from the header dropdown, or create one with + New Project."
+        message="Choose a project above, or create one with + New Project."
       />
 
       <ProjectGate agentLabel="Content Marketing workspace">

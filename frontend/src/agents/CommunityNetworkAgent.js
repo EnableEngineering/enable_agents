@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect } from 'react';
-import Header from '../core/Header';
 import { BackButton, Input, Textarea, ConfirmDialog, ProjectSelector, LiveModeHint, AgentOutcomesStrip, ProjectGate, NetworkSearchResults } from '../components';
 import '../styles/CommunityNetworkAgent.css';
 import { STRINGS } from '../constants/strings';
@@ -631,7 +630,6 @@ function CommunityNetworkAgent() {
 
   return (
     <div className="community-network-agent">
-      <Header />
 
       <div className="agent-page-header">
         <div className="agent-header-left">
@@ -667,7 +665,7 @@ function CommunityNetworkAgent() {
 
       <LiveModeHint
         requireProject
-        message="Choose a project from the header dropdown, or create one with + New Project."
+        message="Choose a project above, or create one with + New Project."
       />
 
       <ProjectGate agentLabel="Community Network workspace">

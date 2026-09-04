@@ -3,7 +3,6 @@ import ReactMarkdown from 'react-markdown';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import Header from '../core/Header';
 import { BackButton, LiveModeHint, AgentOutcomesStrip, ProjectSelector, ProjectGate, Modal, showConfirm, WorkflowExecutionBanner } from '../components';
 import '../styles/RequirementsGathering.css';
 import { API_CONFIG } from '../config/apiConfig';
@@ -1435,7 +1434,6 @@ function RequirementsGathering() {
 
     return (
     <div className="requirements-page">
-      <Header />
       <div className="requirements-container">
 
         <div className="agent-page-header">
@@ -1465,7 +1463,7 @@ function RequirementsGathering() {
 
         <LiveModeHint
           requireProject
-          message="Choose a project from the header dropdown, or create one with + New Project."
+          message="Choose a project above, or create one with + New Project."
         />
 
         <ProjectGate agentLabel="Market Research workspace">
