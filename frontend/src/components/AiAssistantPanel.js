@@ -4,8 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { API_CONFIG } from '../config/apiConfig';
 import { authJsonHeaders } from '../core/authHeaders';
 import { getRouteByModuleName } from '../config/agentsConfig';
-import { findModuleByName } from '../data/agentCatalog';
-import { showAlert } from './ConfirmDialog';
+import { findModuleByName, DEPARTMENT_COLORS } from '../data/agentCatalog';
 import { CardGrid, ModuleCard } from './Card';
 import { STRINGS } from '../constants/strings';
 import './AiAssistantPanel.css';
@@ -103,16 +102,9 @@ function AiAssistantPanel({ open, onToggle }) {
     localStorage.removeItem('aiAssistantDeptPrompted');
   };
 
-  const handleTryModule = (moduleName) => {
+  const handleOpenModule = (moduleName) => {
     const route = getRouteByModuleName(moduleName);
     if (route) navigate(route);
-  };
-
-  const handleBuyModule = async (module) => {
-    await showAlert(
-      `Interested in ${module.name}? We'd love to show you how it can help your business.\n\nContact our sales team:\n📧 sales@enableagents.com\n🌐 enableagents.com/demo`,
-      'Request a Demo'
-    );
   };
 
   const handleEnterpriseChat = async (userInput) => {
@@ -344,9 +336,10 @@ function AiAssistantPanel({ open, onToggle }) {
                   price={module.price}
                   status={isReady ? 'ready' : 'in-progress'}
                   locked={!isReady}
+                  department={module.department}
+                  departmentColor={DEPARTMENT_COLORS[module.department]}
                   badge="Recommended"
-                  onTry={() => { if (isReady) handleTryModule(module.name); }}
-                  onBuy={() => handleBuyModule(module)}
+                  onOpen={() => handleOpenModule(module.name)}
                 />
               );
             })}

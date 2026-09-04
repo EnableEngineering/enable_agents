@@ -85,32 +85,33 @@ export function CardGrid({
  * @param {string} icon - Icon URL
  * @param {string} title - Module title
  * @param {string} description - Short module description (optional)
+ * @param {string} department - Department label shown above the title (e.g. "Sales")
+ * @param {string} departmentColor - Dot color for the department label
  * @param {string} status - 'ready' | 'in-progress' | 'unavailable'
- * @param {string} price - Price string (e.g., '$29/month')
- * @param {function} onTry - Try button handler
- * @param {function} onBuy - Buy button handler
- * @param {boolean} locked - If true, card is not interactive (Live mode stub)
+ * @param {string} price - Price string (e.g., '$29/month'), shown next to the action when ready
+ * @param {function} onOpen - "Open agent" button handler (ready modules only)
+ * @param {boolean} locked - If true, shows "Coming soon" and a disabled "Notify me" button instead
  * @param {string} badge - Optional small label chip (e.g. "Recommended")
  */
 export function ModuleCard({
   icon,
   title,
   description,
+  department,
+  departmentColor = 'var(--color-text-subtle)',
   status = 'ready',
   price,
-  onTry,
-  onBuy,
+  onOpen,
   locked = false,
   badge,
   className = '',
   ...props
 }) {
-  const isReady = status === 'ready';
-  const isUnavailable = status === 'unavailable' || locked;
+  const isReady = status === 'ready' && !locked;
 
   const classes = [
     'module-card-component',
-    isUnavailable && 'module-card-locked',
+    !isReady && 'module-card-locked',
     className
   ].filter(Boolean).join(' ');
 
@@ -118,30 +119,34 @@ export function ModuleCard({
     <div className={classes} {...props}>
       <div className="module-card-header">
         {icon && <img src={icon} alt="" className="module-card-icon" />}
-        <span className="module-card-title">{title}</span>
+        <div className="module-card-heading">
+          {department && (
+            <div className="module-card-department">
+              <span className="module-card-dot" style={{ background: departmentColor }} />
+              <span>{department}</span>
+            </div>
+          )}
+          <span className="module-card-title">{title}</span>
+        </div>
         {badge && <span className="module-card-badge">{badge}</span>}
-        <StatusIndicator status={status} />
+        {!isReady && <span className="module-card-coming-soon">Coming soon</span>}
       </div>
 
       {description && <p className="module-card-description">{description}</p>}
-      {price && <div className="module-card-price">{price}</div>}
 
       <div className="module-card-footer">
-        <button
-          className="btn btn-secondary btn-sm"
-          onClick={onTry}
-          disabled={isUnavailable}
-          title={isUnavailable ? 'Not available yet' : `Try ${title}`}
-        >
-          {isUnavailable ? 'Not Available' : 'Try'}
-        </button>
-        <button
-          className="btn btn-primary btn-sm"
-          onClick={onBuy}
-          title={`Buy ${title}${price ? ` - ${price}` : ''}`}
-        >
-          Buy
-        </button>
+        {isReady ? (
+          <>
+            <button className="btn btn-primary btn-sm" onClick={onOpen} title={`Open ${title}`}>
+              Open agent
+            </button>
+            {price && <span className="module-card-price">{price}</span>}
+          </>
+        ) : (
+          <button className="btn btn-secondary btn-sm" disabled title="Not available yet">
+            Notify me
+          </button>
+        )}
       </div>
     </div>
   );

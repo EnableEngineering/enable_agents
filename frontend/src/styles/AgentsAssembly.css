@@ -195,6 +195,112 @@
   overflow-x: hidden;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════════
+   AGENTS PAGE HEADER + FIND BAR + DEPARTMENT CHIPS
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+.agents-page-header {
+  margin-bottom: var(--space-5);
+}
+
+.agents-page-header h1 {
+  margin: 0 0 var(--space-1);
+  font-family: var(--font-display);
+  font-size: var(--text-page-title);
+  font-weight: var(--font-bold);
+  color: var(--color-primary);
+  letter-spacing: -0.02em;
+}
+
+.agents-page-header p {
+  margin: 0;
+  font-size: var(--text-body);
+  color: var(--color-text-muted);
+}
+
+.agent-find-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface);
+  border: 1.5px solid var(--color-border-strong, var(--color-border));
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.agent-find-icon {
+  flex-shrink: 0;
+}
+
+.agent-find-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: var(--text-body);
+  font-family: var(--font-body);
+  color: var(--color-text);
+}
+
+.agent-find-input::placeholder {
+  color: var(--color-text-subtle);
+}
+
+.agent-find-btn {
+  flex-shrink: 0;
+}
+
+.agent-find-hint {
+  margin: var(--space-2) 0 var(--space-4);
+  font-size: var(--text-caption);
+  color: var(--color-text-subtle);
+}
+
+.department-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-5);
+}
+
+.department-chip {
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-size: var(--text-small);
+  font-weight: var(--font-medium);
+  font-family: var(--font-body);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+}
+
+.department-chip:hover:not(.department-chip--active) {
+  border-color: var(--color-accent);
+  color: var(--color-text);
+}
+
+.department-chip--active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-text-inverse);
+}
+
+@media (max-width: 600px) {
+  .agent-find-bar {
+    flex-wrap: wrap;
+  }
+
+  .agent-find-btn {
+    width: 100%;
+  }
+}
+
 /* Page header row with title and badge */
 .page-header-row {
   display: flex;

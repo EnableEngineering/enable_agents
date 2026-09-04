@@ -1,8 +1,22 @@
 /**
  * Agent catalog data used by both the Agents Assembly grid and the global
  * AI Assistant panel's recommended-modules list, so the two stay in sync
- * instead of maintaining separate copies of the same 11 entries.
+ * instead of maintaining separate copies of the same entries.
+ *
+ * `department` + `departmentColor` back the catalog's unified department
+ * filter (All/Sales/Marketing/Procurement/Operations/Finance/Customer
+ * Service) - replacing the old Business/Technical split, which grouped by
+ * how the agent was built rather than what it helps you do.
  */
+
+export const DEPARTMENT_COLORS = {
+  Sales: '#1E3A5F',
+  Marketing: '#C2410C',
+  Procurement: '#16A34A',
+  Operations: '#F59E0B',
+  Finance: '#7C3AED',
+  'Customer Service': '#2563EB',
+};
 
 export const BUSINESS_MODULES = [
   {
@@ -10,6 +24,7 @@ export const BUSINESS_MODULES = [
     icon: '/assets/icons/search-analysis.png',
     price: '$29/month',
     status: 'ready',
+    department: 'Sales',
     description: 'Discover market trends, analyze competitors, and gather customer insights to make data-driven decisions.',
     keywords: ['market analysis', 'competitor research', 'customer insights', 'business intelligence', 'market trends'],
     businessContext: ['retail', 'ecommerce', 'startup', 'product launch', 'competitive analysis'],
@@ -21,6 +36,7 @@ export const BUSINESS_MODULES = [
     icon: '/assets/icons/increase.png',
     price: '$45/month',
     status: 'ready',
+    department: 'Sales',
     description: 'Supercharge your sales with lead management, CRM integration, and intelligent sales strategy recommendations.',
     keywords: ['sales', 'sales enablement', 'CRM', 'lead management', 'sales strategy'],
     businessContext: ['sales', 'lead generation', 'customer acquisition', 'sales optimization', 'business growth'],
@@ -32,6 +48,7 @@ export const BUSINESS_MODULES = [
     icon: '/assets/icons/bullhorn.png',
     price: '$49/month',
     status: 'ready',
+    department: 'Marketing',
     description: 'Create compelling content, manage campaigns, and boost your brand presence with AI-powered marketing.',
     keywords: ['content marketing', 'content creation', 'marketing strategy', 'brand content', 'SEO'],
     businessContext: ['content marketing', 'brand building', 'digital marketing', 'social media', 'marketing strategy'],
@@ -43,6 +60,7 @@ export const BUSINESS_MODULES = [
     icon: '/assets/icons/community.png',
     price: '$38/month',
     status: 'ready',
+    department: 'Marketing',
     description: 'Build and engage your community, manage relationships, and grow customer loyalty organically.',
     keywords: ['community management', 'network building', 'customer engagement', 'social platform', 'relationship management'],
     businessContext: ['customer engagement', 'brand building', 'social media', 'community building', 'customer loyalty'],
@@ -54,6 +72,7 @@ export const BUSINESS_MODULES = [
     icon: '/assets/icons/checklist.png',
     price: 'Free',
     status: 'ready',
+    department: 'Operations',
     description: 'Your AI-powered executive assistant for task management, reminders, and stakeholder coordination via email.',
     keywords: ['executive assistant', 'task management', 'reminders', 'email', 'stakeholder updates'],
     businessContext: ['executive', 'management', 'personal productivity', 'team coordination'],
@@ -65,6 +84,7 @@ export const BUSINESS_MODULES = [
     icon: '/assets/icons/networking.png',
     price: '$30/month',
     status: 'ready',
+    department: 'Marketing',
     description: 'Maximize event ROI with smart attendee matching and follow-up automation.',
     keywords: ['event networking', 'attendee matching', 'follow-up', 'event ROI'],
     businessContext: ['events', 'networking', 'conferences', 'trade shows'],
@@ -76,6 +96,7 @@ export const BUSINESS_MODULES = [
     icon: '/assets/icons/mail.png',
     price: '$25/month',
     status: 'ready',
+    department: 'Sales',
     description: 'Send personalized bulk emails to suppliers, leads, or contacts with templates and tracking.',
     keywords: ['email outreach', 'bulk email', 'RFQ', 'supplier outreach', 'email campaigns'],
     businessContext: ['sales', 'procurement', 'supplier management', 'lead nurturing'],
@@ -87,6 +108,7 @@ export const BUSINESS_MODULES = [
     icon: '/assets/icons/supply-chain-management.png',
     price: '$40/month',
     status: 'ready',
+    department: 'Procurement',
     description: 'Qualify suppliers through capability and compliance audits with weighted scoring.',
     keywords: ['supply chain', 'supplier audit', 'qualification', 'compliance', 'vendor management'],
     businessContext: ['procurement', 'supplier management', 'quality assurance', 'vendor qualification'],
@@ -104,6 +126,7 @@ export const TECHNICAL_MODULES = [
     icon: '/assets/icons/data-discovery.png',
     price: '$48/month',
     status: 'ready',
+    department: 'Operations',
     description: 'Explore your data, uncover hidden patterns, and generate actionable business insights with AI-powered document analysis.',
     keywords: ['data analysis', 'data mining', 'insights', 'data exploration', 'RAG'],
     businessContext: ['data analysis', 'business intelligence', 'analytics'],
@@ -111,10 +134,23 @@ export const TECHNICAL_MODULES = [
     useCases: ['data exploration', 'business insights', 'data analysis', 'document Q&A']
   },
   {
+    name: 'AI Chatbot',
+    icon: '/assets/icons/ai-chatbots.png',
+    price: '$20/month',
+    status: 'ready',
+    department: 'Customer Service',
+    description: 'A general-purpose assistant for quick questions across your uploaded documents.',
+    keywords: ['chatbot', 'customer support', 'document Q&A', 'conversational AI'],
+    businessContext: ['customer service', 'support automation', 'document Q&A'],
+    industries: ['all industries'],
+    useCases: ['answering questions', 'document lookup', 'customer support']
+  },
+  {
     name: 'Investment Agent',
     icon: '/assets/icons/save-money.png',
     price: '$65/month',
     status: 'coming_soon',
+    department: 'Finance',
     description: 'Make smarter investment decisions with AI-powered market analysis and portfolio recommendations.',
     keywords: ['investment', 'portfolio', 'market analysis', 'risk assessment'],
     businessContext: ['investment', 'portfolio management', 'financial planning'],
@@ -126,6 +162,7 @@ export const TECHNICAL_MODULES = [
     icon: '/assets/icons/performance.png',
     price: '$39/month',
     status: 'coming_soon',
+    department: 'Operations',
     description: 'Track team productivity, evaluate performance, and identify areas for improvement with analytics.',
     keywords: ['team performance', 'productivity', 'performance analytics', 'goal management'],
     businessContext: ['team management', 'performance review', 'productivity'],
