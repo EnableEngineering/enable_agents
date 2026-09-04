@@ -125,10 +125,7 @@ function RegisterUser() {
         position: 'relative',
       }}
     >
-      <div
-        className="login-card-container"
-        style={{ maxWidth: '600px', padding: '30px 40px', maxHeight: '85vh', overflowY: 'auto' }}
-      >
+      <div className="login-card-container login-card-container--wide">
         <div className="enable-logo" style={{ marginBottom: '20px' }}>
           Enable<span className="dot">.</span>
         </div>
