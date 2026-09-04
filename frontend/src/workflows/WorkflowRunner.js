@@ -175,7 +175,7 @@ const DEMO_STAGES = [
     id: 'document_analysis',
     name: 'Supplier Document Analysis',
     description: 'Analyze supplier documents, catalogs, and market reports',
-    agent: 'market_research',
+    agent: 'data_insights',
   },
   {
     id: 'rfq_outreach',
