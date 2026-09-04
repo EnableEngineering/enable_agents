@@ -11,7 +11,6 @@ import { Modal, ModalTabs } from './Modal';
 import { CardGrid, StatusIndicator } from './Card';
 import Select from './Select';
 import LiveModeHint from './LiveModeHint';
-import { useMode } from '../contexts';
 import { STRINGS } from '../constants/strings';
 
 
@@ -72,10 +71,6 @@ function AgentsAssembly() {
   });
   const [showChatbot, setShowChatbot] = useState(false);
   const [registryAgents, setRegistryAgents] = useState([]);
-
-  // Live/Demo mode - read from localStorage (synced with Header and Settings)
-  const { isDemoMode } = useMode();
-  const isLiveMode = !isDemoMode;
 
   const navigate = useNavigate();
   const chatHistoryRef = useRef(null);
@@ -273,7 +268,9 @@ function AgentsAssembly() {
     }
   }, [selectedIndustry]);
 
-  // Only show working technical modules
+  // Ready technical modules, plus coming-soon ones shown as locked cards
+  // (previously fully hidden - Try/Buy are already disabled by isNotReady
+  // for any non-'ready' status, this just stops omitting the cards)
   const technicalModules = [
     {
       name: 'Data Insights',
@@ -285,6 +282,28 @@ function AgentsAssembly() {
       businessContext: ['data analysis', 'business intelligence', 'analytics'],
       industries: ['all industries', 'technology', 'finance'],
       useCases: ['data exploration', 'business insights', 'data analysis', 'document Q&A']
+    },
+    {
+      name: 'Investment Agent',
+      icon: '/assets/icons/save-money.png',
+      price: '$65/month',
+      status: 'coming_soon',
+      description: 'Make smarter investment decisions with AI-powered market analysis and portfolio recommendations.',
+      keywords: ['investment', 'portfolio', 'market analysis', 'risk assessment'],
+      businessContext: ['investment', 'portfolio management', 'financial planning'],
+      industries: ['finance', 'all industries'],
+      useCases: ['market analysis', 'portfolio tracking', 'risk assessment']
+    },
+    {
+      name: 'Team Performance',
+      icon: '/assets/icons/performance.png',
+      price: '$39/month',
+      status: 'coming_soon',
+      description: 'Track team productivity, evaluate performance, and identify areas for improvement with analytics.',
+      keywords: ['team performance', 'productivity', 'performance analytics', 'goal management'],
+      businessContext: ['team management', 'performance review', 'productivity'],
+      industries: ['all industries'],
+      useCases: ['performance tracking', 'team analytics', 'goal management']
     }
   ];
 
@@ -1144,10 +1163,10 @@ const handleEnterpriseChat = async (userInput) => {
                     return (
                       <div
                         key={module.name}
-                        className={`carousel-3d-card ${isActive ? 'carousel-3d-card--active' : ''}`}
+                        className={`carousel-3d-card ${isActive ? 'carousel-3d-card--active' : ''} ${isNotReady ? 'carousel-3d-card--locked' : ''}`}
                         onClick={() => {
                           if (isActive) {
-                            handleCardClick(module.name);
+                            if (isReady) handleCardClick(module.name);
                           } else {
                             setCarouselIndex(index);
                           }

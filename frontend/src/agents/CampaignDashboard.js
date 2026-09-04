@@ -55,7 +55,7 @@ function CampaignDashboard() {
   // Demo mode detection
   const [isDemoMode, setIsDemoMode] = useState(() => {
     const stored = localStorage.getItem('enableAgentsMode');
-    return stored !== 'live';
+    return stored === 'demo';
   });
 
   // Persist state
@@ -85,7 +85,7 @@ function CampaignDashboard() {
   useEffect(() => {
     const handleModeChange = () => {
       const stored = localStorage.getItem('enableAgentsMode');
-      const newMode = stored !== 'live';
+      const newMode = stored === 'demo';
       if (newMode !== isDemoMode) {
         setIsDemoMode(newMode);
         setCampaigns([]);

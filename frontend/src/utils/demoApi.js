@@ -21,10 +21,13 @@
 import { getDemoData } from '../data/demo';
 
 /**
- * Check if demo mode is enabled
+ * Check if demo mode is enabled. Default is Live when unset - was
+ * `!== 'live'` (defaults to Demo for anything else, including every
+ * first-time visitor), the opposite of the locked default. Same fix as
+ * contexts/ModeContext.js, which duplicates this same check.
  */
 export function isDemoMode() {
-  return localStorage.getItem('enableAgentsMode') !== 'live';
+  return localStorage.getItem('enableAgentsMode') === 'demo';
 }
 
 /**

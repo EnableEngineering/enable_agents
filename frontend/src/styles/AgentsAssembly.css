@@ -1772,6 +1772,15 @@
   opacity: 0.9;
 }
 
+/* Locked (coming-soon) cards - visible but not actionable */
+.carousel-3d-card--locked {
+  filter: grayscale(60%) brightness(0.9);
+}
+
+.carousel-3d-card--locked.carousel-3d-card--active {
+  cursor: default;
+}
+
 /* Inactive cards */
 .carousel-3d-card:not(.carousel-3d-card--active) {
   filter: grayscale(20%) brightness(0.95);

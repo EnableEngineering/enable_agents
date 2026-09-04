@@ -60,7 +60,7 @@ export function useProjectData(agentKey, options = {}) {
   const projectId = searchParams.get('project');
 
   const [isDemoMode] = useState(() => {
-    return localStorage.getItem('enableAgentsMode') !== 'live';
+    return localStorage.getItem('enableAgentsMode') === 'demo';
   });
 
   const [project, setProject] = useState(null);

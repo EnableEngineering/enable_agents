@@ -46,7 +46,7 @@ function EventNetworkingAgent() {
 
   // Demo mode detection
   const [isDemoMode, setIsDemoMode] = useState(() => {
-    return localStorage.getItem('enableAgentsMode') !== 'live';
+    return localStorage.getItem('enableAgentsMode') === 'demo';
   });
 
   // State with persistence from URL/sessionStorage
@@ -126,7 +126,7 @@ function EventNetworkingAgent() {
   // Listen for mode changes (storage event handles cross-tab changes)
   useEffect(() => {
     const handleModeChange = () => {
-      const newMode = localStorage.getItem('enableAgentsMode') !== 'live';
+      const newMode = localStorage.getItem('enableAgentsMode') === 'demo';
       if (newMode !== isDemoMode) {
         setIsDemoMode(newMode);
         setEvents([]);

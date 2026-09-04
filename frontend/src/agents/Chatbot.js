@@ -33,7 +33,7 @@ function Chatbot() {
   }, []);
 
   const [isDemoMode, setIsDemoMode] = useState(() => {
-    return localStorage.getItem('enableAgentsMode') !== 'live';
+    return localStorage.getItem('enableAgentsMode') === 'demo';
   });
 
   // Load messages from sessionStorage or default
@@ -65,7 +65,7 @@ function Chatbot() {
 
   useEffect(() => {
     const handleModeChange = () => {
-      const newMode = localStorage.getItem('enableAgentsMode') !== 'live';
+      const newMode = localStorage.getItem('enableAgentsMode') === 'demo';
       if (isDemoMode !== newMode) {
         setMessages([{ sender: 'ai', text: 'Hi! Ask me anything about your documents.' }]);
         setChatHistory([{ subject: 'Welcome', summary: 'Introduction to the chatbot.' }]);

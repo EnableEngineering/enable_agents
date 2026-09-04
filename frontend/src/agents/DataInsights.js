@@ -277,7 +277,7 @@ function DataInsights() {
 
   // Demo mode detection
   const [isDemoMode, setIsDemoMode] = useState(() => {
-    return localStorage.getItem('enableAgentsMode') !== 'live';
+    return localStorage.getItem('enableAgentsMode') === 'demo';
   });
 
   // Workflow context - for saving results back to workflow
@@ -336,7 +336,7 @@ function DataInsights() {
   // Listen for mode changes
   useEffect(() => {
     const handleModeChange = () => {
-      const newMode = localStorage.getItem('enableAgentsMode') !== 'live';
+      const newMode = localStorage.getItem('enableAgentsMode') === 'demo';
       if (isDemoMode !== newMode) {
         setIsDemoMode(newMode);
         setCurrentInsight(null);

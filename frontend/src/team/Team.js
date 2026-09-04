@@ -90,7 +90,7 @@ function Team() {
   }, []);
 
   const fetchTeam = async () => {
-    const isDemoMode = localStorage.getItem('enableAgentsMode') !== 'live';
+    const isDemoMode = localStorage.getItem('enableAgentsMode') === 'demo';
     if (isDemoMode) {
       const demoMembers = DEMO_MEMBERS.map(m => ({
         ...m,

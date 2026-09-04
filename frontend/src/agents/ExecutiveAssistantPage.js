@@ -45,7 +45,7 @@ const DEMO_PEOPLE = [
 function ExecutiveAssistantPage() {
   // Demo mode detection with change listener
   const [isDemoMode, setIsDemoMode] = useState(() => {
-    return localStorage.getItem('enableAgentsMode') !== 'live';
+    return localStorage.getItem('enableAgentsMode') === 'demo';
   });
 
   // Workflow context - for saving results back to workflow
@@ -91,7 +91,7 @@ function ExecutiveAssistantPage() {
   const [activeTab, setActiveTab] = useState('projects-tasks');
 
   // Initialize with demo data if in demo mode
-  const initialDemoMode = localStorage.getItem('enableAgentsMode') !== 'live';
+  const initialDemoMode = localStorage.getItem('enableAgentsMode') === 'demo';
 
   const [projects, setProjects] = useState(() => initialDemoMode ? DEMO_PROJECTS : []);
   const [tasks, setTasks] = useState(() => initialDemoMode ? DEMO_TASKS : []);
@@ -130,7 +130,7 @@ function ExecutiveAssistantPage() {
   // Listen for mode changes (storage event handles cross-tab changes)
   useEffect(() => {
     const handleModeChange = () => {
-      const newMode = localStorage.getItem('enableAgentsMode') !== 'live';
+      const newMode = localStorage.getItem('enableAgentsMode') === 'demo';
       setIsDemoMode(newMode);
     };
     window.addEventListener('storage', handleModeChange);

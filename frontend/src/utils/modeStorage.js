@@ -23,10 +23,12 @@ const DEMO_KEY = 'enableAgentsDemoData';
 const LIVE_KEY = 'enableAgentsLiveData';
 
 /**
- * Check if currently in demo mode
+ * Check if currently in demo mode. Default is Live when unset - was
+ * `!== 'live'`, the opposite of the locked default. Same fix as
+ * contexts/ModeContext.js and utils/demoApi.js, which duplicate this check.
  */
 export const isDemoMode = () => {
-  return localStorage.getItem('enableAgentsMode') !== 'live';
+  return localStorage.getItem('enableAgentsMode') === 'demo';
 };
 
 /**

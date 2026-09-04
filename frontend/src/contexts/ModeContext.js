@@ -13,20 +13,25 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 const MODE_KEY = 'enableAgentsMode';
 
 const ModeContext = createContext({
-  isDemoMode: true,
+  isDemoMode: false,
   setMode: () => {},
 });
 
 export function ModeProvider({ children }) {
+  // Default is Live when unset - was `!== 'live'`, which defaults to Demo
+  // for any value other than the literal string 'live' (including null,
+  // i.e. every first-time visitor), the opposite of the locked product
+  // decision ("Live by default, user switches to Demo when exploring
+  // samples" - docs/todo/active-priorities.md).
   const [isDemoMode, setIsDemoMode] = useState(() => {
-    return localStorage.getItem(MODE_KEY) !== 'live';
+    return localStorage.getItem(MODE_KEY) === 'demo';
   });
 
   // Listen for storage changes (from other tabs or same-tab updates)
   useEffect(() => {
     const handleStorageChange = (e) => {
       if (e.key === MODE_KEY || e.key === null) {
-        const newMode = localStorage.getItem(MODE_KEY) !== 'live';
+        const newMode = localStorage.getItem(MODE_KEY) === 'demo';
         setIsDemoMode(newMode);
       }
     };
@@ -36,7 +41,7 @@ export function ModeProvider({ children }) {
 
     // Custom event for same-tab updates
     const handleModeChange = () => {
-      const newMode = localStorage.getItem(MODE_KEY) !== 'live';
+      const newMode = localStorage.getItem(MODE_KEY) === 'demo';
       setIsDemoMode(newMode);
     };
     window.addEventListener('modeChange', handleModeChange);
