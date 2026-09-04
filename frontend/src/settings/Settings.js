@@ -4,6 +4,7 @@ import './Settings.css';
 import { showToast } from '../core/toast';
 import { showConfirm } from '../components/ConfirmDialog';
 import Header from '../core/Header';
+import FormField from '../components/FormField';
 import Skeleton from '../components/SkeletonLoader';
 import { useMode } from '../contexts';
 import { authJsonHeaders, authOptionalHeaders } from '../core/authHeaders';
@@ -302,7 +303,13 @@ function Settings() {
     setAccountForm(prev => ({ ...prev, [field]: value }));
   };
 
+  const [accountSubmitted, setAccountSubmitted] = useState(false);
+
   const saveAccountInfo = () => {
+    setAccountSubmitted(true);
+    if (!accountForm.firstName.trim()) {
+      return;
+    }
     localStorage.setItem('firstName', accountForm.firstName);
     localStorage.setItem('lastName', accountForm.lastName);
     showToast('Account info saved', 'success');
@@ -606,13 +613,22 @@ function Settings() {
                       <div className="setting-label">First Name</div>
                     </div>
                     <div className="setting-control">
-                      <input
-                        type="text"
-                        value={accountForm.firstName}
-                        onChange={(e) => handleAccountChange('firstName', e.target.value)}
-                        className="setting-input"
-                        placeholder="First name"
-                      />
+                      <FormField
+                        htmlFor="firstName"
+                        error={accountSubmitted && !accountForm.firstName.trim() ? 'First name is required' : null}
+                      >
+                        <input
+                          id="firstName"
+                          type="text"
+                          value={accountForm.firstName}
+                          onChange={(e) => {
+                            handleAccountChange('firstName', e.target.value);
+                            if (accountSubmitted) setAccountSubmitted(false);
+                          }}
+                          className="setting-input"
+                          placeholder="First name"
+                        />
+                      </FormField>
                     </div>
                   </div>
 
