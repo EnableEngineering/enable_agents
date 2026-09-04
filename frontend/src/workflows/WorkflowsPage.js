@@ -130,6 +130,61 @@ function WorkflowsPage() {
   // Demo mode from shared context
   const { isDemoMode } = useMode();
 
+  // AI agent suggestions for the selected project, based on its business
+  // context (set at project creation) - fetched on demand, not
+  // automatically, since it's a real LLM call. Purely informational: never
+  // auto-applied to a template, the user still picks and configures
+  // manually.
+  const [agentSuggestions, setAgentSuggestions] = useState(null);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+
+  const handleGetSuggestions = async () => {
+    if (!selectedProjectId) return;
+    setLoadingSuggestions(true);
+    setAgentSuggestions(null);
+    try {
+      const projectRes = await fetch(`${API_CONFIG.BASE_URL}/api/projects/${selectedProjectId}`, {
+        headers: authJsonHeaders(),
+      });
+      const projectData = await projectRes.json();
+      const businessContext = projectData?.project?.data?.business_context;
+
+      if (!businessContext || (!businessContext.industry && !businessContext.productService && !businessContext.role)) {
+        showToast('This project has no business context yet - add one from the project settings to get agent suggestions.', 'warning');
+        return;
+      }
+
+      const recRes = await fetch(`${API_CONFIG.BASE_URL}/recommend_agents`, {
+        method: 'POST',
+        headers: authJsonHeaders(),
+        body: JSON.stringify({
+          industry: businessContext.industry || '',
+          product_service: businessContext.productService || '',
+          role: businessContext.role || '',
+        }),
+      });
+      const recData = await recRes.json();
+      const toolNames = (recData?.recommendations?.recommended_tools || [])
+        .map((tool) => tool.name || tool.tool_name)
+        .filter(Boolean);
+
+      if (toolNames.length) {
+        setAgentSuggestions(toolNames);
+      } else {
+        showToast('Could not generate agent suggestions right now. Please try again shortly.', 'warning');
+      }
+    } catch (err) {
+      showToast('Could not generate agent suggestions right now. Please try again shortly.', 'warning');
+    } finally {
+      setLoadingSuggestions(false);
+    }
+  };
+
+  // Clear stale suggestions when the selected project changes
+  useEffect(() => {
+    setAgentSuggestions(null);
+  }, [selectedProjectId]);
+
   const fetchTemplates = useCallback(async () => {
     // Use demo data in demo mode
     if (isDemoMode) {
@@ -311,6 +366,25 @@ function WorkflowsPage() {
 
           {activeTab === 'templates' && (
             <div className="workflows-content">
+              {selectedProjectId && !isDemoMode && (
+                <div className="agent-suggestions-bar">
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={handleGetSuggestions}
+                    disabled={loadingSuggestions}
+                  >
+                    {loadingSuggestions ? 'Thinking...' : 'Get AI Agent Suggestions'}
+                  </button>
+                  {agentSuggestions && (
+                    <div className="agent-suggestions-result">
+                      <span>Based on this project's business context, consider: </span>
+                      <strong>{agentSuggestions.join(', ')}</strong>
+                      <span className="agent-suggestions-hint"> - pick any template below and configure agents manually as needed.</span>
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="category-filter">
                 <button
                   className={`category-btn ${selectedCategory === 'all' ? 'active' : ''}`}

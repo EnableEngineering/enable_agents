@@ -95,11 +95,35 @@ function Projects() {
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [newProject, setNewProject] = useState({
+  const emptyBusinessContext = { industry: '', role: '', productService: '' };
+
+  // Pre-fill from Settings' Business Context tab if the user has already
+  // set one - optional, not required to create a project (decision:
+  // non-blocking, since making it mandatory would stop existing users
+  // with no context from creating new projects at all).
+  const loadStoredBusinessContext = () => {
+    try {
+      const stored = localStorage.getItem('enableAgentsBusinessContext');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return {
+          industry: parsed.industry || '',
+          role: parsed.role || '',
+          productService: parsed.productService || '',
+        };
+      }
+    } catch {
+      // keep defaults
+    }
+    return { ...emptyBusinessContext };
+  };
+
+  const [newProject, setNewProject] = useState(() => ({
     name: '',
     description: '',
     team_id: '',
-  });
+    business_context: loadStoredBusinessContext(),
+  }));
   const [creating, setCreating] = useState(false);
   const [teams, setTeams] = useState([]);
   const [loadingTeams, setLoadingTeams] = useState(false);
@@ -202,12 +226,12 @@ function Projects() {
         status: 'active',
         createdAt: new Date().toISOString().split('T')[0],
         updatedAt: new Date().toISOString(),
-        data: {},
+        data: { business_context: newProject.business_context },
       };
       const updatedProjects = [...projects, project];
       setProjects(updatedProjects);
       saveStoredProjects(updatedProjects);
-      setNewProject({ name: '', description: '', team_id: '' });
+      setNewProject({ name: '', description: '', team_id: '', business_context: { ...emptyBusinessContext } });
       setShowCreateModal(false);
       showToast('Project created', 'success');
       return;
@@ -223,7 +247,7 @@ function Projects() {
 
       if (res.ok) {
         showToast('Project created', 'success');
-        setNewProject({ name: '', description: '', team_id: '' });
+        setNewProject({ name: '', description: '', team_id: '', business_context: { ...emptyBusinessContext } });
         setShowCreateModal(false);
         fetchProjects();
       } else {
@@ -563,6 +587,50 @@ function Projects() {
                   </div>
                 </div>
               )}
+
+              <div className="field-group-divider">
+                <span>Business context (optional)</span>
+                <span className="field-hint">Helps the AI Assistant recommend agents for this project's workflows</span>
+              </div>
+              <div className="field-row">
+                <div className="field">
+                  <label>Industry</label>
+                  <input
+                    type="text"
+                    value={newProject.business_context.industry}
+                    onChange={(e) => setNewProject({
+                      ...newProject,
+                      business_context: { ...newProject.business_context, industry: e.target.value }
+                    })}
+                    placeholder="e.g., Manufacturing"
+                  />
+                </div>
+                <div className="field">
+                  <label>Your role</label>
+                  <input
+                    type="text"
+                    value={newProject.business_context.role}
+                    onChange={(e) => setNewProject({
+                      ...newProject,
+                      business_context: { ...newProject.business_context, role: e.target.value }
+                    })}
+                    placeholder="e.g., Sales Manager"
+                  />
+                </div>
+              </div>
+              <div className="field">
+                <label>Product / service</label>
+                <input
+                  type="text"
+                  value={newProject.business_context.productService}
+                  onChange={(e) => setNewProject({
+                    ...newProject,
+                    business_context: { ...newProject.business_context, productService: e.target.value }
+                  })}
+                  placeholder="e.g., Industrial pumps for manufacturers"
+                />
+              </div>
+
               <p className="field-hint" style={{ marginTop: '8px', color: 'var(--color-text-muted)' }}>
                 All agents will have access to this project.
               </p>

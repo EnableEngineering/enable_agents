@@ -72,6 +72,10 @@ def create_project():
         'marketResearch', 'salesHelper', 'contentMarketing',
         'communityNetwork', 'eventNetworking', 'executiveAssistant', 'dataInsights'
     ]
+    # Optional - industry/role/product-service, used by the AI Assistant to
+    # suggest relevant agents when the user later configures a workflow for
+    # this project. Not required to create a project.
+    business_context = data.get('business_context') or {}
 
     if not name:
         return jsonify({'error': 'Project name is required'}), 400
@@ -85,7 +89,7 @@ def create_project():
         description=description,
     )
     project.agents = agents
-    project.data = {}
+    project.data = {'business_context': business_context} if business_context else {}
 
     db.session.add(project)
     db.session.commit()
