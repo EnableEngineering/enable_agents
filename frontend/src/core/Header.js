@@ -301,12 +301,6 @@ function Header({ onProcessClick, onModeChange }) {
   const [showSystemModal, setShowSystemModal] = useState(false);
   const [systemTools, setSystemTools] = useState([]);
   const [toolsSortAsc, setToolsSortAsc] = useState(true);
-  const [business, setBusiness] = useState('');
-  const [role, setRole] = useState('');
-  const [businessDesc, setBusinessDesc] = useState('');
-  const [contextStep, setContextStep] = useState(0);
-  const [contextConfirmed, setContextConfirmed] = useState(false);
-  const [editingContext, setEditingContext] = useState(false);
   const [recommendedAgents, setRecommendedAgents] = useState('');
 
   // Notifications state
@@ -396,50 +390,41 @@ function Header({ onProcessClick, onModeChange }) {
     }
   };
 
-  function handleBusinessSubmit(e) {
-    e.preventDefault();
-    setContextStep(1);
-  }
-  function handleBusinessDescSubmit(e) {
-    e.preventDefault();
-    setContextStep(2);
-  }
-  function handleRoleSubmit(e) {
-    e.preventDefault();
-    setContextStep(3);
-  }
-  function handleContextConfirm() {
-    setContextConfirmed(true);
-  }
-  function handleContextEdit() {
-    setContextStep(0);
-    setContextConfirmed(false);
-  }
-
-  function handleContextSave(e) {
-    e.preventDefault();
-    setEditingContext(false);
-    // Optionally, save to API or localStorage here
-  }
-
   const handleSystemClick = async () => {
     setShowSystemModal(true);
     try {
-      const toolsRes = await fetch(`${API_CONFIG.API_URL}/get_tools_landscape`);
+      // Both endpoints require @require_auth - this was previously
+      // sending no Authorization header at all, so every call silently
+      // 401'd (still resolves to valid JSON via the error body, so it
+      // never threw - just looked like "no tools"/"no recommendations"
+      // instead of surfacing the real auth failure).
+      const toolsRes = await fetch(`${API_CONFIG.API_URL}/get_tools_landscape`, {
+        headers: authJsonHeaders(),
+      });
       const toolsResult = await toolsRes.json();
       let tools = Array.isArray(toolsResult.tools) ? toolsResult.tools : [];
       setSystemTools(tools);
 
-      // Get business, role, and description from state (or default)
+      // Business context lives in localStorage under
+      // 'enableAgentsBusinessContext' (same key the Business Context tab
+      // below and Settings' business tab read/write).
+      const storedContext = localStorage.getItem('enableAgentsBusinessContext');
+      const context = storedContext ? JSON.parse(storedContext) : {};
+
+      // Field names must match /recommend_agents' actual payload shape
+      // (backend/app.py:recommend_agents) - this previously sent
+      // tools_landscape/business_description, which that endpoint doesn't
+      // read at all (it reads tools/product_service), so every call
+      // silently produced recommendations based on empty input.
       const payload = {
-        tools_landscape: tools,
-        industry: business,
-        role: role,
-        business_description: businessDesc
+        tools: tools,
+        industry: context.industry || '',
+        product_service: context.productService || '',
+        role: context.role || '',
       };
       const agentsRes = await fetch(`${API_CONFIG.API_URL}/recommend_agents`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authJsonHeaders(),
         body: JSON.stringify(payload)
       });
       const agentsResult = await agentsRes.json();
@@ -456,22 +441,6 @@ function Header({ onProcessClick, onModeChange }) {
   };
   const handleCloseSystemModal = () => {
     setShowSystemModal(false);
-  };
-
-  const roleOptionsByIndustry = {
-    Finance: ['Manager', 'Analyst', 'Accountant', 'Auditor', 'Consultant', 'Other'],
-    Healthcare: ['Doctor', 'Nurse', 'Administrator', 'Technician', 'Consultant', 'Other'],
-    Education: ['Teacher', 'Principal', 'Administrator', 'Counselor', 'Other'],
-    Technology: ['Developer', 'Product Manager', 'Designer', 'QA Engineer', 'Consultant', 'Other'],
-    Retail: ['Store Manager', 'Sales Associate', 'Inventory Specialist', 'Buyer', 'Other'],
-    Other: ['Manager', 'Consultant', 'Specialist', 'Other']
-  };
-
-  const getRoleOptions = () => {
-    if (!business || !roleOptionsByIndustry[business]) {
-      return ['Manager', 'Analyst', 'Developer', 'Consultant', 'Other'];
-    }
-    return roleOptionsByIndustry[business];
   };
 
   return (
@@ -513,6 +482,19 @@ function Header({ onProcessClick, onModeChange }) {
             <span className="icon-label" style={{ fontSize: '0.95em', marginTop: '2px' }}>process</span>
           </div>
           */}
+          {/* System Overview: tools landscape + AI-recommended agents.
+              Button was removed in 9a3209b4 (no stated reason, bundled
+              into an unrelated demo-mode change) while the modal/handler
+              stayed behind, unreachable. Restored, now that the
+              /recommend_agents payload bug above is fixed. */}
+          <button
+            className="header-icon-button"
+            onClick={handleSystemClick}
+            aria-label="System overview"
+            title="System overview: tools & recommended agents"
+          >
+            <img src="/assets/icons/puzzle.png" alt="" className="icon" />
+          </button>
           {/* Notifications */}
           <div className="notif-icon-wrapper" ref={notifDropdownRef}>
             <button
