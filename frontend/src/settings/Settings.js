@@ -316,6 +316,7 @@ function Settings() {
     localStorage.removeItem('enableAgentsMode');
     localStorage.removeItem('enableAgentsBusinessContext');
     sessionStorage.clear();
+    window.dispatchEvent(new Event('authChange'));
     navigate('/login');
   };
 

@@ -59,6 +59,7 @@ function Login() {
       if (sess) {
         localStorage.setItem('sessionToken', sess);
       }
+      window.dispatchEvent(new Event('authChange'));
       navigate('/agents');
     }
   }, [location, navigate]);
@@ -104,6 +105,7 @@ function Login() {
         }
         localStorage.setItem('firstName', data.username || data.first_name || 'User');
         localStorage.setItem('userEmail', values.email);
+        window.dispatchEvent(new Event('authChange'));
         navigate('/agents');
       } else {
         showToast(data.error || 'Login failed. Please check your credentials.', 'error');

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 
 // Contexts
@@ -13,6 +13,8 @@ import Settings from './settings/Settings';
 import Team from './team/Team';
 import Projects from './projects/Projects';
 import Usage from './usage/Usage';
+import AiAssistantPanel from './components/AiAssistantPanel';
+import './App.css';
 
 // Pages
 import Dashboard from './pages/Dashboard';
@@ -48,13 +50,40 @@ function RootRedirect() {
 }
 
 function App() {
+  const [loggedIn, setLoggedIn] = useState(isLoggedIn());
+  const [panelOpen, setPanelOpen] = useState(() => {
+    const saved = sessionStorage.getItem('aiAssistantOpen');
+    return saved === null ? true : saved === 'true';
+  });
+
+  // isLoggedIn() reads localStorage, which doesn't trigger a React re-render
+  // on its own - listen for the same custom event ModeContext.js already
+  // uses for same-tab localStorage sync (Login/RegisterUser dispatch it on
+  // sign-in, Settings on sign-out) plus the native storage event for
+  // cross-tab sign-in/out, so the panel appears/disappears without a
+  // full page reload.
+  useEffect(() => {
+    const handleAuthChange = () => setLoggedIn(isLoggedIn());
+    window.addEventListener('authChange', handleAuthChange);
+    window.addEventListener('storage', handleAuthChange);
+    return () => {
+      window.removeEventListener('authChange', handleAuthChange);
+      window.removeEventListener('storage', handleAuthChange);
+    };
+  }, []);
+
+  const handlePanelToggle = (next) => {
+    setPanelOpen(next);
+    sessionStorage.setItem('aiAssistantOpen', next.toString());
+  };
+
   return (
     <ModeProvider>
       <Router>
         <SkipLink />
         <div className="App">
           <ErrorBoundary>
-          <main id="main-content">
+          <main id="main-content" className={loggedIn && panelOpen ? 'main-content--panel-open' : ''}>
           <Routes>
           <Route path="/" element={<RootRedirect />} />
           <Route path="/login" element={<Login />} />
@@ -87,6 +116,7 @@ function App() {
           <Route path="/workflows/:instanceId" element={<WorkflowRunner />} />
           </Routes>
           </main>
+          {loggedIn && <AiAssistantPanel open={panelOpen} onToggle={handlePanelToggle} />}
           </ErrorBoundary>
         </div>
       </Router>

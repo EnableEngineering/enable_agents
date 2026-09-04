@@ -10,6 +10,17 @@
   background-color: var(--color-background);
 }
 
+/* Shifts main content left to make room for the docked AI Assistant panel */
+#main-content.main-content--panel-open {
+  margin-right: var(--ai-panel-width, 360px);
+}
+
+@media (max-width: 1024px) {
+  #main-content.main-content--panel-open {
+    margin-right: 0;
+  }
+}
+
 /* Form layout */
 form {
   margin: var(--space-5) auto;

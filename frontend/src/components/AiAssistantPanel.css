@@ -1,0 +1,369 @@
+/**
+ * AI Assistant Panel - global, persistent, docked right-side column
+ * (Copilot-style), present on every logged-in page. Uses design tokens
+ * from tokens.css.
+ */
+
+.ai-assistant-panel {
+  position: fixed;
+  top: var(--header-height);
+  right: 0;
+  width: var(--ai-panel-width, 360px);
+  height: calc(100vh - var(--header-height));
+  background: var(--color-background);
+  border-left: 1px solid var(--color-border);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 900;
+}
+
+.ai-panel-collapsed-trigger {
+  position: fixed;
+  top: calc(var(--header-height) + var(--space-4));
+  right: var(--space-4);
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+  color: var(--color-text-inverse);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-lg);
+  z-index: 900;
+  transition: transform var(--transition-fast);
+}
+
+.ai-panel-collapsed-trigger:hover {
+  transform: scale(1.05);
+}
+
+.ai-panel-collapsed-icon {
+  width: 24px;
+  height: 24px;
+  filter: brightness(0) invert(1);
+}
+
+.ai-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-5);
+  background: var(--color-accent);
+  color: var(--color-text-inverse);
+  flex-shrink: 0;
+}
+
+.ai-panel-title {
+  font-size: var(--text-base);
+  font-weight: var(--font-semibold);
+  font-family: var(--font-display);
+}
+
+.ai-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.ai-panel-clear,
+.ai-panel-collapse {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-full);
+  border: none;
+  background: rgba(255, 255, 255, 0.2);
+  color: var(--color-text-inverse);
+  font-size: var(--text-heading);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition-fast);
+}
+
+.ai-panel-collapse {
+  font-size: var(--text-page-title);
+}
+
+.ai-panel-clear:hover,
+.ai-panel-collapse:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.ai-panel-history {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.ai-panel-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.ai-panel-row.user {
+  align-items: flex-end;
+}
+
+.ai-panel-sender {
+  font-size: var(--text-small);
+  font-weight: var(--font-semibold);
+  color: var(--color-text-muted);
+}
+
+.ai-panel-message {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  font-size: var(--text-small);
+  line-height: var(--leading-normal);
+  max-width: 90%;
+}
+
+.ai-panel-message.system {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+}
+
+.ai-panel-message.user {
+  background: var(--color-accent);
+  color: var(--color-text-inverse);
+}
+
+.ai-panel-timestamp {
+  font-size: var(--text-caption, 0.7rem);
+  color: var(--color-text-subtle);
+}
+
+.ai-panel-buffering {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.ai-panel-loading-dots span {
+  animation: aiPanelBlink 1.4s infinite both;
+}
+
+.ai-panel-loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+.ai-panel-loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes aiPanelBlink {
+  0%, 80%, 100% { opacity: 0.2; }
+  40% { opacity: 1; }
+}
+
+.ai-panel-options-list {
+  margin-top: var(--space-2);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.ai-panel-option-btn {
+  background: var(--color-background);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-small);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.ai-panel-option-btn:hover {
+  background: var(--color-accent);
+  color: var(--color-text-inverse);
+  border-color: var(--color-accent);
+}
+
+.ai-panel-recommended {
+  flex-shrink: 0;
+  max-height: 45%;
+  overflow-y: auto;
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+.ai-panel-recommended-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--text-small);
+  font-weight: var(--font-semibold);
+  color: var(--color-text);
+  margin-bottom: var(--space-2);
+}
+
+.ai-panel-detailed-report-tag {
+  background: none;
+  border: none;
+  color: var(--color-accent);
+  font-size: var(--text-small);
+  font-weight: var(--font-semibold);
+  cursor: pointer;
+  padding: 0;
+}
+
+.ai-panel-detailed-report-tag:hover {
+  text-decoration: underline;
+}
+
+.ai-panel-input {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.ai-panel-input-field {
+  flex: 1;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--text-small);
+  background: var(--color-background);
+  color: var(--color-text);
+}
+
+.ai-panel-input-field.highlighted {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px rgba(194, 65, 12, 0.15);
+}
+
+.ai-panel-input-field:disabled {
+  opacity: 0.6;
+}
+
+.ai-panel-send-btn {
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  border: none;
+  background: var(--color-border);
+  color: var(--color-text-muted);
+  font-weight: var(--font-semibold);
+  font-size: var(--text-small);
+  cursor: not-allowed;
+  transition: all var(--transition-fast);
+}
+
+.ai-panel-send-btn--active {
+  background: var(--color-accent);
+  color: var(--color-text-inverse);
+  cursor: pointer;
+}
+
+.ai-panel-send-btn--active:hover {
+  background: var(--color-accent-dark);
+}
+
+/* Detailed report popup - scoped modal within the panel's viewport */
+.ai-panel-report-popup {
+  position: fixed;
+  inset: 0;
+  background: rgba(30, 41, 59, 0.18);
+  z-index: 950;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ai-panel-report-modal {
+  background: var(--color-surface);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-xl);
+  padding: var(--space-6);
+  max-width: 700px;
+  width: 92vw;
+  max-height: 80vh;
+  overflow-y: auto;
+  position: relative;
+}
+
+.ai-panel-report-close {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  background: var(--color-background);
+  border: none;
+  border-radius: var(--radius-md);
+  padding: var(--space-1) var(--space-3);
+  font-weight: var(--font-semibold);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.ai-panel-report-title {
+  font-family: var(--font-display);
+  font-size: var(--text-title);
+  margin-bottom: var(--space-4);
+}
+
+.ai-panel-report-section {
+  margin-bottom: var(--space-5);
+}
+
+.ai-panel-report-section h3 {
+  font-size: var(--text-body);
+  font-weight: var(--font-semibold);
+  margin-bottom: var(--space-2);
+}
+
+.ai-panel-report-card {
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-2);
+}
+
+.ai-panel-report-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: var(--font-semibold);
+}
+
+.ai-panel-report-badge {
+  background: var(--color-warning-bg);
+  color: var(--color-accent-dark);
+  font-size: var(--text-small);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-full);
+}
+
+.ai-panel-report-desc {
+  font-size: var(--text-small);
+  color: var(--color-text-muted);
+  margin-top: var(--space-1);
+}
+
+.ai-panel-report-companies {
+  font-size: var(--text-small);
+  color: var(--color-text-muted);
+  margin-top: var(--space-1);
+}
+
+.ai-panel-report-empty {
+  font-size: var(--text-small);
+  color: var(--color-text-muted);
+}
+
+@media (max-width: 1024px) {
+  .ai-assistant-panel {
+    width: 100vw;
+    border-left: none;
+  }
+}

@@ -99,6 +99,7 @@ function RegisterUser() {
         localStorage.setItem('userEmail', values.email.trim());
         localStorage.setItem('firstName', values.firstName || values.email.trim().split('@')[0] || 'User');
         showToast('Account created. You are signed in.', 'success');
+        window.dispatchEvent(new Event('authChange'));
         navigate('/agents');
       } else {
         showToast(data.error || 'Registration failed. Please try again.', 'error');
