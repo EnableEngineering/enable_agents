@@ -1282,6 +1282,22 @@ a.wf-btn {
   height: 12px;
 }
 
+.wf-task-assignee--picker select {
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: var(--text-caption);
+  font-family: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+.wf-task-assignee--picker select:hover,
+.wf-task-assignee--picker select:focus {
+  color: var(--color-text);
+  outline: none;
+}
+
 /* Task Delete Button */
 .wf-task-delete {
   width: 24px;
