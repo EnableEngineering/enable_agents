@@ -355,6 +355,8 @@ function WorkflowRunner() {
         setInstance(data.instance);
         setStageData({});
         showToast(data.instance.status === 'completed' ? 'Workflow completed!' : 'Stage completed', 'success');
+      } else if (data.missing_inputs?.length) {
+        showToast(`Please fill in: ${data.missing_inputs.map(formatLabel).join(', ')}`, 'error');
       } else {
         showToast(data.error || 'Failed to complete stage', 'error');
       }
