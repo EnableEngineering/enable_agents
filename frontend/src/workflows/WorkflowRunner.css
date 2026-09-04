@@ -4,6 +4,13 @@
   padding: var(--space-4) var(--space-5);
   max-width: 1200px;
   margin: 0 auto;
+  /* The 3-lane grid below reacts to this container's actual rendered
+     width, not the viewport's - the persistent Sidebar and the (open by
+     default) global AI Assistant panel can leave well under half the
+     viewport for this page's own content, so a viewport-width media query
+     would think there's room for 3 fixed-width lanes when there isn't. */
+  container-type: inline-size;
+  container-name: wf-runner;
 }
 
 /* Loading */
@@ -122,17 +129,32 @@
   transition: width 0.3s ease;
 }
 
-/* Content Layout */
-.wf-content {
+/* 3-lane Layout: persistent progress (Lane 1) | main work surface (Lane 2)
+   | real activity timeline (Lane 3) */
+.wf-layout {
   display: grid;
-  grid-template-columns: 1fr 280px;
+  grid-template-columns: 300px 1fr 320px;
   gap: var(--space-4);
+  align-items: start;
 }
 
-.wf-main {
+.wf-progress-lane {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+  position: sticky;
+  top: var(--space-4);
+}
+
+.wf-progress-lane .wf-progress-section {
+  margin-bottom: 0;
+}
+
+.wf-main-lane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
 }
 
 /* Stages Panel */
@@ -187,6 +209,10 @@
 
 .wf-stage-row:hover {
   background: var(--color-background);
+}
+
+.wf-stage-row.selected {
+  background: var(--color-background-subtle);
 }
 
 .wf-stage-indicator {
@@ -309,13 +335,6 @@
   color: var(--color-text-muted);
 }
 
-.wf-stage-desc {
-  font-size: var(--text-caption);
-  color: var(--color-text-muted);
-  margin: var(--space-1) 0;
-  line-height: 1.4;
-}
-
 .wf-stage-agent {
   display: inline-flex;
   align-items: center;
@@ -330,45 +349,6 @@
 .wf-stage-agent img {
   width: 12px;
   height: 12px;
-}
-
-.wf-stage-type {
-  font-size: var(--text-xs);
-  font-weight: 600;
-  padding: 1px 4px;
-  border-radius: 3px;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-  margin-left: var(--space-1);
-}
-
-.wf-stage-type-agent {
-  background: var(--color-success-bg);
-  color: var(--color-success-text);
-}
-
-.wf-stage-type-placeholder {
-  background: var(--color-warning-bg);
-  color: var(--color-accent-dark);
-}
-
-.wf-stage-type-form {
-  background: var(--color-background);
-  color: var(--color-text-muted);
-  border: 1px solid var(--color-border);
-}
-
-.wf-stage-expand {
-  width: 16px;
-  height: 16px;
-  opacity: 0.3;
-  transition: opacity 0.15s ease;
-  flex-shrink: 0;
-  margin-top: var(--space-1);
-}
-
-.wf-stage-row:hover .wf-stage-expand {
-  opacity: 0.7;
 }
 
 /* Action Panels */
@@ -535,33 +515,33 @@
   border-color: var(--color-success);
 }
 
-/* Sidebar */
-.wf-sidebar {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.wf-summary-card {
+/* Lane 3: Activity timeline */
+.wf-activity-lane {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   padding: var(--space-4);
+  position: sticky;
+  top: var(--space-4);
 }
 
-.wf-summary-card h3 {
+.wf-activity-header {
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.wf-activity-header img {
+  width: 18px;
+  height: 18px;
+}
+
+.wf-activity-header h3 {
   font-size: var(--text-body);
   font-weight: 600;
   color: var(--color-text);
-  margin: 0 0 var(--space-3) 0;
-}
-
-.wf-summary-card h3 img {
-  width: 18px;
-  height: 18px;
+  margin: 0;
 }
 
 .wf-empty-text {
@@ -570,68 +550,70 @@
   margin: 0;
 }
 
-.wf-summary-groups {
+.wf-activity-list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
 }
 
-.wf-summary-group + .wf-summary-group {
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--color-border);
-}
-
-.wf-summary-group-header {
+.wf-activity-item {
   display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin-bottom: var(--space-2);
-  font-size: var(--text-caption);
-  font-weight: 600;
-  color: var(--color-text);
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
-}
-
-.wf-summary-group-header img {
-  width: 16px;
-  height: 16px;
-}
-
-.wf-summary-items {
-  display: flex;
-  flex-direction: column;
   gap: var(--space-3);
 }
 
-.wf-summary-item {
+.wf-activity-dot-col {
   display: flex;
-  align-items: flex-start;
-  gap: var(--space-2);
-}
-
-.wf-summary-item img {
-  width: 16px;
-  height: 16px;
-  margin-top: 2px;
+  flex-direction: column;
+  align-items: center;
   flex-shrink: 0;
 }
 
-.wf-summary-item > div {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
+.wf-activity-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  margin-top: 4px;
+  flex-shrink: 0;
 }
 
-.wf-summary-label {
+.wf-activity-line {
+  width: 1.5px;
+  flex: 1;
+  min-height: var(--space-4);
+  background: var(--color-border);
+  margin-top: 2px;
+}
+
+.wf-activity-body {
+  flex: 1;
+  min-width: 0;
+  padding-bottom: var(--space-4);
+}
+
+.wf-activity-title-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.wf-activity-title {
+  font-size: var(--text-caption);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.wf-activity-time {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.wf-activity-detail {
   font-size: var(--text-caption);
   color: var(--color-text-muted);
-}
-
-.wf-summary-value {
-  font-size: var(--text-body);
-  color: var(--color-text);
-  word-break: break-word;
+  margin: 2px 0 0;
 }
 
 /* Stage Detail View */
@@ -976,14 +958,27 @@ a.wf-btn {
   height: 16px;
 }
 
-/* Responsive */
-@media (max-width: 900px) {
-  .wf-content {
+/* Responsive - keyed to the workflow-runner container's own rendered
+   width (see container-type above), since the Sidebar + AI Assistant
+   panel can leave this page far narrower than the viewport. */
+@container wf-runner (max-width: 950px) {
+  .wf-layout {
+    grid-template-columns: 240px 1fr;
+  }
+
+  .wf-activity-lane {
+    grid-column: 1 / -1;
+    position: static;
+  }
+}
+
+@container wf-runner (max-width: 620px) {
+  .wf-layout {
     grid-template-columns: 1fr;
   }
 
-  .wf-sidebar {
-    order: -1;
+  .wf-progress-lane {
+    position: static;
   }
 }
 

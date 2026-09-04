@@ -169,6 +169,7 @@ function WorkflowRunner() {
   const [stageData, setStageData] = useState({});
   const [completing, setCompleting] = useState(false);
   const [selectedStage, setSelectedStage] = useState(null);
+  const [allTasks, setAllTasks] = useState([]);
 
   const fetchInstance = useCallback(async () => {
     try {
@@ -193,6 +194,26 @@ function WorkflowRunner() {
   useEffect(() => {
     fetchInstance();
   }, [fetchInstance]);
+
+  // Every task across every stage (not scoped to whichever stage is
+  // currently selected) - the source for the activity lane's timeline.
+  // Re-fetched whenever StageDetailView's task list changes so the
+  // timeline reflects the same data without a full page reload.
+  const fetchAllTasks = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_CONFIG.BASE_URL}/api/workflows/instances/${instanceId}/tasks`, {
+        headers: authJsonHeaders(),
+      });
+      const data = await res.json();
+      if (data.success) setAllTasks(data.tasks);
+    } catch (err) {
+      // Non-critical - the activity lane just shows fewer events.
+    }
+  }, [instanceId]);
+
+  useEffect(() => {
+    fetchAllTasks();
+  }, [fetchAllTasks]);
 
   const handleStart = async () => {
     try {
@@ -300,6 +321,45 @@ function WorkflowRunner() {
     ? Math.round((instance.currentStageIndex / instance.totalStages) * 100)
     : 0;
 
+  // Real, timestamped events only - workflow/stage lifecycle timestamps and
+  // task completions already tracked by the backend. No fabricated
+  // "proposed action" entries - if the data isn't real, it isn't shown.
+  const activityEvents = (() => {
+    const events = [];
+    if (instance.startedAt) {
+      events.push({ id: 'started', time: instance.startedAt, title: 'Workflow started', detail: `${instance.totalStages} stages` });
+    }
+    stages.forEach((stage) => {
+      const state = stageStates[stage.id];
+      if (state?.completedAt) {
+        events.push({
+          id: `stage-${stage.id}`,
+          time: state.completedAt,
+          title: `${stage.name} completed`,
+          detail: getAgentLabel(stage.agent),
+        });
+      }
+    });
+    allTasks.forEach((task) => {
+      if (task.status === 'done' && task.completed_at) {
+        events.push({
+          id: `task-${task.id}`,
+          time: task.completed_at,
+          title: `Task completed: ${task.title}`,
+          detail: task.completed_by ? `by ${task.completed_by.split('@')[0]}` : null,
+        });
+      }
+    });
+    if (instance.completedAt) {
+      events.push({ id: 'completed', time: instance.completedAt, title: 'Workflow completed', detail: null });
+    }
+    return events.sort((a, b) => new Date(a.time) - new Date(b.time));
+  })();
+
+  const formatEventTime = (iso) => new Date(iso).toLocaleString('en-US', {
+    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+  });
+
   return (
     <>
       <div className="workflow-runner">
@@ -321,88 +381,87 @@ function WorkflowRunner() {
           </span>
         </div>
 
-        {/* Progress Bar */}
-        <div className="wf-progress-section">
-          <div className="wf-progress-info">
-            <span className="wf-progress-label">Progress</span>
-            <span className="wf-progress-value">{instance.currentStageIndex} of {instance.totalStages} stages complete</span>
-          </div>
-          <div className="wf-progress-bar">
-            <div className="wf-progress-fill" style={{ width: `${progress}%` }} />
-          </div>
-        </div>
+        <div className="wf-layout">
+          {/* Lane 1: persistent workflow progress - always visible, never
+              replaced by the stage detail view, so you always know where
+              you are in the workflow while working in Lane 2. */}
+          <div className="wf-progress-lane">
+            <div className="wf-progress-section">
+              <div className="wf-progress-info">
+                <span className="wf-progress-label">Progress</span>
+                <span className="wf-progress-value">{instance.currentStageIndex} of {instance.totalStages} stages complete</span>
+              </div>
+              <div className="wf-progress-bar">
+                <div className="wf-progress-fill" style={{ width: `${progress}%` }} />
+              </div>
+            </div>
 
-        <div className="wf-content">
-          {/* Main Content - Stages or Selected Stage Detail */}
-          <div className="wf-main">
+            <div className="wf-stages-panel">
+              <div className="wf-panel-header">
+                <img src="/assets/icons/process.png" alt="" className="wf-panel-icon" />
+                <h2>Workflow Stages</h2>
+              </div>
+              <p className="wf-panel-subtitle">Select a stage to view inputs, outputs, and agent details</p>
+
+              <div className="wf-stages-list">
+                {stages.map((stage, idx) => {
+                  const state = stageStates[stage.id] || {};
+                  const isStageCompleted = idx < instance.currentStageIndex;
+                  const isCurrent = idx === instance.currentStageIndex && instance.status === 'running';
+                  const isPendingStage = idx > instance.currentStageIndex || instance.status === 'pending';
+                  const isSelected = selectedStage?.id === stage.id;
+
+                  return (
+                    <div
+                      key={stage.id}
+                      className={`wf-stage-row ${isStageCompleted ? 'completed' : ''} ${isCurrent ? 'current' : ''} ${isPendingStage ? 'pending' : ''} ${isSelected ? 'selected' : ''}`}
+                      onClick={() => setSelectedStage({ ...stage, index: idx, state })}
+                    >
+                      <div className="wf-stage-indicator">
+                        {isStageCompleted ? (
+                          <div className="wf-stage-check">
+                            ✓
+                          </div>
+                        ) : isCurrent ? (
+                          <div className="wf-stage-current">
+                            <div className="wf-stage-pulse" />
+                            {idx + 1}
+                          </div>
+                        ) : (
+                          <div className="wf-stage-pending">{idx + 1}</div>
+                        )}
+                        {idx < stages.length - 1 && (
+                          <div className={`wf-stage-line ${isStageCompleted ? 'completed' : ''}`} />
+                        )}
+                      </div>
+
+                      <div className="wf-stage-content">
+                        <div className="wf-stage-header">
+                          <img src={getStageIcon(stage.name)} alt="" className="wf-stage-icon" />
+                          <span className="wf-stage-name">{stage.name}</span>
+                          {isStageCompleted && state.completedAt && (
+                            <span className="wf-stage-date">
+                              {new Date(state.completedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                            </span>
+                          )}
+                        </div>
+                        <div className="wf-stage-agent">
+                          <img src={getAgentIcon(stage.agent)} alt="" />
+                          <span>{getAgentLabel(stage.agent)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Lane 2: the main work surface - the action panel for the
+              workflow's current status, or the selected stage's detail. */}
+          <div className="wf-main-lane">
             {!selectedStage ? (
               <>
-                {/* Stages List */}
-                <div className="wf-stages-panel">
-                  <div className="wf-panel-header">
-                    <img src="/assets/icons/process.png" alt="" className="wf-panel-icon" />
-                    <h2>Workflow Stages</h2>
-                  </div>
-                  <p className="wf-panel-subtitle">Select a stage to view inputs, outputs, and agent details</p>
-
-                  <div className="wf-stages-list">
-                    {stages.map((stage, idx) => {
-                      const state = stageStates[stage.id] || {};
-                      const isStageCompleted = idx < instance.currentStageIndex;
-                      const isCurrent = idx === instance.currentStageIndex && instance.status === 'running';
-                      const isPendingStage = idx > instance.currentStageIndex || instance.status === 'pending';
-
-                      return (
-                        <div
-                          key={stage.id}
-                          className={`wf-stage-row ${isStageCompleted ? 'completed' : ''} ${isCurrent ? 'current' : ''} ${isPendingStage ? 'pending' : ''}`}
-                          onClick={() => setSelectedStage({ ...stage, index: idx, state })}
-                        >
-                          <div className="wf-stage-indicator">
-                            {isStageCompleted ? (
-                              <div className="wf-stage-check">
-                                ✓
-                              </div>
-                            ) : isCurrent ? (
-                              <div className="wf-stage-current">
-                                <div className="wf-stage-pulse" />
-                                {idx + 1}
-                              </div>
-                            ) : (
-                              <div className="wf-stage-pending">{idx + 1}</div>
-                            )}
-                            {idx < stages.length - 1 && (
-                              <div className={`wf-stage-line ${isStageCompleted ? 'completed' : ''}`} />
-                            )}
-                          </div>
-
-                          <div className="wf-stage-content">
-                            <div className="wf-stage-header">
-                              <img src={getStageIcon(stage.name)} alt="" className="wf-stage-icon" />
-                              <span className="wf-stage-name">{stage.name}</span>
-                              {isStageCompleted && state.completedAt && (
-                                <span className="wf-stage-date">
-                                  {new Date(state.completedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                                </span>
-                              )}
-                            </div>
-                            <p className="wf-stage-desc">{stage.description}</p>
-                            <div className="wf-stage-agent">
-                              <img src={getAgentIcon(stage.agent)} alt="" />
-                              <span>{getAgentLabel(stage.agent)}</span>
-                              <span className={`wf-stage-type wf-stage-type-${getAgentType(stage.agent)}`}>
-                                {getAgentType(stage.agent) === 'agent' ? 'Agent' : getAgentType(stage.agent) === 'placeholder' ? 'Soon' : 'Form'}
-                              </span>
-                            </div>
-                          </div>
-
-                          <img src="/assets/icons/maximize.png" alt="View" className="wf-stage-expand" />
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
                 {/* Action Panels */}
                 {isPending && (
                   <div className="wf-action-panel">
@@ -493,50 +552,43 @@ function WorkflowRunner() {
                 stageState={stageStates[selectedStage.id]}
                 instance={instance}
                 onBack={() => setSelectedStage(null)}
+                onTasksChange={fetchAllTasks}
               />
             )}
           </div>
 
-          {/* Sidebar - Quick Summary, grouped by the stage that produced each value */}
-          <div className="wf-sidebar">
-            <div className="wf-summary-card">
-              <h3>
-                <img src="/assets/icons/document.png" alt="" /> Summary
-              </h3>
-              {(() => {
-                const completedStages = stages
-                  .map((stage, idx) => ({ stage, idx, state: stageStates[stage.id] || {} }))
-                  .filter(({ idx, state }) => idx < instance.currentStageIndex && state.data && Object.keys(state.data).length > 0);
-
-                if (completedStages.length === 0) {
-                  return <p className="wf-empty-text">No data collected yet</p>;
-                }
-
-                return (
-                  <div className="wf-summary-groups">
-                    {completedStages.map(({ stage, state }) => (
-                      <div key={stage.id} className="wf-summary-group">
-                        <div className="wf-summary-group-header">
-                          <img src={getAgentIcon(stage.agent)} alt="" />
-                          <span>{stage.name || getAgentLabel(stage.agent)}</span>
-                        </div>
-                        <div className="wf-summary-items">
-                          {Object.entries(state.data).slice(0, 6).map(([key, value]) => (
-                            <div key={key} className="wf-summary-item">
-                              <img src={getContextIcon(key)} alt="" />
-                              <div>
-                                <span className="wf-summary-label">{formatLabel(key)}</span>
-                                <span className="wf-summary-value">{formatContextValue(value)}</span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                );
-              })()}
+          {/* Lane 3: real activity timeline - workflow/stage lifecycle
+              timestamps and task completions the backend already tracks.
+              Each stage's own inputs/outputs remain visible in its detail
+              view (Lane 2); this lane is about *when* things happened. */}
+          <div className="wf-activity-lane">
+            <div className="wf-activity-header">
+              <img src="/assets/icons/monitoring.png" alt="" />
+              <h3>Activity</h3>
             </div>
+            {activityEvents.length === 0 ? (
+              <p className="wf-empty-text">
+                {isPending ? 'Nothing yet - start the workflow to begin.' : 'No activity recorded yet.'}
+              </p>
+            ) : (
+              <div className="wf-activity-list">
+                {activityEvents.map((event, idx) => (
+                  <div key={event.id} className="wf-activity-item">
+                    <div className="wf-activity-dot-col">
+                      <span className="wf-activity-dot" />
+                      {idx < activityEvents.length - 1 && <span className="wf-activity-line" />}
+                    </div>
+                    <div className="wf-activity-body">
+                      <div className="wf-activity-title-row">
+                        <span className="wf-activity-title">{event.title}</span>
+                        <span className="wf-activity-time">{formatEventTime(event.time)}</span>
+                      </div>
+                      {event.detail && <p className="wf-activity-detail">{event.detail}</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
