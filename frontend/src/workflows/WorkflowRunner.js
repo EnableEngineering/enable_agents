@@ -685,10 +685,26 @@ function StageDetailView({ stage, stageState, instance, onBack, onTasksChange, i
   const [showAddTask, setShowAddTask] = useState(false);
   const [newTaskRequired, setNewTaskRequired] = useState(false);
   const [savingTask, setSavingTask] = useState(false);
+  const [teamMembers, setTeamMembers] = useState([]);
 
   const isCompleted = stageState?.status === 'completed';
   const isCurrent = stage.index === instance.currentStageIndex && instance.status === 'running';
   const isPending = stage.index > instance.currentStageIndex;
+
+  // Fetch team members for the assignee picker - only relevant if this
+  // workflow is linked to a project (assigning to someone else only works
+  // if they're on that project's team, per get_accessible_instance's
+  // owner-or-team-member access model on the backend).
+  useEffect(() => {
+    if (isDemoMode || !instance.projectId) {
+      setTeamMembers([]);
+      return;
+    }
+    fetch(`${API_CONFIG.BASE_URL}/api/team`, { headers: authJsonHeaders() })
+      .then(res => res.json())
+      .then(data => setTeamMembers(data.members || []))
+      .catch(() => setTeamMembers([]));
+  }, [isDemoMode, instance.projectId]);
 
   // Fetch tasks for this stage
   useEffect(() => {
@@ -829,6 +845,28 @@ function StageDetailView({ stage, stageState, instance, onBack, onTasksChange, i
       }
     } catch (err) {
       showToast('Error deleting task', 'error');
+    }
+  };
+
+  const handleAssignTask = async (task, assignee) => {
+    if (isDemoMode) {
+      showToast('Switch to Live mode to manage tasks', 'info');
+      return;
+    }
+    try {
+      const res = await fetch(`${API_CONFIG.BASE_URL}/api/workflows/instances/${instance.id}/tasks/${task.id}`, {
+        method: 'PATCH',
+        headers: authJsonHeaders(),
+        body: JSON.stringify({ assigned_to: assignee || null }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setTasks(tasks.map(t => t.id === task.id ? data.task : t));
+      } else {
+        showToast(data.error || 'Failed to update assignee', 'error');
+      }
+    } catch (err) {
+      showToast('Error updating assignee', 'error');
     }
   };
 
@@ -978,7 +1016,21 @@ function StageDetailView({ stage, stageState, instance, onBack, onTasksChange, i
                     ) : (
                       <span className="wf-task-badge optional">Optional</span>
                     )}
-                    {task.assigned_to && (
+                    {teamMembers.length > 0 && !isCompleted ? (
+                      <span className="wf-task-assignee wf-task-assignee--picker">
+                        <img src="/assets/icons/user.png" alt="" />
+                        <select
+                          value={task.assigned_to || ''}
+                          onChange={(e) => handleAssignTask(task, e.target.value)}
+                          aria-label={`Assign "${task.title}"`}
+                        >
+                          <option value="">Unassigned</option>
+                          {teamMembers.map((m) => (
+                            <option key={m.email} value={m.email}>{m.name}</option>
+                          ))}
+                        </select>
+                      </span>
+                    ) : task.assigned_to && (
                       <span className="wf-task-assignee">
                         <img src="/assets/icons/user.png" alt="" />
                         {task.assigned_to.split('@')[0]}

@@ -4,8 +4,9 @@ Workflow Templates API Routes.
 Handles workflow template CRUD, instance management, and stage transitions.
 """
 from flask import Blueprint, request, jsonify, g
+from sqlalchemy import or_
 
-from core.auth import require_auth
+from core.auth import require_auth, user_can_access_project
 from datetime import datetime
 import uuid
 import json
@@ -13,7 +14,7 @@ from pathlib import Path
 
 from core.database import db
 from models.workflow import WorkflowTemplate, WorkflowInstance
-from core.models import WorkflowTask, Notification
+from core.models import WorkflowTask, Notification, Project, TeamMember
 
 workflows_bp = Blueprint('workflows', __name__)
 
@@ -22,6 +23,35 @@ TEMPLATES_DIR = Path(__file__).parent.parent / "config" / "workflow-templates"
 
 def get_user_id() -> str:
     return g.user_id
+
+
+def get_accessible_instance(instance_id: str, user_id: str):
+    """Fetch a workflow instance the user can access - either the owner, or
+    (if it's linked to a project) a member of that project's team, matching
+    the same owner-or-team-member model Projects already use via
+    user_can_access_project. Returns None if not found or not accessible
+    (caller should 404, not 403, to avoid confirming existence of other
+    users' instances)."""
+    instance = WorkflowInstance.query.filter_by(instance_id=instance_id).first()
+    if not instance:
+        return None
+    if instance.user_id == user_id:
+        return instance
+    if instance.project_id and user_can_access_project(user_id, instance.project_id):
+        return instance
+    return None
+
+
+def user_can_assign_task(user_id: str, assignee: str, instance: WorkflowInstance) -> bool:
+    """True if assignee can actually access this instance once assigned -
+    either they own it, or they're on the team of the instance's project.
+    Prevents creating a task_assigned notification that just 404s for the
+    assignee (no project link, or a project they're not a member of)."""
+    if assignee == user_id:
+        return True
+    if not instance.project_id:
+        return False
+    return user_can_access_project(assignee, instance.project_id)
 
 
 def load_system_templates():
@@ -156,7 +186,20 @@ def list_instances():
     status = request.args.get("status")
     project_id = request.args.get("project_id")
 
-    query = WorkflowInstance.query.filter_by(user_id=user_id)
+    # Instances the user owns, plus instances linked to a project whose team
+    # they're a member of - matching the owner-or-team-member model
+    # get_accessible_instance() uses for a single instance.
+    member_team_ids = [m.team_id for m in TeamMember.query.filter_by(user_id=user_id).all()]
+    accessible_project_ids = (
+        [p.project_id for p in Project.query.filter(Project.team_id.in_(member_team_ids)).all()]
+        if member_team_ids else []
+    )
+    query = WorkflowInstance.query.filter(
+        or_(
+            WorkflowInstance.user_id == user_id,
+            WorkflowInstance.project_id.in_(accessible_project_ids),
+        )
+    )
     if status:
         query = query.filter_by(status=status)
     if project_id:
@@ -210,7 +253,7 @@ def get_instance(instance_id: str):
     if not user_id:
         return jsonify({"error": "Not authenticated"}), 401
 
-    instance = WorkflowInstance.query.filter_by(instance_id=instance_id, user_id=user_id).first()
+    instance = get_accessible_instance(instance_id, user_id)
     if not instance:
         return jsonify({"error": "Instance not found"}), 404
 
@@ -225,7 +268,7 @@ def start_instance(instance_id: str):
     if not user_id:
         return jsonify({"error": "Not authenticated"}), 401
 
-    instance = WorkflowInstance.query.filter_by(instance_id=instance_id, user_id=user_id).first()
+    instance = get_accessible_instance(instance_id, user_id)
     if not instance:
         return jsonify({"error": "Instance not found"}), 404
 
@@ -248,7 +291,7 @@ def complete_stage(instance_id: str):
     if not user_id:
         return jsonify({"error": "Not authenticated"}), 401
 
-    instance = WorkflowInstance.query.filter_by(instance_id=instance_id, user_id=user_id).first()
+    instance = get_accessible_instance(instance_id, user_id)
     if not instance:
         return jsonify({"error": "Instance not found"}), 404
 
@@ -295,7 +338,7 @@ def save_stage_data(instance_id: str, stage_id: str):
     if not user_id:
         return jsonify({"error": "Not authenticated"}), 401
 
-    instance = WorkflowInstance.query.filter_by(instance_id=instance_id, user_id=user_id).first()
+    instance = get_accessible_instance(instance_id, user_id)
     if not instance:
         return jsonify({"error": "Instance not found"}), 404
 
@@ -360,7 +403,7 @@ def pause_instance(instance_id: str):
     if not user_id:
         return jsonify({"error": "Not authenticated"}), 401
 
-    instance = WorkflowInstance.query.filter_by(instance_id=instance_id, user_id=user_id).first()
+    instance = get_accessible_instance(instance_id, user_id)
     if not instance:
         return jsonify({"error": "Instance not found"}), 404
 
@@ -380,7 +423,7 @@ def delete_instance(instance_id: str):
     if not user_id:
         return jsonify({"error": "Not authenticated"}), 401
 
-    instance = WorkflowInstance.query.filter_by(instance_id=instance_id, user_id=user_id).first()
+    instance = get_accessible_instance(instance_id, user_id)
     if not instance:
         return jsonify({"error": "Instance not found"}), 404
 
@@ -418,7 +461,7 @@ def list_tasks(instance_id: str):
     if not user_id:
         return jsonify({"error": "Not authenticated"}), 401
 
-    instance = WorkflowInstance.query.filter_by(instance_id=instance_id, user_id=user_id).first()
+    instance = get_accessible_instance(instance_id, user_id)
     if not instance:
         return jsonify({"error": "Instance not found"}), 404
 
@@ -439,7 +482,7 @@ def list_stage_tasks(instance_id: str, stage_id: str):
     if not user_id:
         return jsonify({"error": "Not authenticated"}), 401
 
-    instance = WorkflowInstance.query.filter_by(instance_id=instance_id, user_id=user_id).first()
+    instance = get_accessible_instance(instance_id, user_id)
     if not instance:
         return jsonify({"error": "Instance not found"}), 404
 
@@ -473,7 +516,7 @@ def create_task(instance_id: str):
     if not user_id:
         return jsonify({"error": "Not authenticated"}), 401
 
-    instance = WorkflowInstance.query.filter_by(instance_id=instance_id, user_id=user_id).first()
+    instance = get_accessible_instance(instance_id, user_id)
     if not instance:
         return jsonify({"error": "Instance not found"}), 404
 
@@ -486,13 +529,17 @@ def create_task(instance_id: str):
     if not stage_id:
         return jsonify({"error": "stage_id is required"}), 400
 
+    assignee = data.get("assigned_to")
+    if assignee and not user_can_assign_task(user_id, assignee, instance):
+        return jsonify({"error": "That person doesn't have access to this workflow's project"}), 400
+
     task = WorkflowTask(
         task_id=str(uuid.uuid4()),
         instance_id=instance_id,
         stage_id=stage_id,
         title=title,
         description=data.get("description"),
-        assigned_to=data.get("assigned_to"),
+        assigned_to=assignee,
         is_required=data.get("is_required", True),
         source=data.get("source", "manual"),
         created_by=user_id,
@@ -523,7 +570,7 @@ def update_task(instance_id: str, task_id: str):
     if not user_id:
         return jsonify({"error": "Not authenticated"}), 401
 
-    instance = WorkflowInstance.query.filter_by(instance_id=instance_id, user_id=user_id).first()
+    instance = get_accessible_instance(instance_id, user_id)
     if not instance:
         return jsonify({"error": "Instance not found"}), 404
 
@@ -543,7 +590,10 @@ def update_task(instance_id: str, task_id: str):
     if "is_required" in data:
         task.is_required = data["is_required"]
     if "assigned_to" in data:
-        task.assigned_to = data["assigned_to"]
+        new_assignee = data["assigned_to"]
+        if new_assignee and not user_can_assign_task(user_id, new_assignee, instance):
+            return jsonify({"error": "That person doesn't have access to this workflow's project"}), 400
+        task.assigned_to = new_assignee
     if "status" in data:
         task.status = data["status"]
         if data["status"] == "done" and old_status != "done":
@@ -586,7 +636,7 @@ def delete_task(instance_id: str, task_id: str):
     if not user_id:
         return jsonify({"error": "Not authenticated"}), 401
 
-    instance = WorkflowInstance.query.filter_by(instance_id=instance_id, user_id=user_id).first()
+    instance = get_accessible_instance(instance_id, user_id)
     if not instance:
         return jsonify({"error": "Instance not found"}), 404
 
