@@ -1631,26 +1631,38 @@ href={`${getAgentRoute(stage.agent)}?workflow=${instance.id}&stage=${stage.id}&v
 
 ## API Reference
 
-### Documents
+_Verified against `backend/agents/document_intelligence/routes.py`, `backend/core/connectors/routes.py`, `backend/core/settings_routes.py` (2026-09-04) — this list was previously missing several live endpoints._
+
+### Documents (`/api/document-intelligence`)
 | Method | Endpoint |
 |--------|----------|
 | POST | `/api/document-intelligence/upload` |
+| GET | `/api/document-intelligence/status/:document_id` |
 | GET | `/api/document-intelligence/documents` |
+| DELETE | `/api/document-intelligence/documents/:document_id` |
+| POST | `/api/document-intelligence/process/:document_id` |
+| GET | `/api/document-intelligence/documents/:document_id/insight` |
 | POST | `/api/document-intelligence/chat` |
+| POST | `/api/document-intelligence/search` |
 
-### Connectors
+### Connectors (`/api/connectors`)
 | Method | Endpoint |
 |--------|----------|
 | GET | `/api/connectors` |
+| GET | `/api/connectors/:id/status` |
+| POST | `/api/connectors/:id/connect` |
 | POST | `/api/connectors/:id/fetch` |
 | GET | `/api/connectors/:id/auth-url` |
+| POST | `/api/connectors/:id/callback` |
 
-### Settings
+### Settings (`/api/settings`)
 | Method | Endpoint |
 |--------|----------|
 | GET | `/api/settings` |
+| GET | `/api/settings/:category` |
 | POST | `/api/settings` |
 | DELETE | `/api/settings/:category/:key` |
+| GET | `/api/settings/definitions` |
 | POST | `/api/settings/test-connection` |
 
 ---
