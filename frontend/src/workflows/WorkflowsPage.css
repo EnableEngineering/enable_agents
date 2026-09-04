@@ -69,6 +69,27 @@
   flex-wrap: wrap;
 }
 
+.workflows-page .agent-suggestions-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.workflows-page .agent-suggestions-result {
+  font-size: var(--text-small);
+  color: var(--color-text);
+}
+
+.workflows-page .agent-suggestions-hint {
+  color: var(--color-text-muted);
+}
+
 .workflows-page .category-btn {
   padding: var(--space-1) var(--space-3);
   background: var(--color-surface);
