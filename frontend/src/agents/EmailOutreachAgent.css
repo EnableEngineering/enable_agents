@@ -175,7 +175,7 @@
 }
 
 .email-outreach-page .recipient-status.sent {
-  color: var(--color-success);
+  color: var(--color-success-text);
 }
 
 .email-outreach-page .recipient-status.pending {

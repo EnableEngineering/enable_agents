@@ -176,7 +176,7 @@
 
 .projects-page .status-badge.active {
   background: var(--color-success-bg);
-  color: var(--color-success);
+  color: var(--color-success-text);
 }
 
 .projects-page .status-badge.completed {

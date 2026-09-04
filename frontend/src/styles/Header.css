@@ -780,7 +780,7 @@
 }
 
 .mode-toggle--live .mode-toggle-label {
-  color: var(--color-success);
+  color: var(--color-success-text);
 }
 
 .modal-overlay {

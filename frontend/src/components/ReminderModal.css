@@ -114,12 +114,12 @@
 
 .priority-tag.medium {
   background: var(--color-warning-bg);
-  color: var(--color-warning);
+  color: var(--color-accent-dark);
 }
 
 .priority-tag.low {
   background: var(--color-success-bg);
-  color: var(--color-success);
+  color: var(--color-success-text);
 }
 
 /* Channel Selection */

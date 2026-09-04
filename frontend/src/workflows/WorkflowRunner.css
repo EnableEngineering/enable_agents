@@ -76,10 +76,10 @@
   height: 14px;
 }
 
-.wf-status-pending { background: var(--color-warning-bg); color: var(--color-warning); }
+.wf-status-pending { background: var(--color-warning-bg); color: var(--color-accent-dark); }
 .wf-status-running { background: #dbeafe; color: #2563eb; }
 .wf-status-paused { background: var(--color-background); color: var(--color-text-muted); }
-.wf-status-completed { background: var(--color-success-bg); color: var(--color-success); }
+.wf-status-completed { background: var(--color-success-bg); color: var(--color-success-text); }
 
 /* Progress Section */
 .wf-progress-section {
@@ -292,7 +292,7 @@
 }
 
 .wf-stage-row.completed .wf-stage-name {
-  color: var(--color-success);
+  color: var(--color-success-text);
 }
 
 .wf-stage-row.current .wf-stage-name {
@@ -344,12 +344,12 @@
 
 .wf-stage-type-agent {
   background: var(--color-success-bg);
-  color: var(--color-success);
+  color: var(--color-success-text);
 }
 
 .wf-stage-type-placeholder {
   background: var(--color-warning-bg);
-  color: var(--color-warning);
+  color: var(--color-accent-dark);
 }
 
 .wf-stage-type-form {
@@ -695,7 +695,7 @@
 
 .wf-detail-status.completed {
   background: var(--color-success-bg);
-  color: var(--color-success);
+  color: var(--color-success-text);
 }
 
 .wf-detail-status.current {
@@ -782,7 +782,7 @@
 
 .wf-io-badge-output {
   background: var(--color-success-bg);
-  color: var(--color-success);
+  color: var(--color-success-text);
 }
 
 .wf-io-value {
@@ -836,7 +836,7 @@
 
 .wf-agent-type-agent {
   background: var(--color-success-bg);
-  color: var(--color-success);
+  color: var(--color-success-text);
 }
 
 .wf-agent-type-form {
@@ -950,7 +950,7 @@ a.wf-btn {
 }
 
 .wf-output-value {
-  color: var(--color-success);
+  color: var(--color-success-text);
   font-weight: 500;
 }
 
@@ -962,7 +962,7 @@ a.wf-btn {
   padding-top: var(--space-4);
   border-top: 1px solid var(--color-border);
   font-size: var(--text-caption);
-  color: var(--color-success);
+  color: var(--color-success-text);
 }
 
 .wf-detail-footer img {
@@ -1070,7 +1070,7 @@ a.wf-btn {
   border-radius: var(--radius-md);
   margin-bottom: var(--space-3);
   font-size: var(--text-caption);
-  color: var(--color-warning);
+  color: var(--color-accent-dark);
 }
 
 .wf-tasks-warning img {
@@ -1261,7 +1261,7 @@ a.wf-btn {
 
 .wf-task-badge.required {
   background: var(--color-warning-bg);
-  color: var(--color-warning);
+  color: var(--color-accent-dark);
 }
 
 .wf-task-badge.optional {
