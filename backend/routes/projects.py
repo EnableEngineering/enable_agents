@@ -23,25 +23,11 @@ def get_user_team(user_email: str) -> Team:
     if member:
         return member.team
 
-    # Create new team with user as owner
-    team_id = str(uuid.uuid4())
-    team = Team(
-        team_id=team_id,
-        owner_id=user_email,
-        name=f"{user_email.split('@')[0]}'s Team"
-    )
-    db.session.add(team)
-
-    member = TeamMember(
-        member_id=str(uuid.uuid4()),
-        team_id=team_id,
-        user_id=user_email,
-        name=user_email.split('@')[0],
-        role='owner'
-    )
-    db.session.add(member)
-    db.session.commit()
-    return team
+    # Delegates to routes.team so a fresh team/owner-member is created with
+    # the same logic (and the same real-name lookup) regardless of whether
+    # /api/projects or /api/team is the first endpoint to touch this user.
+    from routes.team import get_or_create_team
+    return get_or_create_team(user_email)
 
 
 def get_user_projects(user_email: str):

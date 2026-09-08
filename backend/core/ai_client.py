@@ -246,7 +246,7 @@ class _CompatResponse:
 
 # OpenAI-only request shapes that Anthropic's Messages API can't serve -
 # call sites using these are forced to stay on OpenAI, see ai_chat_completion.
-_OPENAI_ONLY_KWARGS = ("functions", "function_call", "response_format")
+_OPENAI_ONLY_KWARGS = ("functions", "function_call", "response_format", "tools", "tool_choice")
 
 
 def _anthropic_chat_completion(api_key: str, model: str, messages: List[Dict[str, str]], **kwargs: Any) -> _CompatResponse:

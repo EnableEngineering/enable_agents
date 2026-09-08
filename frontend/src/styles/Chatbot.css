@@ -159,10 +159,10 @@ body, html {
 
 .chatbot-message.user {
   background: linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-dark) 100%);
-  color: #ffffff;
+  color: var(--color-text-inverse);
   align-self: flex-end;
   border-bottom-right-radius: var(--radius-sm);
-  box-shadow: 0 2px 8px rgba(191, 87, 0, 0.2);
+  box-shadow: 0 2px 8px rgba(var(--color-accent-rgb), 0.2);
 }
 
 .chatbot-message.ai {
@@ -171,7 +171,7 @@ body, html {
   align-self: flex-start;
   border: 1px solid var(--color-border);
   border-bottom-left-radius: var(--radius-sm);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 2px 8px rgba(var(--color-primary-rgb), 0.05);
 }
 
 /* Typing indicator */
@@ -208,13 +208,13 @@ body, html {
 /* Timestamp */
 .chatbot-message-time {
   font-size: var(--text-caption);
-  color: rgba(0, 0, 0, 0.4);
+  color: rgba(var(--color-primary-rgb), 0.4);
   margin-top: var(--space-1);
   display: block;
 }
 
 .chatbot-message.user .chatbot-message-time {
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(var(--color-white-rgb), 0.7);
   text-align: right;
 }
 
@@ -242,8 +242,8 @@ body, html {
 .chatbot-input-row input:focus {
   outline: none;
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 4px rgba(191, 87, 0, 0.1);
-  background: #ffffff;
+  box-shadow: 0 0 0 4px rgba(var(--color-accent-rgb), 0.1);
+  background: var(--color-surface);
 }
 
 .chatbot-input-row input::placeholder {
@@ -256,7 +256,7 @@ body, html {
   border-radius: 50%;
   border: none;
   background: linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-dark) 100%);
-  color: #ffffff;
+  color: var(--color-text-inverse);
   font-weight: var(--font-bold);
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
@@ -264,13 +264,13 @@ body, html {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 12px rgba(191, 87, 0, 0.3);
+  box-shadow: 0 4px 12px rgba(var(--color-accent-rgb), 0.3);
   flex-shrink: 0;
 }
 
 .chatbot-input-row button:hover {
   transform: scale(1.05);
-  box-shadow: 0 6px 20px rgba(191, 87, 0, 0.4);
+  box-shadow: 0 6px 20px rgba(var(--color-accent-rgb), 0.4);
 }
 
 .chatbot-input-row button:active {

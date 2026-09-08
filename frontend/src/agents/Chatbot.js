@@ -1,8 +1,9 @@
 import { API_CONFIG } from '../config/apiConfig';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { BackButton, LiveModeHint, AgentOutcomesStrip, ProjectSelector, ProjectGate } from '../components';
+import { BackButton, LiveModeHint, AgentPrefillBanner, AgentOutcomesStrip, ProjectSelector, ProjectGate, Spinner, TypingIndicator } from '../components';
 import { useSelectedProjectId } from '../hooks/useSelectedProjectId';
+import { usePendingAgentPrefill } from '../hooks';
 import { authJsonHeaders } from '../core/authHeaders';
 import '../styles/agent-shell.css';
 import '../styles/Chatbot.css';
@@ -29,6 +30,11 @@ function Chatbot() {
     return saved.messages || [{ sender: 'ai', text: 'Hi! Ask me anything about your documents.' }];
   });
   const [input, setInput] = useState('');
+
+  const { prefill, dismiss: dismissPrefill } = usePendingAgentPrefill('aiChatbot', (fields) => {
+    const val = fields.find((f) => f.field_key === 'input');
+    if (val) setInput(val.field_value);
+  });
   const [loading, setLoading] = useState(false);
   const [chatHistory, setChatHistory] = useState(() => {
     const saved = loadPersistedState();
@@ -124,13 +130,19 @@ function Chatbot() {
 
       <AgentOutcomesStrip
         items={[
-          { iconSrc: '/assets/icons/chat.png', title: 'Document Q&A', description: 'Ask questions about uploaded files.' },
+          { iconSrc: '/assets/icons/message.png', title: 'Document Q&A', description: 'Ask questions about uploaded files.' },
           { iconSrc: '/assets/icons/retrieval.png', title: 'Data extraction', description: 'Pull facts and summaries from docs.' },
           { iconSrc: '/assets/icons/document.png', title: 'Chat history', description: 'Review past queries and answers.' },
         ]}
       />
 
       <LiveModeHint message="Upload documents to get started." requireProject={true} />
+
+      <AgentPrefillBanner
+        prefill={prefill}
+        onDismiss={dismissPrefill}
+        labels={{ input: 'Question' }}
+      />
 
       <ProjectGate agentLabel="AI Chatbot">
         <div className="chatbot-page">
@@ -154,6 +166,11 @@ function Chatbot() {
                       <ReactMarkdown>{msg.text}</ReactMarkdown>
                     </div>
                   ))}
+                  {loading && (
+                    <div className="chatbot-message ai">
+                      <TypingIndicator />
+                    </div>
+                  )}
                   <div ref={chatEndRef} />
                 </div>
                 <div className="chatbot-input-row">
@@ -166,7 +183,7 @@ function Chatbot() {
                     disabled={loading}
                   />
                   <button type="button" onClick={sendMessage} disabled={loading || !input.trim()}>
-                    {loading ? '...' : 'Send'}
+                    {loading ? <Spinner size="sm" color="white" /> : 'Send'}
                   </button>
                 </div>
               </div>

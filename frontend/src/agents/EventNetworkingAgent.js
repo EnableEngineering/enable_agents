@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { BackButton, ProjectSelector, LiveModeHint, AgentOutcomesStrip, ProjectGate } from '../components';
+import { BackButton, ProjectSelector, LiveModeHint, AgentPrefillBanner, AgentOutcomesStrip, ProjectGate, EmptyState, Button } from '../components';
 import '../styles/EventNetworkingAgent.css';
 import { STRINGS } from '../constants/strings';
 import { API_CONFIG } from '../config/apiConfig';
 import { showToast } from '../core/toast';
 import { useSelectedProjectId } from '../hooks/useSelectedProjectId';
+import { usePendingAgentPrefill, notifyAgentCompleted } from '../hooks';
 import { authJsonHeaders } from '../core/authHeaders';
 
 // Storage key for persisting state
@@ -49,6 +50,16 @@ function EventNetworkingAgent() {
   // Recommendations
   const [userInterests, setUserInterests] = useState('');
   const [userGoals, setUserGoals] = useState('');
+
+  const { prefill, dismiss: dismissPrefill } = usePendingAgentPrefill('eventNetworking', (fields) => {
+    const map = Object.fromEntries(fields.map((f) => [f.field_key, f.field_value]));
+    if (map.name || map.description || map.location || map.date) {
+      setNewEvent((prev) => ({ ...prev, ...map }));
+      setShowCreateEvent(true);
+    }
+    if (map.interests) setUserInterests(map.interests);
+    if (map.goals) setUserGoals(map.goals);
+  });
 
   // Follow-up
   const [selectedAttendees, setSelectedAttendees] = useState([]);
@@ -177,6 +188,10 @@ function EventNetworkingAgent() {
         setShowCreateEvent(false);
         setNewEvent({ name: '', description: '', date: '', location: '' });
         showToast('Event created successfully', 'success');
+        notifyAgentCompleted('eventNetworking', `Created event "${data.event.name}"`, [
+          { field_key: 'subject', field_value: `Great connecting at ${data.event.name}` },
+          { field_key: 'body', field_value: `Hi {{company}},\n\nIt was great connecting with you at ${data.event.name}${data.event.location ? ` in ${data.event.location}` : ''}. I wanted to follow up and continue the conversation.\n\n[Add a line here about what stood out from your chat or a specific next step.]\n\nWould you be open to a follow-up call?\n\nBest,\n[Your name]` },
+        ]);
       } else {
         showToast(data.error || 'Failed to create event', 'error');
       }
@@ -530,18 +545,21 @@ function EventNetworkingAgent() {
                   </div>
                 </div>
                 <div className="inline-panel-footer">
-                  <button type="button" className="btn-secondary" onClick={() => setShowCreateEvent(false)}>Cancel</button>
-                  <button type="button" className="btn-primary" onClick={handleCreateEvent} disabled={isLoading}>
+                  <Button variant="secondary" onClick={() => setShowCreateEvent(false)}>Cancel</Button>
+                  <Button variant="primary" onClick={handleCreateEvent} disabled={isLoading}>
                     {isLoading ? 'Creating...' : 'Create Event'}
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}
 
             {events.length === 0 && !showCreateEvent ? (
-              <div className="empty-state">
-                <p>No events yet. Create your first event to start networking!</p>
-              </div>
+              <EmptyState
+                iconType="empty"
+                title="No events yet"
+                description="Create your first event to start networking!"
+                action={{ label: 'Create Event', onClick: () => setShowCreateEvent(true) }}
+              />
             ) : events.length > 0 ? (
               <div className="events-list">
                 {events.map(event => {
@@ -645,10 +663,10 @@ Jane Smith,jane@startup.io,StartupIO,CTO,Product;Engineering"
                   />
                 </div>
                 <div className="inline-panel-footer">
-                  <button type="button" className="btn-secondary" onClick={() => setShowUploadModal(false)}>Cancel</button>
-                  <button type="button" className="btn-primary" onClick={handleUploadAttendees} disabled={isLoading}>
+                  <Button variant="secondary" onClick={() => setShowUploadModal(false)}>Cancel</Button>
+                  <Button variant="primary" onClick={handleUploadAttendees} disabled={isLoading}>
                     {isLoading ? 'Importing...' : 'Import'}
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}
@@ -722,7 +740,7 @@ Jane Smith,jane@startup.io,StartupIO,CTO,Product;Engineering"
                     {/* Quick Stats */}
                     <div className="profile-stats">
                       <div className="stat-item">
-                        <span className="stat-value">{selectedContact.lastContact || '—'}</span>
+                        <span className="stat-value">{selectedContact.lastContact || '-'}</span>
                         <span className="stat-label">Last Contact</span>
                       </div>
                       <div className="stat-item">
@@ -779,10 +797,10 @@ Jane Smith,jane@startup.io,StartupIO,CTO,Product;Engineering"
 
                     {/* Footer */}
                     <div className="notes-footer">
-                      <button type="button" className="btn-secondary" onClick={() => setShowContactModal(false)}>Cancel</button>
-                      <button type="button" className="btn-primary" onClick={handleSaveNotes} disabled={isLoading}>
+                      <Button variant="secondary" onClick={() => setShowContactModal(false)}>Cancel</Button>
+                      <Button variant="primary" onClick={handleSaveNotes} disabled={isLoading}>
                         {isLoading ? 'Saving...' : 'Save Notes'}
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -790,9 +808,11 @@ Jane Smith,jane@startup.io,StartupIO,CTO,Product;Engineering"
             )}
 
             {attendees.length === 0 ? (
-              <div className="empty-state">
-                <p>No contacts yet. Import a CSV or add contacts manually.</p>
-              </div>
+              <EmptyState
+                iconType="empty"
+                title="No contacts yet"
+                description="Import a CSV or add contacts manually."
+              />
             ) : (
               <div className="contacts-grid">
                 {attendees.map(attendee => {
@@ -1029,7 +1049,7 @@ Jane Smith,jane@startup.io,StartupIO,CTO,Product;Engineering"
                       {selectedContactsList.slice(0, 5).map(c => (
                         <span key={c.id} className="recipient-chip">
                           {c.name}
-                          <button type="button" onClick={() => toggleAttendeeSelection(c.id)}>×</button>
+                          <button type="button" onClick={() => toggleAttendeeSelection(c.id)} aria-label={`Remove ${c.name}`}>×</button>
                         </span>
                       ))}
                       {selectedContactsList.length > 5 && (
@@ -1152,7 +1172,13 @@ Jane Smith,jane@startup.io,StartupIO,CTO,Product;Engineering"
         message="Select a project, then create events to get started."
       />
 
-      <ProjectGate agentLabel="Event Networking data">
+      <AgentPrefillBanner
+        prefill={prefill}
+        onDismiss={dismissPrefill}
+        labels={{ name: 'Name', description: 'Description', location: 'Location', date: 'Date', interests: 'Interests', goals: 'Goals' }}
+      />
+
+      <ProjectGate agentLabel="Event Networking">
         <div className="event-networking-body">
           {renderTabs()}
           {renderContent()}

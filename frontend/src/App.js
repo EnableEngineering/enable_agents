@@ -12,6 +12,7 @@ import Projects from './projects/Projects';
 import Usage from './usage/Usage';
 import Sidebar from './core/Sidebar';
 import AiAssistantPanel from './components/AiAssistantPanel';
+import { useActivityTrail } from './hooks';
 import './App.css';
 
 // Pages
@@ -53,11 +54,21 @@ function RootRedirect() {
 // full-page chat surface.
 const PANEL_HIDDEN_PATHS = ['/home', '/route'];
 
+// Unauthenticated-only pages - never show the logged-in app shell (sidebar,
+// AI panel) here, and bounce an already-logged-in user straight to /home
+// instead of stacking the auth card on top of the shell.
+const AUTH_ONLY_PATHS = ['/login', '/register'];
+
 function App() {
   const [loggedIn, setLoggedIn] = useState(isLoggedIn());
   const [panelOpen, setPanelOpen] = useState(() => {
     const saved = sessionStorage.getItem('aiAssistantOpen');
-    return saved === null ? true : saved === 'true';
+    if (saved !== null) return saved === 'true';
+    // No saved preference yet: default open on desktop (it docks beside
+    // content there), but default closed below the panel's own 1024px
+    // breakpoint, where it switches to a 100vw overlay - opening it there
+    // by default covers the entire page with no hint of what's underneath.
+    return typeof window === 'undefined' || window.innerWidth > 1024;
   });
 
   // isLoggedIn() reads localStorage, which doesn't trigger a React re-render
@@ -93,25 +104,29 @@ function App() {
 
 function AppShell({ loggedIn, panelOpen, onPanelToggle }) {
   const location = useLocation();
-  const showPanel = loggedIn && !PANEL_HIDDEN_PATHS.includes(location.pathname);
+  useActivityTrail();
+  const isAuthOnlyPath = AUTH_ONLY_PATHS.includes(location.pathname);
+  const showShell = loggedIn && !isAuthOnlyPath;
+  const showPanel = showShell && !PANEL_HIDDEN_PATHS.includes(location.pathname);
 
   return (
     <>
       <SkipLink />
       <div className="App">
         <ErrorBoundary>
-          {loggedIn && <Sidebar />}
+          {showShell && <Sidebar />}
           <main
             id="main-content"
             className={[
-              loggedIn ? 'main-content--sidebar-open' : '',
+              showShell ? 'main-content--sidebar-open' : '',
               showPanel && panelOpen ? 'main-content--panel-open' : '',
+              showPanel && !panelOpen ? 'main-content--panel-trigger' : '',
             ].filter(Boolean).join(' ')}
           >
           <Routes>
           <Route path="/" element={<RootRedirect />} />
-          <Route path="/login" element={<Login />} />
-           <Route path="/register" element={<RegisterUser />} />
+          <Route path="/login" element={loggedIn ? <Navigate to="/home" replace /> : <Login />} />
+           <Route path="/register" element={loggedIn ? <Navigate to="/home" replace /> : <RegisterUser />} />
           <Route path="/home" element={<Home />} />
           <Route path="/route" element={<ChatRoutingPage />} />
           <Route path="/dashboard" element={<Dashboard />} />

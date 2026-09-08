@@ -42,7 +42,7 @@
   gap: var(--space-2);
   padding: var(--space-3) var(--space-5);
   background: var(--color-accent);
-  color: #fff;
+  color: var(--color-text-inverse);
   border: none;
   border-radius: var(--radius-md);
   font-weight: var(--font-semibold);
@@ -52,7 +52,7 @@
 }
 
 .projects-page .btn-create:hover {
-  background: var(--color-accent-dark, #9a3412);
+  background: var(--color-accent-dark);
 }
 
 .projects-page .btn-create svg {
@@ -97,7 +97,7 @@
 .projects-page .empty-state-card .btn-primary {
   padding: var(--space-3) var(--space-6);
   background: var(--color-accent);
-  color: #fff;
+  color: var(--color-text-inverse);
   border: none;
   border-radius: var(--radius-md);
   font-weight: var(--font-semibold);
@@ -140,7 +140,7 @@
   justify-content: center;
   background: var(--color-accent);
   border-radius: var(--radius-md);
-  color: #fff;
+  color: var(--color-text-inverse);
   flex-shrink: 0;
 }
 
@@ -159,9 +159,12 @@
   font-size: 1.1rem;
   font-weight: var(--font-semibold);
   color: var(--color-text);
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
   text-overflow: ellipsis;
+  line-height: 1.3;
 }
 
 .projects-page .status-badge {
@@ -180,7 +183,7 @@
 }
 
 .projects-page .status-badge.completed {
-  background: rgba(30, 58, 95, 0.1);
+  background: rgba(var(--color-primary-rgb), 0.1);
   color: var(--color-primary);
 }
 
@@ -287,54 +290,9 @@
   gap: var(--space-3);
 }
 
-/* Modal */
-.projects-page .modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  padding: 20px;
-}
-
-.projects-page .modal {
-  background: var(--color-surface);
-  border-radius: var(--radius-lg);
-  width: 100%;
-  max-width: 500px;
-  max-height: 85vh;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
-}
-
-.projects-page .modal.modal-lg {
-  max-width: 600px;
-}
-
-.projects-page .modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--space-4) var(--space-5);
-  border-bottom: 1px solid var(--color-border);
-}
-
-.projects-page .modal-header h3 {
-  margin: 0;
-  font-size: 1.1rem;
-  font-weight: var(--font-semibold);
-  color: var(--color-text);
-}
-
-.projects-page .modal-body {
-  padding: var(--space-5);
-  overflow-y: auto;
-  flex: 1;
-  min-height: 0;
-}
+/* Modal - overlay/dialog/header/body chrome now comes from the shared
+   Modal component (components/Modal.js); footer button styling below is
+   still needed since real buttons render inside its footer slot. */
 
 .projects-page .field {
   margin-bottom: var(--space-4);
@@ -431,11 +389,11 @@
 }
 
 .projects-page .field-hint.test-success {
-  color: var(--color-success, #16a34a);
+  color: var(--color-success);
 }
 
 .projects-page .field-hint.test-error {
-  color: var(--color-error, #dc2626);
+  color: var(--color-error);
 }
 
 .projects-page .field textarea {
@@ -467,7 +425,7 @@
 }
 
 .projects-page .agent-checkbox.selected {
-  background: rgba(194, 65, 12, 0.08);
+  background: rgba(var(--color-accent-rgb), 0.08);
   border-color: var(--color-accent);
 }
 
@@ -503,7 +461,7 @@
 
 .projects-page .btn-secondary {
   padding: var(--space-3) var(--space-5);
-  background: #fff;
+  background: var(--color-surface);
   color: var(--color-text);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
@@ -518,7 +476,7 @@
 .projects-page .btn-primary {
   padding: var(--space-3) var(--space-5);
   background: var(--color-accent);
-  color: #fff;
+  color: var(--color-text-inverse);
   border: none;
   border-radius: var(--radius-md);
   font-weight: var(--font-semibold);
@@ -526,7 +484,7 @@
 }
 
 .projects-page .btn-primary:hover:not(:disabled) {
-  background: var(--color-accent-dark, #9a3412);
+  background: var(--color-accent-dark);
 }
 
 .projects-page .btn-primary:disabled {
@@ -549,7 +507,7 @@
   background: none;
   border: none;
   color: var(--color-accent);
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 500;
   cursor: pointer;
   padding: 0;

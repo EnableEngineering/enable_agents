@@ -83,9 +83,6 @@ export const API_CONFIG = {
   // Connection
   TEST_CONNECTION: `${API_URL}/test-connection`,
 
-  // Tools
-  GET_TOOLS_LANDSCAPE: `${API_URL}/get_tools_landscape`,
-
   // Requirements / market research
   GENERATE_REQUIREMENTS:           `${API_URL}/generate-requirements`,
   PREVIOUS_PROMPTS:                `${API_URL}/previous-prompts`,

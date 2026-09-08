@@ -4,7 +4,7 @@ import { API_CONFIG } from '../config/apiConfig';
 import { authJsonHeaders } from '../core/authHeaders';
 import './Home.css';
 
-const EXAMPLE_PROMPTS = [
+export const EXAMPLE_PROMPTS = [
   'Find new customers',
   'Qualify a supplier',
   'Draft an outreach campaign',
@@ -72,7 +72,7 @@ function Home() {
           What do you need help with{firstName ? `, ${firstName}` : ''}?
         </h1>
         <p className="home-subtitle">
-          Describe the task in plain English — Enable will find the right agent, or start a guided workflow if it's a bigger job.
+          Describe the task in plain English. Enable will find the right agent, or start a guided workflow if it's a bigger job.
         </p>
 
         <div className="home-chat-input">

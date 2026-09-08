@@ -99,6 +99,7 @@ function RegisterUser() {
         }
         localStorage.setItem('userEmail', values.email.trim());
         localStorage.setItem('firstName', values.firstName || values.email.trim().split('@')[0] || 'User');
+        localStorage.setItem('lastName', values.lastName || '');
         showToast('Account created. You are signed in.', 'success');
         window.dispatchEvent(new Event('authChange'));
         navigateAfterLogin(navigate);

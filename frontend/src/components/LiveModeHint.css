@@ -5,9 +5,9 @@
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-2) var(--space-3);
-  background: var(--color-surface-alt, #f8f6f3);
-  border-radius: var(--radius-full, 20px);
-  font-size: var(--text-sm, 0.875rem);
+  background: var(--color-surface-alt);
+  border-radius: var(--radius-full);
+  font-size: var(--text-sm);
   color: var(--color-text-muted);
   margin: 0 auto var(--space-4);
   max-width: fit-content;
@@ -26,8 +26,8 @@
 
 .live-mode-hint .btn-sm {
   padding: var(--space-1) var(--space-2);
-  font-size: var(--text-xs, 0.75rem);
-  border-radius: var(--radius-full, 12px);
+  font-size: var(--text-xs);
+  border-radius: var(--radius-full);
 }
 
 .live-mode-hint .btn-ghost {

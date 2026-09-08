@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import '../styles/AgentsAssembly.css';
 import { getRouteByModuleName } from '../config/agentsConfig';
 import { BUSINESS_MODULES, TECHNICAL_MODULES, DEPARTMENTS as CATALOG_DEPARTMENTS } from '../data/agentCatalog';
+import Button from './Button';
 import { CardGrid, ModuleCard } from './Card';
 
 const ALL_MODULES = [...BUSINESS_MODULES, ...TECHNICAL_MODULES];
@@ -87,15 +88,15 @@ function AgentsAssembly() {
           <input
             type="text"
             className="agent-find-input"
-            placeholder='Describe what you&apos;re trying to do — e.g. "find new customers in India"'
+            placeholder='Describe what you&apos;re trying to do, e.g. "find new customers in India"'
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') handleFindAgent(); }}
             aria-label="Describe what you're trying to do"
           />
-          <button type="button" className="btn btn-primary btn-sm agent-find-btn" onClick={handleFindAgent} disabled={!searchTerm.trim()}>
+          <Button variant="primary" size="sm" className="agent-find-btn" onClick={handleFindAgent} disabled={!searchTerm.trim()}>
             Find agent
-          </button>
+          </Button>
         </div>
         <p className="agent-find-hint">We'll point you to the agent (or workflow) that best matches what you type.</p>
 

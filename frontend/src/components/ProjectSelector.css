@@ -162,7 +162,7 @@
 }
 
 .project-option--create:hover {
-  background: rgba(194, 65, 12, 0.06);
+  background: rgba(var(--color-accent-rgb), 0.06);
 }
 
 .plus-icon {

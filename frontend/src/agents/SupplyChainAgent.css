@@ -12,11 +12,11 @@
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-3);
-  background: #dbeafe;
+  background: var(--color-info-bg);
   border-radius: var(--radius-md);
   margin-bottom: var(--space-4);
   font-size: var(--text-caption);
-  color: #2563eb;
+  color: var(--role-member);
 }
 
 .supply-chain-page .workflow-context-banner img {
@@ -91,12 +91,6 @@
 .supply-chain-page .suppliers-section h2 img {
   width: 20px;
   height: 20px;
-}
-
-.supply-chain-page .empty-state-compact {
-  padding: var(--space-6);
-  text-align: center;
-  color: var(--color-text-muted);
 }
 
 .supply-chain-page .suppliers-grid {
@@ -248,59 +242,9 @@
   font-size: var(--text-caption) !important;
 }
 
-/* Modal */
-.supply-chain-page .modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  padding: var(--space-4);
-}
-
-.supply-chain-page .audit-modal {
-  background: var(--color-surface);
-  border-radius: var(--radius-lg);
-  max-width: 500px;
-  width: 100%;
-  max-height: 90vh;
-  overflow: auto;
-}
-
-.supply-chain-page .modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--space-4);
-  border-bottom: 1px solid var(--color-border);
-}
-
-.supply-chain-page .modal-header h2 {
-  margin: 0;
-  font-size: var(--text-body);
-  font-weight: 600;
-}
-
-.supply-chain-page .modal-close {
-  background: none;
-  border: none;
-  font-size: 1.5rem;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  padding: 0;
-  line-height: 1;
-}
-
-.supply-chain-page .modal-close:hover {
-  color: var(--color-text);
-}
-
-.supply-chain-page .modal-body {
-  padding: var(--space-4);
-}
-
+/* Modal - overlay/header/close/body/footer chrome now comes from the
+   shared Modal component (components/Modal.js); only the audit-specific
+   content styling below is still needed. */
 .supply-chain-page .audit-instructions {
   font-size: var(--text-caption);
   color: var(--color-text-muted);
@@ -376,14 +320,6 @@
 .supply-chain-page .score-result {
   font-size: var(--text-caption);
   font-weight: normal;
-}
-
-.supply-chain-page .modal-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-3);
-  padding: var(--space-4);
-  border-top: 1px solid var(--color-border);
 }
 
 /* Responsive */

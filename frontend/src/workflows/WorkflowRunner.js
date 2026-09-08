@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { BackButton, EmptyState } from '../components';
+import { BackButton, EmptyState, Spinner } from '../components';
 import { API_CONFIG } from '../config/apiConfig';
 import { authJsonHeaders } from '../core/authHeaders';
 import { showToast } from '../core/toast';
@@ -138,7 +138,7 @@ const AGENT_ICONS = {
   content_marketing: '/assets/icons/bullhorn.png',
   community_network: '/assets/icons/networking.png',
   event_networking: '/assets/icons/networking.png',
-  default: '/assets/icons/ai-technology.png',
+  default: '/assets/icons/ai-chatbots.png',
 };
 
 const getAgentIcon = (agentId) => AGENT_ICONS[agentId] || AGENT_ICONS.default;
@@ -279,7 +279,7 @@ function WorkflowRunner() {
       <>
         <div className="workflow-runner">
           <div className="workflow-loading">
-            <div className="loading-spinner" />
+            <Spinner size="lg" />
             <span>Loading workflow...</span>
           </div>
         </div>
@@ -815,7 +815,7 @@ function StageDetailView({ stage, stageState, instance, onBack, onTasksChange })
                       <span className="wf-io-badge wf-io-badge-output">Output</span>
                     </span>
                     <span className={`wf-io-value ${value === undefined ? 'wf-io-empty' : ''}`}>
-                      {value !== undefined ? formatContextValue(value) : isCompleted ? '—' : 'Not yet generated'}
+                      {value !== undefined ? formatContextValue(value) : isCompleted ? '-' : 'Not yet generated'}
                     </span>
                   </div>
                 </div>

@@ -6,7 +6,12 @@
  */
 
 .App {
-  text-align: center;
+  /* Was `text-align: center` (CRA boilerplate) - every element inherited
+     centered text unless a page explicitly overrode it. Pages that want
+     centered text (Home's title, Login's card) already set that
+     explicitly, so this was only ever surfacing as an unintended bug in
+     layouts that never expected to inherit it (e.g. Settings' grid rows). */
+  text-align: left;
   background-color: var(--color-background);
 }
 
@@ -26,6 +31,16 @@
   }
   #main-content.main-content--panel-open {
     margin-right: 0;
+  }
+  /* The AI panel's collapsed state is a fixed 48px circle pinned to the
+     top-right corner of the viewport (see .ai-panel-collapsed-trigger) -
+     the same corner most page headers put their primary action button in
+     (Team's "+ Invite", Dashboard's "+ Create New Project", etc). On the
+     wide desktop layout there's room to spare; below this breakpoint the
+     header runs edge-to-edge and collides with it, so reserve clearance
+     above the content instead of patching every page's header. */
+  #main-content.main-content--panel-trigger {
+    padding-top: 64px;
   }
 }
 
@@ -57,7 +72,7 @@ input, textarea {
 input:focus, textarea:focus {
   outline: none;
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px rgba(194, 65, 12, 0.12);
+  box-shadow: 0 0 0 3px rgba(var(--color-accent-rgb), 0.12);
 }
 
 /* Legacy form submit buttons only — do NOT apply width:100% to all buttons app-wide */

@@ -1,0 +1,16 @@
+.expandable-text-toggle {
+  display: inline;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-accent);
+  font-weight: var(--font-semibold);
+  font-size: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  white-space: nowrap;
+}
+
+.expandable-text-toggle:hover {
+  color: var(--color-accent-dark);
+}

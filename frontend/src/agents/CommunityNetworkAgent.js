@@ -1,10 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { BackButton, Input, Textarea, ConfirmDialog, ProjectSelector, LiveModeHint, AgentOutcomesStrip, ProjectGate, NetworkSearchResults } from '../components';
+import { BackButton, Input, Textarea, ConfirmDialog, ProjectSelector, LiveModeHint, AgentPrefillBanner, AgentOutcomesStrip, ProjectGate, NetworkSearchResults, TypingIndicator } from '../components';
 import '../styles/CommunityNetworkAgent.css';
 import { STRINGS } from '../constants/strings';
 import { API_CONFIG } from '../config/apiConfig';
 import { useAgentChat } from '../hooks/useAgentChat';
+import { usePendingAgentPrefill, notifyAgentCompleted } from '../hooks';
 import { authJsonHeaders, authOptionalHeaders } from '../core/authHeaders';
+import { showToast } from '../core/toast';
 import MessageContent from '../components/MessageContent';
 import { formatDate, formatTime, getRelativeDateLabel, isSameDay } from '../utils/dateFormat';
 import { useSelectedProjectId } from '../hooks/useSelectedProjectId';
@@ -30,6 +32,11 @@ function CommunityNetworkAgent() {
   const [csvData, setCsvData] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  const { prefill, dismiss: dismissPrefill } = usePendingAgentPrefill('communityNetwork', (fields) => {
+    const msg = fields.find((f) => f.field_key === 'inputMessage');
+    if (msg) setInputMessage(msg.field_value);
+  });
   const csvFileRef = useRef(null);
   const cvFileRef = useRef(null);
   const [existingFiles, setExistingFiles] = useState(new Map());
@@ -84,7 +91,8 @@ function CommunityNetworkAgent() {
             },
             'markdown'
           );
-          
+          notifyAgentCompleted('communityNetwork', `Found ${result.total_found} connections`, []);
+
           // Show more results option if there are many
           if (result.total_found > 5) {
             addMessage(`**Found ${result.total_found} total results.** Showing top 5. Try being more specific to narrow down results.`, 'agent', null, 'markdown');
@@ -564,6 +572,7 @@ function CommunityNetworkAgent() {
       }
     } catch (error) {
       console.error('Error loading favorites:', error);
+      showToast('Could not load your saved favorites.', 'error');
     }
   };
 
@@ -666,6 +675,12 @@ function CommunityNetworkAgent() {
       <LiveModeHint
         requireProject
         message="Choose a project above, or create one with + New Project."
+      />
+
+      <AgentPrefillBanner
+        prefill={prefill}
+        onDismiss={dismissPrefill}
+        labels={{ inputMessage: 'Message' }}
       />
 
       <ProjectGate agentLabel="Community Network workspace">
@@ -903,16 +918,7 @@ function CommunityNetworkAgent() {
             
             {(isLoading || isAnalyzing) && (
               <div className="message agent">
-                <div className="message-content">
-                  <div className="typing-indicator">
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                  </div>
-                  <p className="loading-text">
-                    {isAnalyzing ? 'Analyzing CV...' : 'Processing...'}
-                  </p>
-                </div>
+                <TypingIndicator label={isAnalyzing ? 'Analyzing CV...' : 'Processing...'} />
               </div>
             )}
             <div ref={messagesEndRef} />

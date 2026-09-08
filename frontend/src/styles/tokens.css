@@ -32,13 +32,13 @@
   /* Surfaces */
   --color-surface: #FFFFFF;
   --color-surface-elevated: #FFFFFF;
-  --color-surface-alt: #F8F9FA;
-  --color-background: #F1EAE4;
-  --color-background-subtle: #E8DDD5;
+  --color-surface-alt: #F3F5F7;
+  --color-background: #F7F8FA;
+  --color-background-subtle: #EEF1F5;
 
   /* Borders */
-  --color-border: #D6C7B8;
-  --color-border-light: #E5DAD0;
+  --color-border: #E2E5EA;
+  --color-border-light: #EDEFF3;
   --color-border-focus: var(--color-accent);
 
   /* Text */
@@ -50,14 +50,18 @@
 
   /* Status */
   --color-success: #16A34A;
+  --color-success-dark: #047857;
   --color-success-text: #166534;
   --color-success-bg: #DCFCE7;
   --color-success-bg-hover: #D1FAE5;
   --color-error: #DC2626;
+  --color-error-dark: #991B1B;
   --color-error-bg: #FEE2E2;
   --color-error-bg-hover: #FECACA;
   --color-warning: #F59E0B;
   --color-warning-bg: #FEF3C7;
+  --color-accent-bg: rgba(194, 65, 12, 0.12);
+  --color-info-bg: #DBEAFE;
 
   /* Team role badge colors */
   --role-owner: #92660A;
@@ -68,14 +72,46 @@
   /* Focus & Interactive */
   --color-focus-ring: rgba(194, 65, 12, 0.4);
 
+  /* RGB triplets — for rgba() opacity variants of the palette above. Add
+     one only when a real rgba(<literal>, alpha) usage needs to become
+     token-driven; keep in sync with the hex values by hand. */
+  --color-primary-rgb: 30, 58, 95;
+  --color-accent-rgb: 194, 65, 12;
+  --color-accent-dark-rgb: 180, 83, 9;
+  --color-success-rgb: 22, 163, 74;
+  --color-error-rgb: 220, 38, 38;
+  --color-warning-rgb: 245, 158, 11;
+  --color-grey-rgb: 71, 85, 105;
+  --color-border-rgb: 226, 229, 234;
+
+  /* Categorical palette — for tagging/visualizing distinct data types
+     (e.g. entity kinds in Data Insights' graph/badges) where the brand's
+     primary/accent pair isn't enough to keep categories visually
+     distinct. Not for brand UI chrome. */
+  --color-chart-blue: #3B82F6;
+  --color-chart-blue-rgb: 59, 130, 246;
+  --color-chart-purple: #8B5CF6;
+  --color-chart-purple-rgb: 139, 92, 246;
+  --color-chart-pink: #EC4899;
+  --color-chart-pink-rgb: 236, 72, 153;
+  --color-chart-indigo: #6366F1;
+  --color-chart-indigo-rgb: 99, 102, 241;
+  --color-chart-gray: #6B7280;
+  --color-chart-gray-rgb: 107, 114, 128;
+
+  /* White / backdrop - for glassmorphism surfaces and modal-overlay
+     dimming, neither of which are brand palette entries. */
+  --color-white-rgb: 255, 255, 255;
+  --color-backdrop-rgb: 15, 23, 42;
+
   /* Skeleton Loader */
-  --color-skeleton: #E8DDD5;
-  --color-skeleton-shine: #F1EAE4;
+  --color-skeleton: #EEF1F5;
+  --color-skeleton-shine: #F7F8FA;
 
   /* Gradients */
   --gradient-accent: linear-gradient(135deg, #C2410C 0%, #B45309 100%);
   --gradient-primary: linear-gradient(135deg, #1E3A5F 0%, #284A7A 100%);
-  --gradient-surface: linear-gradient(135deg, #F1EAE4 0%, #E8DDD5 100%);
+  --gradient-surface: linear-gradient(135deg, #F7F8FA 0%, #EEF1F5 100%);
   --gradient-header: linear-gradient(135deg, #1E3A5F 0%, #284A7A 100%);
 
   /* ═══════════════════════════════════════════════════════════════════════════
@@ -293,6 +329,26 @@
 .btn-ghost:active {
   transform: scale(0.98);
   color: var(--color-text);
+}
+
+.btn-outline {
+  background: transparent;
+  color: var(--color-accent);
+  border: 1.5px solid var(--color-accent);
+}
+
+.btn-outline:hover:not(:disabled) {
+  background: var(--color-accent);
+  color: var(--color-text-inverse);
+}
+
+.btn-outline:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.btn-outline:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .btn-danger {

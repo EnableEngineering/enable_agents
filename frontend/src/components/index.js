@@ -16,6 +16,12 @@ export { Toast, ToastContainer } from './Toast';
 export { default as Skeleton } from './SkeletonLoader';
 export { default as Spinner } from './Spinner';
 
+// Buttons
+export { default as Button } from './Button';
+
+// Chat
+export { default as TypingIndicator } from './TypingIndicator';
+
 // Empty states
 export { default as EmptyState } from './EmptyState';
 
@@ -31,6 +37,8 @@ export { default as ProjectSelector } from './ProjectSelector';
 export { default as ProjectGate } from './ProjectGate';
 export { default as LiveModeHint } from './LiveModeHint';
 export { default as AgentOutcomesStrip } from './AgentOutcomesStrip';
+export { default as AgentPrefillBanner } from './AgentPrefillBanner';
+export { default as ExpandableText } from './ExpandableText';
 export { default as AgentPlaceholderShell } from './AgentPlaceholderShell';
 export { default as AgentPrerequisiteGate } from './AgentPrerequisiteGate';
 export { default as NetworkProfileCard, NetworkSearchResults, normalizeSearchProfile } from './NetworkProfileCard';

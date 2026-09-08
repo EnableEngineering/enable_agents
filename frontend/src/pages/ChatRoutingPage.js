@@ -1,14 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Navigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { API_CONFIG } from '../config/apiConfig';
 import { authJsonHeaders } from '../core/authHeaders';
 import { showToast } from '../core/toast';
+import { EXAMPLE_PROMPTS } from './Home';
+import { TypingIndicator } from '../components';
+import './Home.css';
 import './ChatRoutingPage.css';
+
+function ChatAvatar({ hidden }) {
+  return <div className="chatroute-avatar" style={hidden ? { visibility: 'hidden' } : undefined} />;
+}
 
 // Steps: project -> routing -> recap -> result -> none
 function ChatRoutingPage() {
   const navigate = useNavigate();
-  const [task] = useState(() => sessionStorage.getItem('pendingTaskRoute') || '');
+  const firstName = localStorage.getItem('firstName') || '';
+  const [task, setTask] = useState(() => sessionStorage.getItem('pendingTaskRoute') || '');
+  const [taskInput, setTaskInput] = useState('');
   const [step, setStep] = useState('project');
 
   const [projects, setProjects] = useState([]);
@@ -42,8 +51,18 @@ function ChatRoutingPage() {
         setLoadingProjects(false);
       }
     })();
+    // task only ever transitions once (either already in sessionStorage on
+    // mount, or set locally by handleTaskEntrySubmit below) - re-running
+    // this when it changes covers a page landed on directly with no task.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [task]);
+
+  const handleTaskEntrySubmit = (text) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    sessionStorage.setItem('pendingTaskRoute', trimmed);
+    setTask(trimmed);
+  };
 
   const handleConfirmProject = async () => {
     if (projectMode === 'existing') {
@@ -139,11 +158,61 @@ function ChatRoutingPage() {
     navigate('/home');
   };
 
-  // No task in flight (e.g. this URL was visited directly rather than
-  // reached via Home's chat box or the Agents "Find agent" bar, both of
-  // which stash the task in sessionStorage before navigating here) -
-  // redirect declaratively so there's no blank frame first.
-  if (!task) return <Navigate to="/home" replace />;
+  // No task in flight (e.g. this URL was visited directly, refreshed in a
+  // fresh tab, or reached via browser back/forward after the flow already
+  // completed and cleared sessionStorage). Show the same entry prompt as
+  // Home right here instead of silently bouncing to a different page - this
+  // route should work on its own, not only as a transient hop from Home.
+  if (!task) {
+    return (
+      <div className="home-page">
+        <div className="home-content">
+          <h1 className="home-title">
+            What do you need help with{firstName ? `, ${firstName}` : ''}?
+          </h1>
+          <p className="home-subtitle">
+            Describe the task in plain English. Enable will find the right agent, or start a guided workflow if it's a bigger job.
+          </p>
+
+          <div className="home-chat-input">
+            <textarea
+              rows={1}
+              className="home-chat-textarea"
+              placeholder='e.g. "Find 50 potential customers for our SaaS product in the healthcare industry"'
+              value={taskInput}
+              onChange={(e) => setTaskInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleTaskEntrySubmit(taskInput);
+                }
+              }}
+              autoFocus
+            />
+            <button
+              type="button"
+              className="home-chat-send"
+              onClick={() => handleTaskEntrySubmit(taskInput)}
+              disabled={!taskInput.trim()}
+              aria-label="Send"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5 12h14M13 6l6 6-6 6" />
+              </svg>
+            </button>
+          </div>
+
+          <div className="home-examples">
+            {EXAMPLE_PROMPTS.map((label) => (
+              <button key={label} type="button" className="home-example-chip" onClick={() => handleTaskEntrySubmit(label)}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="chatroute-page">
@@ -153,7 +222,7 @@ function ChatRoutingPage() {
         </div>
 
         <div className="chatroute-bubble-row assistant">
-          <div className="chatroute-avatar" />
+          <ChatAvatar />
           <div className="chatroute-bubble assistant">
             {loadingProjects
               ? 'One moment...'
@@ -161,7 +230,7 @@ function ChatRoutingPage() {
           </div>
         </div>
 
-        {!loadingProjects && (
+        {!loadingProjects && step === 'project' && (
           <div className="chatroute-bubble-row user">
             <div className="chatroute-project-picker">
               {projects.length > 0 && (
@@ -170,7 +239,6 @@ function ChatRoutingPage() {
                     type="button"
                     className={projectMode === 'existing' ? 'active' : ''}
                     onClick={() => setProjectMode('existing')}
-                    disabled={step !== 'project'}
                   >
                     Existing project
                   </button>
@@ -178,7 +246,6 @@ function ChatRoutingPage() {
                     type="button"
                     className={projectMode === 'new' ? 'active' : ''}
                     onClick={() => setProjectMode('new')}
-                    disabled={step !== 'project'}
                   >
                     New project
                   </button>
@@ -188,7 +255,6 @@ function ChatRoutingPage() {
                 <select
                   value={selectedProjectId}
                   onChange={(e) => setSelectedProjectId(e.target.value)}
-                  disabled={step !== 'project'}
                 >
                   {projects.map((p) => (
                     <option key={p.id} value={p.id}>{p.name}</option>
@@ -200,38 +266,47 @@ function ChatRoutingPage() {
                   placeholder="New project name"
                   value={newProjectName}
                   onChange={(e) => setNewProjectName(e.target.value)}
-                  disabled={step !== 'project'}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleConfirmProject();
+                    }
+                  }}
                 />
               )}
-              {step === 'project' && (
-                <button type="button" className="chatroute-btn-primary" onClick={handleConfirmProject}>
-                  Continue
-                </button>
-              )}
-              {resolvedProject && step !== 'project' && (
-                <span className="chatroute-project-confirmed">{resolvedProject.name}</span>
-              )}
+              <button type="button" className="chatroute-btn-primary" onClick={handleConfirmProject}>
+                Continue
+              </button>
+            </div>
+          </div>
+        )}
+
+        {!loadingProjects && step !== 'project' && resolvedProject && (
+          <div className="chatroute-bubble-row user">
+            <div className="chatroute-project-confirmed-chip">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              {resolvedProject.name}
             </div>
           </div>
         )}
 
         {step === 'routing' && (
           <div className="chatroute-bubble-row assistant">
-            <div className="chatroute-avatar" />
-            <div className="chatroute-bubble assistant chatroute-thinking">
-              <span className="chatroute-dots"><span>.</span><span>.</span><span>.</span></span> Thinking about the best way to handle this
-            </div>
+            <ChatAvatar />
+            <TypingIndicator label="Thinking about the best way to handle this" />
           </div>
         )}
 
         {(step === 'recap' || step === 'result') && route && (
           <div className="chatroute-bubble-row assistant">
-            <div className="chatroute-avatar" />
+            <ChatAvatar />
             <div className="chatroute-recap-block">
               <div className="chatroute-bubble assistant">
                 {route.type === 'workflow'
-                  ? "Here's what I've got — this is a multi-step process, so I'd recommend a guided workflow:"
-                  : `Here's what I've got — ${route.agent.name} can help with this:`}
+                  ? "Here's what I've got: this is a multi-step process, so I'd recommend a guided workflow:"
+                  : `Here's what I've got: ${route.agent.name} can help with this:`}
               </div>
               {route.recap?.length > 0 && (
                 <div className="chatroute-recap-fields">
@@ -263,7 +338,7 @@ function ChatRoutingPage() {
 
         {step === 'result' && route && (
           <div className="chatroute-bubble-row assistant">
-            <div className="chatroute-avatar" style={{ visibility: 'hidden' }} />
+            <ChatAvatar hidden />
             <div className="chatroute-result">
               {route.type === 'workflow' ? (
                 <div className="chatroute-card">
@@ -315,7 +390,7 @@ function ChatRoutingPage() {
 
         {step === 'none' && (
           <div className="chatroute-bubble-row assistant">
-            <div className="chatroute-avatar" />
+            <ChatAvatar />
             <div className="chatroute-recap-block">
               <div className="chatroute-bubble assistant">
                 {routeError || "I couldn't find a great match for this in what's available yet."}

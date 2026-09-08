@@ -26,40 +26,16 @@
 }
 
 .workflows-page .workflows-loading {
-  text-align: center;
-  padding: var(--space-6);
-  color: var(--color-text-muted);
-}
-
-.workflows-page .workflows-tabs {
   display: flex;
-  gap: var(--space-2);
-  margin-bottom: var(--space-4);
-  border-bottom: 1px solid var(--color-border);
-  padding-bottom: var(--space-2);
-}
-
-.workflows-page .workflow-tab {
-  padding: var(--space-2) var(--space-3);
-  background: transparent;
-  border: none;
-  font-family: var(--font-body);
-  font-size: var(--text-body);
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-10) var(--space-6);
   color: var(--color-text-muted);
-  cursor: pointer;
-  border-radius: var(--radius-md);
-  transition: all 0.2s;
 }
 
-.workflows-page .workflow-tab:hover {
-  color: var(--color-text);
-  background: var(--color-surface-hover);
-}
-
-.workflows-page .workflow-tab.active {
-  color: var(--color-primary);
-  background: var(--color-primary-bg);
-  font-weight: 500;
+.workflows-page .module-tabs {
+  margin-bottom: var(--space-4);
 }
 
 .workflows-page .category-filter {
@@ -184,7 +160,7 @@
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: rgba(30, 58, 95, 0.1);
+  background: rgba(var(--color-primary-rgb), 0.1);
   color: var(--color-primary);
   font-size: 0.7rem;
   font-weight: var(--font-semibold);
@@ -198,7 +174,7 @@
   font-size: var(--text-small);
   font-weight: var(--font-semibold);
   color: var(--color-primary);
-  background: rgba(30, 58, 95, 0.1);
+  background: rgba(var(--color-primary-rgb), 0.1);
   padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-full);
   margin: var(--space-2) 0;
@@ -276,7 +252,7 @@
 }
 
 .workflows-page .instance-status[style*="info"] {
-  background: #dbeafe;
+  background: var(--color-info-bg);
 }
 
 .workflows-page .instance-template {
@@ -331,14 +307,14 @@
   color: var(--color-text);
   margin-bottom: var(--space-3);
   padding: 8px 10px;
-  background: #f0f9ff;
+  background: rgba(var(--color-primary-rgb), 0.04);
   border-radius: 6px;
-  border-left: 3px solid #0ea5e9;
+  border-left: 3px solid var(--color-primary);
 }
 
 .workflows-page .current-stage-label {
   font-weight: 600;
-  color: #0ea5e9;
+  color: var(--color-primary);
 }
 
 .workflows-page .instance-actions {
@@ -390,7 +366,7 @@
     grid-template-columns: 1fr;
   }
 
-  .workflows-page .workflow-tab {
+  .workflows-page .module-tab {
     flex: 1;
     text-align: center;
   }

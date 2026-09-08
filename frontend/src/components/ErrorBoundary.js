@@ -1,6 +1,7 @@
 import React from 'react';
 import './ErrorBoundary.css';
 import { STRINGS } from '../constants';
+import Button from './Button';
 
 /**
  * ErrorBoundary Component
@@ -64,20 +65,18 @@ class ErrorBoundary extends React.Component {
               {STRINGS.ERRORS.TRY_AGAIN_MESSAGE}
             </p>
             <div className="error-boundary-actions">
-              <button
-                type="button"
-                className="btn btn-primary"
+              <Button
+                variant="primary"
                 onClick={this.handleRetry}
               >
                 {STRINGS.COMMON.TRY_AGAIN}
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary"
+              </Button>
+              <Button
+                variant="secondary"
                 onClick={this.handleGoHome}
               >
                 {STRINGS.ERRORS.GO_HOME}
-              </button>
+              </Button>
             </div>
             {process.env.NODE_ENV === 'development' && this.state.error && (
               <details className="error-boundary-details">

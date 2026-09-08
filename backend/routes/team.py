@@ -18,6 +18,17 @@ from core.email_sender import send_platform_email
 team_bp = Blueprint('team', __name__)
 
 
+def _display_name_for_email(user_email: str) -> str:
+    """Registered user's full name if available, else the email's local part."""
+    from app import User
+    user = User.query.filter_by(email=user_email).first()
+    if user:
+        full = f"{(user.first_name or '').strip()} {(user.last_name or '').strip()}".strip()
+        if full:
+            return full
+    return user_email.split('@')[0]
+
+
 def get_or_create_team(user_email: str) -> Team:
     """Get existing team or create new one with user as owner."""
     member = TeamMember.query.filter_by(user_id=user_email).first()
@@ -36,7 +47,7 @@ def get_or_create_team(user_email: str) -> Team:
         member_id=str(uuid.uuid4()),
         team_id=team_id,
         user_id=user_email,
-        name=user_email.split('@')[0],
+        name=_display_name_for_email(user_email),
         role='owner'
     )
     db.session.add(member)
@@ -93,7 +104,7 @@ def invite_member():
         member_id=str(uuid.uuid4()),
         team_id=team.team_id,
         user_id=invite_email,
-        name=invite_email.split('@')[0],
+        name=_display_name_for_email(invite_email),
         role=role
     )
     db.session.add(new_member)

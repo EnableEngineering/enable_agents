@@ -1,13 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { BackButton, ProjectSelector, LiveModeHint, ProjectGate, AgentOutcomesStrip, WorkflowExecutionBanner, WorkflowContextCard } from '../components';
+import { BackButton, ProjectSelector, LiveModeHint, AgentPrefillBanner, ProjectGate, AgentOutcomesStrip, WorkflowExecutionBanner, WorkflowContextCard, Spinner, EmptyState, TypingIndicator } from '../components';
 import '../styles/SalesHelperAgent.css';
 import { useSelectedProjectId } from '../hooks/useSelectedProjectId';
 import { API_CONFIG } from '../config/apiConfig';
 import { authJsonHeaders, authOptionalHeaders } from '../core/authHeaders';
+import { showToast } from '../core/toast';
 import { useAgentChat } from '../hooks/useAgentChat';
 import MessageContent from '../components/MessageContent';
 import { formatTime, getRelativeDateLabel, isSameDay } from '../utils/dateFormat';
-import { useWorkflowContext } from '../hooks';
+import { useWorkflowContext, usePendingAgentPrefill, notifyAgentCompleted } from '../hooks';
 
 function SalesHelperAgent() {
   const selectedProjectId = useSelectedProjectId();
@@ -38,6 +39,15 @@ function SalesHelperAgent() {
   const [rankedVendors, setRankedVendors] = useState([]);
   const [activeTab, setActiveTab] = useState('leads'); // 'leads' or 'ranking'
   const [isChatOpen, setIsChatOpen] = useState(false);
+
+  const { prefill, dismiss: dismissPrefill } = usePendingAgentPrefill('salesHelper', (fields) => {
+    if (isHistoryView) return;
+    const msg = fields.find((f) => f.field_key === 'inputMessage');
+    if (msg) {
+      setInputMessage(msg.field_value);
+      setIsChatOpen(true);
+    }
+  });
   const rankingResultsRef = useRef(null);
   const [defaultUserId] = useState('user_001');
 
@@ -91,6 +101,7 @@ function SalesHelperAgent() {
       }
     } catch (error) {
       console.error('Error loading uploaded documents:', error);
+      showToast('Could not load your uploaded documents.', 'error');
     }
   };
 
@@ -198,6 +209,7 @@ function SalesHelperAgent() {
       }
     } catch (error) {
       console.error('Error removing document:', error);
+      showToast('Could not remove that document.', 'error');
     }
   };
 
@@ -286,6 +298,7 @@ function SalesHelperAgent() {
     } catch (error) {
       console.error('Error fetching campaigns:', error);
       setCampaigns([]);
+      showToast('Could not load campaigns.', 'error');
     } finally {
       setIsLoadingCampaigns(false);
     }
@@ -342,6 +355,7 @@ function SalesHelperAgent() {
     } catch (error) {
       console.error('Error loading saved projects:', error);
       setSavedProjects([]);
+      showToast('Could not load saved lists.', 'error');
     } finally {
       setIsLoadingSavedProjects(false);
     }
@@ -445,6 +459,10 @@ function SalesHelperAgent() {
           null,
           'markdown'
         );
+        notifyAgentCompleted('salesHelper', `Ranked ${result.vendors.length} vendors for ${campaignName}`, [
+          { field_key: 'subject', field_value: `Following up - ${campaignName}` },
+          { field_key: 'body', field_value: `Hi {{company}},\n\nThanks for your response to our "${campaignName}" outreach - we've ranked it among our top prospects.\n\n[Add a line here about next steps or what you'd like to discuss.]\n\nDo you have 15 minutes this week for a quick call?\n\nBest,\n[Your name]` },
+        ]);
 
         // Save to workflow if in workflow context
         if (isInWorkflow) {
@@ -543,7 +561,7 @@ function SalesHelperAgent() {
       <AgentOutcomesStrip
         items={[
           { iconSrc: '/assets/icons/search-analysis.png', title: 'Lead analysis', description: 'Load saved lead lists and explore prospect data.' },
-          { iconSrc: '/assets/icons/chat.png', title: 'AI assistant', description: 'Ask questions about vendors and product fit.' },
+          { iconSrc: '/assets/icons/message.png', title: 'AI assistant', description: 'Ask questions about vendors and product fit.' },
           { iconSrc: '/assets/icons/bar-chart.png', title: 'Vendor ranking', description: 'Score and compare vendors for your RFP.' },
         ]}
       />
@@ -551,6 +569,12 @@ function SalesHelperAgent() {
       <LiveModeHint
         requireProject
         message="Choose a project above, or create one with + New Project."
+      />
+
+      <AgentPrefillBanner
+        prefill={prefill}
+        onDismiss={dismissPrefill}
+        labels={{ inputMessage: 'Message' }}
       />
 
       <div className="main-container">
@@ -565,9 +589,9 @@ function SalesHelperAgent() {
           <div className="sales-helper-content">
             <div className="assistant-workspace tabbed-layout">
           {/* Tab Navigation */}
-          <div className="workspace-tabs">
+          <div className="module-tabs">
             <button
-              className={`workspace-tab ${activeTab === 'leads' ? 'active' : ''}`}
+              className={`module-tab ${activeTab === 'leads' ? 'module-tab--active' : ''}`}
               onClick={() => setActiveTab('leads')}
             >
               Saved Leads
@@ -575,7 +599,7 @@ function SalesHelperAgent() {
               {savedLeadsCount > 0 && <span className="tab-badge accent">{savedLeadsCount} loaded</span>}
             </button>
             <button
-              className={`workspace-tab ${activeTab === 'ranking' ? 'active' : ''}`}
+              className={`module-tab ${activeTab === 'ranking' ? 'module-tab--active' : ''}`}
               onClick={() => setActiveTab('ranking')}
             >
               Vendor Ranking
@@ -591,7 +615,7 @@ function SalesHelperAgent() {
               <div className="tab-panel leads-panel">
                 <div className="panel-header-row">
                   <button type="button" className="panel-action-btn" onClick={fetchSavedProjects} disabled={isLoadingSavedProjects} title="Refresh lists">
-                    {isLoadingSavedProjects ? '...' : 'Refresh'}
+                    {isLoadingSavedProjects ? <Spinner size="sm" /> : 'Refresh'}
                   </button>
                 </div>
 
@@ -600,11 +624,14 @@ function SalesHelperAgent() {
                 {!selectedSavedProject ? (
                   <div className="leads-grid-container">
                     {isLoadingSavedProjects ? (
-                      <div className="empty-saved-state">Loading...</div>
+                      <div className="empty-saved-state"><Spinner size="sm" /></div>
                     ) : savedProjects.length === 0 ? (
-                      <div className="empty-state-compact">
-                        <p>No saved lists yet. Create lead lists from Market Research.</p>
-                      </div>
+                      <EmptyState
+                        iconType="data"
+                        title="No saved lists yet"
+                        description="Create lead lists from Market Research."
+                        size="sm"
+                      />
                     ) : (
                       <div className="leads-list-grid">
                         {savedProjects.map((project) => (
@@ -779,15 +806,17 @@ function SalesHelperAgent() {
                       <h4>Select Campaign</h4>
                       <p>Choose a campaign with vendor responses to rank</p>
                     </div>
-                    <button type="button" className="refresh-btn-small" onClick={fetchCampaigns} disabled={isLoadingCampaigns}>
-                      {isLoadingCampaigns ? '...' : '↻'}
+                    <button type="button" className="refresh-btn-small" onClick={fetchCampaigns} disabled={isLoadingCampaigns} aria-label="Refresh campaigns">
+                      {isLoadingCampaigns ? <Spinner size="sm" /> : '↻'}
                     </button>
                   </div>
 
                   {campaigns.length === 0 ? (
-                    <div className="no-campaigns-hint">
-                      <p>No campaigns with responses yet</p>
-                    </div>
+                    <EmptyState
+                      iconType="data"
+                      title="No campaigns with responses yet"
+                      size="sm"
+                    />
                   ) : (
                     <div className="campaign-cards">
                       {campaigns.map((campaign) => (
@@ -865,7 +894,7 @@ function SalesHelperAgent() {
                   >
                     {isRankingVendors ? (
                       <>
-                        <span className="spinner-small" />
+                        <Spinner size="sm" color="white" />
                         Analyzing responses...
                       </>
                     ) : 'Rank Vendors'}
@@ -932,7 +961,7 @@ function SalesHelperAgent() {
         {/* Floating Chat Button */}
         {!isChatOpen && (
           <button className="floating-chat-btn" onClick={() => setIsChatOpen(true)} aria-label="Open chat">
-            <img src="/assets/icons/chat.png" alt="" className="chat-btn-icon" />
+            <img src="/assets/icons/message.png" alt="" className="chat-btn-icon" />
           </button>
         )}
 
@@ -977,6 +1006,11 @@ function SalesHelperAgent() {
                     </React.Fragment>
                   );
                 })}
+                {isLoading && (
+                  <div className="message agent">
+                    <TypingIndicator />
+                  </div>
+                )}
                 <div ref={messagesEndRef} />
               </div>
 
@@ -1001,7 +1035,7 @@ function SalesHelperAgent() {
                     disabled={isLoading || !inputMessage.trim() || isHistoryView}
                     className="send-button"
                   >
-                    {isLoading ? '...' : '→'}
+                    {isLoading ? <Spinner size="sm" color="white" /> : '→'}
                   </button>
                 </div>
               </form>

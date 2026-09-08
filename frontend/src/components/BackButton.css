@@ -35,14 +35,14 @@
 
 /* Variant for use inside headers with dark background */
 .back-to-hub-button.inverse {
-  background: rgba(255, 255, 255, 0.15);
-  border-color: rgba(255, 255, 255, 0.25);
+  background: rgba(var(--color-white-rgb), 0.15);
+  border-color: rgba(var(--color-white-rgb), 0.25);
   color: var(--color-text-inverse);
 }
 
 .back-to-hub-button.inverse:hover {
-  background: rgba(255, 255, 255, 0.25);
-  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(var(--color-white-rgb), 0.25);
+  border-color: rgba(var(--color-white-rgb), 0.4);
   color: var(--color-text-inverse);
 }
 

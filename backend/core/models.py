@@ -69,6 +69,63 @@ class UserSettingModel(db.Model):
     )
 
 
+class AgentSuggestionFeedback(db.Model):
+    """
+    One row per accept/dismiss on a proactive "recommended next step" card
+    (see frontend/src/hooks/useAgentCompletion.js and AiAssistantPanel.js).
+    The most recent row for a given (user_id, from_agent, to_agent) triple
+    decides whether that pairing is currently suppressed - a later 'accepted'
+    un-suppresses a pair that was previously 'dismissed'.
+    """
+    __tablename__ = "agent_suggestion_feedback"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id = db.Column(db.String(255), nullable=False, index=True)
+    from_agent = db.Column(db.String(100), nullable=False)
+    to_agent = db.Column(db.String(100), nullable=False)
+    action = db.Column(db.String(20), nullable=False)  # 'accepted' | 'dismissed'
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.Index("ix_suggestion_feedback_user_pair", "user_id", "from_agent", "to_agent"),
+    )
+
+
+class AiAssistantMessage(db.Model):
+    """
+    Server-side copy of the AI Assistant chat log (see AiAssistantPanel.js).
+    Was localStorage-only ('aiAssistantMessages' key) - fine for surviving a
+    reload, but invisible on any other browser/device and gone the moment
+    site data is cleared. This table is now the source of truth; localStorage
+    stays only as an instant-paint cache for repeat visits in the same
+    browser. message_id is the client-generated id already used as the React
+    key, so accept/dismiss can update a message in place via upsert instead
+    of duplicating it.
+
+    Scoped per project (project_id = the ?project= a message was sent/fired
+    under) so switching projects shows that project's own conversation, not
+    one account-wide log - matches how Market Research results, documents,
+    suppliers etc. are already isolated per project. project_id is nullable:
+    NULL is the "general" bucket for pages with no project context (Dashboard,
+    Team, Settings, ...).
+    """
+    __tablename__ = "ai_assistant_messages"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id = db.Column(db.String(255), nullable=False, index=True)
+    project_id = db.Column(db.String(36), nullable=True)
+    message_id = db.Column(db.String(64), nullable=False)
+    role = db.Column(db.String(20), nullable=False)  # 'user' | 'assistant'
+    text = db.Column(db.Text, nullable=False)
+    tool_result = db.Column(db.Text, nullable=True)  # JSON-serialized toolResult, if any
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint("user_id", "message_id", name="uq_ai_assistant_message"),
+        db.Index("ix_ai_assistant_messages_user_project_created", "user_id", "project_id", "created_at"),
+    )
+
+
 # =============================================================================
 # Platform-wide models: Team, TeamMember, Project
 # =============================================================================

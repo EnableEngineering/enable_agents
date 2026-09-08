@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BackButton, EmptyState, ProjectSelector } from '../components';
+import { BackButton, EmptyState, ProjectSelector, Button, Spinner } from '../components';
 import { API_CONFIG } from '../config/apiConfig';
 import { STRINGS } from '../constants/strings';
 import { authJsonHeaders } from '../core/authHeaders';
@@ -176,7 +176,10 @@ function WorkflowsPage() {
     return (
       <>
         <div className="workflows-page">
-          <div className="workflows-loading">{STRINGS.LOADING.WORKFLOWS}</div>
+          <div className="workflows-loading">
+            <Spinner size="lg" />
+            <p>{STRINGS.LOADING.WORKFLOWS}</p>
+          </div>
         </div>
       </>
     );
@@ -193,23 +196,23 @@ function WorkflowsPage() {
           <ProjectSelector />
         </div>
 
-        <div className="workflows-tabs">
+        <div className="module-tabs">
             <button
-              className={`workflow-tab ${activeTab === 'templates' ? 'active' : ''}`}
+              className={`module-tab ${activeTab === 'templates' ? 'module-tab--active' : ''}`}
               onClick={() => setActiveTab('templates')}
               title="Browse available workflow templates"
             >
               Templates
             </button>
             <button
-              className={`workflow-tab ${activeTab === 'active' ? 'active' : ''}`}
+              className={`module-tab ${activeTab === 'active' ? 'module-tab--active' : ''}`}
               onClick={() => setActiveTab('active')}
               title="View workflows currently in progress"
             >
               Active ({activeInstances.length})
             </button>
             <button
-              className={`workflow-tab ${activeTab === 'completed' ? 'active' : ''}`}
+              className={`module-tab ${activeTab === 'completed' ? 'module-tab--active' : ''}`}
               onClick={() => setActiveTab('completed')}
               title="View completed workflows and their results"
             >
@@ -221,14 +224,13 @@ function WorkflowsPage() {
             <div className="workflows-content">
               {selectedProjectId && (
                 <div className="agent-suggestions-bar">
-                  <button
-                    type="button"
-                    className="btn-secondary"
+                  <Button
+                    variant="secondary"
                     onClick={handleGetSuggestions}
                     disabled={loadingSuggestions}
                   >
                     {loadingSuggestions ? 'Thinking...' : 'Get AI Agent Suggestions'}
-                  </button>
+                  </Button>
                   {agentSuggestions && (
                     <div className="agent-suggestions-result">
                       <span>Based on this project's business context, consider: </span>
@@ -287,12 +289,13 @@ function WorkflowsPage() {
                           {template.stageCount} stages
                         </div>
                       )}
-                      <button
-                        className="btn btn-primary"
+                      <Button
+                        variant="primary"
+                        size="sm"
                         onClick={() => handleStartWorkflow(template.id)}
                       >
                         Start Workflow
-                      </button>
+                      </Button>
                     </div>
                   ))}
                 </div>
@@ -356,7 +359,7 @@ function InstanceCard({ instance, onDelete }) {
 
   const statusConfig = {
     pending: { label: '○ Not Started', bg: 'var(--color-warning-bg)', color: 'var(--color-warning)' },
-    running: { label: '● In Progress', bg: '#dbeafe', color: '#2563eb' },
+    running: { label: '● In Progress', bg: 'var(--color-info-bg)', color: 'var(--role-member)' },
     paused: { label: '⏸ Paused', bg: 'var(--color-background)', color: 'var(--color-text-muted)' },
     completed: { label: '✓ Completed', bg: 'var(--color-success-bg)', color: 'var(--color-success)' },
     failed: { label: '✕ Failed', bg: 'var(--color-error-bg)', color: 'var(--color-error)' },

@@ -3,14 +3,14 @@ import ReactMarkdown from 'react-markdown';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { BackButton, LiveModeHint, AgentOutcomesStrip, ProjectSelector, ProjectGate, Modal, showConfirm, WorkflowExecutionBanner } from '../components';
+import { BackButton, LiveModeHint, AgentOutcomesStrip, AgentPrefillBanner, ProjectSelector, ProjectGate, Modal, showConfirm, WorkflowExecutionBanner, Spinner, Button } from '../components';
 import '../styles/RequirementsGathering.css';
 import { API_CONFIG } from '../config/apiConfig';
 import { authJsonHeaders, authOptionalHeaders } from '../core/authHeaders';
 import { getAgentData, setAgentData, AGENT_KEYS } from '../utils';
 import { formatDate } from '../utils/dateFormat';
 import { showToast } from '../core/toast';
-import { useWorkflowContext } from '../hooks';
+import { useWorkflowContext, usePendingAgentPrefill, notifyAgentCompleted } from '../hooks';
 import { STRINGS } from '../constants';
 
 const SUPPLIER_TEMPLATE = `Dear [Vendor Name / Sir / Madam],
@@ -91,6 +91,15 @@ function RequirementsGathering() {
   const [context, setContext] = useState('');
   const [countries, setCountries] = useState('');
   const [industries, setIndustries] = useState('');
+
+  const { prefill, dismiss: dismissPrefill } = usePendingAgentPrefill('marketResearch', (fields) => {
+    if (isHistoryView) return; // don't build phantom state while viewing a read-only past workflow stage
+    fields.forEach((f) => {
+      if (f.field_key === 'overview') setOverview(f.field_value);
+      if (f.field_key === 'industries') setIndustries(f.field_value);
+      if (f.field_key === 'countries') setCountries(f.field_value);
+    });
+  });
   const [businessFunctions, setBusinessFunctions] = useState('');
   const [analysisFrameworks, setAnalysisFrameworks] = useState('');
   const [responseFormat, setResponseFormat] = useState('');
@@ -263,6 +272,25 @@ function RequirementsGathering() {
   };
 
   const [isLoadingResearch, setIsLoadingResearch] = useState(false);
+  // Rotating status text for the research-loader below - the real scrape+
+  // analyze job genuinely takes a while, and a single static line the whole
+  // time reads as stuck. Purely cosmetic (not tied to real progress), so it
+  // resets and cycles independently of how long the actual request takes.
+  const RESEARCH_LOADING_STEPS = [
+    'Searching directories...',
+    'Extracting business details...',
+    'Verifying contact info...',
+    'Ranking by relevance...',
+  ];
+  const [researchLoadingStep, setResearchLoadingStep] = useState(0);
+  useEffect(() => {
+    if (!isLoadingResearch) { setResearchLoadingStep(0); return; }
+    const interval = setInterval(() => {
+      setResearchLoadingStep((i) => (i + 1) % RESEARCH_LOADING_STEPS.length);
+    }, 2200);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoadingResearch]);
   const [isLoadingEmails, setIsLoadingEmails] = useState(false);
   const [extractingEmailRows, setExtractingEmailRows] = useState({})
   const [extractingLinkedInRows, setExtractingLinkedInRows] = useState({});
@@ -390,6 +418,11 @@ function RequirementsGathering() {
 
   const handleGenerate = async () => {
     try {
+      if (!responseFormat) {
+        showToast('Please select a Research Type first', 'warning');
+        return;
+      }
+
       // Check if Customer Research or Supplier Research format is selected
       if (responseFormat === 'Customer Research' || responseFormat === 'Supplier Research') {
         // Allow customer research even when OAuth is not connected.
@@ -445,6 +478,10 @@ function RequirementsGathering() {
         setCustomerResearchResults(liveResults);
         setShowCustomerResearchTable(true);
         setIsLoadingResearch(false);
+        notifyAgentCompleted('marketResearch', `Found ${liveResults.businesses.length} results${industries ? ` in ${industries}` : ''}`, [
+          { field_key: 'subject', field_value: `Quick question for {{company}}` },
+          { field_key: 'body', field_value: `Hi {{company}} team,\n\nWe recently researched ${industries || 'your industry'}${countries ? ` in ${countries}` : ''} and came across ${liveResults.businesses.length} companies worth reaching out to - yours included.\n\n[Add a line here about what you offer and why it's relevant to them.]\n\nWould you be open to a quick call this week to explore if there's a fit?\n\nBest,\n[Your name]` },
+        ]);
 
         // Save to workflow if in workflow context
         if (isInWorkflow) {
@@ -1035,7 +1072,7 @@ function RequirementsGathering() {
         }
 
         const { plural } = getResearchEntityMeta();
-        showToast(`Scoring complete — updated ${results.length} ${plural} (sorted by score)`, 'success');
+        showToast(`Scoring complete: updated ${results.length} ${plural} (sorted by score)`, 'success');
         setShowScoreModal(false);
         setScoreQueryText('');
       } else {
@@ -1466,6 +1503,12 @@ function RequirementsGathering() {
           message="Choose a project above, or create one with + New Project."
         />
 
+        <AgentPrefillBanner
+          prefill={prefill}
+          onDismiss={dismissPrefill}
+          labels={{ overview: 'Project context', industries: 'Industry', countries: 'Region' }}
+        />
+
         <ProjectGate agentLabel="Market Research workspace">
         <WorkflowExecutionBanner />
         <div className="requirements-header-bar">
@@ -1541,7 +1584,7 @@ function RequirementsGathering() {
               <button className="generate-req-btn" onClick={handleGenerate} disabled={isLoadingResearch || isHistoryView}>
                 {isLoadingResearch ? (
                   <span style={{display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'}}>
-                    <span className="spinner"></span> Generating...
+                    <Spinner size="sm" color="white" /> Generating...
                   </span>
                 ) : 'Get Research Insights'}
               </button>
@@ -1606,7 +1649,7 @@ function RequirementsGathering() {
                    </h2>
                  )}
                  {isLoadingSavedLists ? (
-                    <div className="saved-lists-loading"><span className="spinner"></span> Loading lists...</div>
+                    <div className="saved-lists-loading"><Spinner size="sm" /> Loading lists...</div>
                  ) : !activeSavedList ? (
                     savedLists.length === 0 ? (
                       <div className="saved-lists-empty">No saved lists found.</div>
@@ -1698,8 +1741,13 @@ function RequirementsGathering() {
             <div className="ai-assisted" style={{ background: 'transparent', boxShadow: 'none' }}>
               {isLoadingResearch ? (
                   <div className="research-loader">
-                    <div className="research-spinner" />
-                    <p className="research-loader-text">Scraping and analyzing {getResearchEntityMeta().plural}... please wait...</p>
+                    <div className="research-loader-glow">
+                      <Spinner size="lg" color="accent" />
+                    </div>
+                    <p className="research-loader-text">
+                      Scraping and analyzing {getResearchEntityMeta().plural}...
+                    </p>
+                    <p className="research-loader-step">{RESEARCH_LOADING_STEPS[researchLoadingStep]}</p>
                   </div>
               ) : (!aiRequirements && !customerResearchResults) ? (
                 <div className="awaiting-config">
@@ -1733,7 +1781,7 @@ function RequirementsGathering() {
                                   setShowSavedListsView(true); 
                                   setShowCustomerResearchTable(false);
                                 }} 
-                                style={{ marginRight: '12px', padding: '8px 16px', background: 'none', border: '1px solid #1E3A5F', borderRadius: '5px', cursor: 'pointer', color: '#1E3A5F', fontWeight: 600 }}
+                                style={{ marginRight: '12px', padding: '8px 16px', background: 'none', border: '1px solid var(--color-primary)', borderRadius: '5px', cursor: 'pointer', color: 'var(--color-primary)', fontWeight: 600 }}
                               >
                                 ← Back to Saved Lists
                               </button>
@@ -1770,10 +1818,10 @@ function RequirementsGathering() {
                                 style={{ margin: 0, padding: '8px 16px' }}
                               >
                                 {isLoadingEmails ? (
-                                  <>
-                                    <span className="spinner" style={{ marginRight: '6px' }}></span>
+                                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                                    <Spinner size="sm" color="white" />
                                     Extracting...
-                                  </>
+                                  </span>
                                 ) : 'Extract Emails'}
                               </button>
                               <button
@@ -1971,7 +2019,7 @@ function RequirementsGathering() {
             title={googleBusinessConnected ? 'Reconnect Google Business Account' : 'Connect Google Business Account'}
             footer={
               <>
-                <button type="button" className="btn-secondary" onClick={() => setShowIntegrationModal(false)}>Cancel</button>
+                <Button variant="secondary" onClick={() => setShowIntegrationModal(false)}>Cancel</Button>
                 <button type="button" className="connect-submit-button" onClick={handleGoogleBusinessConnect}>Connect</button>
               </>
             }
@@ -1988,7 +2036,7 @@ function RequirementsGathering() {
             </div>
           </Modal>
 
-          <Modal open={showPopup} onClose={closePopup} title="Export Options" footer={<button type="button" className="btn-secondary" onClick={closePopup}>Close</button>}>
+          <Modal open={showPopup} onClose={closePopup} title="Export Options" footer={<Button variant="secondary" onClick={closePopup}>Close</Button>}>
             <div className="export-icons">
               <img src="/assets/icons/gmail.png" alt="Gmail" title="Gmail" />
               <img src="/assets/icons/word.png" alt="Word" title="Word" />
@@ -1999,7 +2047,7 @@ function RequirementsGathering() {
             </div>
           </Modal>
 
-          <Modal open={showPromptsPopup} onClose={() => setShowPromptsPopup(false)} title="Previous Prompts" size="lg" footer={<button type="button" className="btn-secondary" onClick={() => setShowPromptsPopup(false)}>Close</button>}>
+          <Modal open={showPromptsPopup} onClose={() => setShowPromptsPopup(false)} title="Previous Prompts" size="lg" footer={<Button variant="secondary" onClick={() => setShowPromptsPopup(false)}>Close</Button>}>
             <ul className="prompts-list">
               {previousPrompts.map((prompt, index) => (
                 <li key={index}>
@@ -2020,7 +2068,7 @@ function RequirementsGathering() {
             open={showExportModal}
             onClose={() => setShowExportModal(false)}
             title="Export Market Research"
-            footer={<button type="button" className="btn-secondary" onClick={() => setShowExportModal(false)}>Close</button>}
+            footer={<Button variant="secondary" onClick={() => setShowExportModal(false)}>Close</Button>}
           >
             <div className="export-options-grid">
               <button type="button" onClick={() => handleExport('excel')}>Download Excel (.xlsx)</button>
@@ -2199,10 +2247,10 @@ function RequirementsGathering() {
             title={`${getResearchEntityMeta().title} List`}
             footer={
               <>
-                <button type="button" className="btn-secondary" onClick={() => { setShowSaveListModal(false); setSaveListMode('create'); setSelectedAppendProjectId(''); }}>Cancel</button>
-                <button type="button" className="btn-primary" onClick={handleSaveList} disabled={isSavingList || (saveListMode === 'append' && !selectedAppendProjectId)}>
+                <Button variant="secondary" onClick={() => { setShowSaveListModal(false); setSaveListMode('create'); setSelectedAppendProjectId(''); }}>Cancel</Button>
+                <Button variant="primary" onClick={handleSaveList} disabled={isSavingList || (saveListMode === 'append' && !selectedAppendProjectId)}>
                   {isSavingList ? 'Saving...' : (saveListMode === 'append' ? `Append ${getResearchEntityMeta().title}` : `Save ${getResearchEntityMeta().title} List`)}
-                </button>
+                </Button>
               </>
             }
           >
@@ -2240,10 +2288,10 @@ function RequirementsGathering() {
             title={`Score ${getResearchEntityMeta().title}`}
             footer={
               <>
-                <button type="button" className="btn-secondary" onClick={() => { setShowScoreModal(false); setScoreQueryText(''); }}>Cancel</button>
-                <button type="button" className="btn-primary" onClick={handleScoreLeads} disabled={isScoring}>
+                <Button variant="secondary" onClick={() => { setShowScoreModal(false); setScoreQueryText(''); }}>Cancel</Button>
+                <Button variant="primary" onClick={handleScoreLeads} disabled={isScoring}>
                   {isScoring ? 'Scoring...' : `Score ${getResearchEntityMeta().title}`}
-                </button>
+                </Button>
               </>
             }
           >

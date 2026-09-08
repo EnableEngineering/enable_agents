@@ -3,6 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { API_CONFIG } from '../config/apiConfig';
 import { authJsonHeaders } from '../core/authHeaders';
 import { getAllAgents } from '../config/agentsConfig';
+import { showToast } from '../core/toast';
+import Spinner from '../components/Spinner';
+import EmptyState from '../components/EmptyState';
 import './Dashboard.css';
 
 function Dashboard() {
@@ -34,6 +37,7 @@ function Dashboard() {
         }
       } catch (err) {
         console.error('[Dashboard] Error loading projects:', err);
+        showToast('Could not load your project count.', 'error');
       }
 
       // Load workflow instances for stats
@@ -56,6 +60,7 @@ function Dashboard() {
         }
       } catch (err) {
         console.error('[Dashboard] Error loading instances:', err);
+        showToast('Could not load recent workflow activity.', 'error');
       }
 
       setStats({
@@ -66,6 +71,7 @@ function Dashboard() {
 
     } catch (err) {
       console.error('[Dashboard] Error loading dashboard data:', err);
+      showToast('Something went wrong loading your dashboard.', 'error');
     } finally {
       setLoading(false);
     }
@@ -92,7 +98,7 @@ function Dashboard() {
       <>
         <div className="dashboard-page">
           <div className="dashboard-loading">
-            <div className="loading-spinner"></div>
+            <Spinner size="lg" />
             <p>Loading your workspace...</p>
           </div>
         </div>
@@ -202,13 +208,12 @@ function Dashboard() {
                 })}
               </div>
             ) : (
-              <div className="empty-state">
-                <img src="/assets/icons/dashboards.png" alt="" className="empty-icon-img" />
-                <p className="empty-text">No recent activity yet — start a workflow to see it here.</p>
-                <button className="btn-primary" onClick={() => navigate('/workflows')}>
-                  Browse workflows
-                </button>
-              </div>
+              <EmptyState
+                icon={<img src="/assets/icons/dashboards.png" alt="" style={{ width: '100%', height: '100%' }} />}
+                title="No recent activity yet"
+                description="Start a workflow to see it here."
+                action={{ label: 'Browse workflows', onClick: () => navigate('/workflows') }}
+              />
             )}
           </section>
         </div>

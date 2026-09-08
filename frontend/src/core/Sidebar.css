@@ -19,7 +19,7 @@
   gap: 8px;
   padding: 6px 8px 22px;
   text-decoration: none;
-  color: #fff;
+  color: var(--color-text-inverse);
 }
 
 .sidebar-logo img {
@@ -29,7 +29,7 @@
 
 .sidebar-logo span {
   font-family: var(--font-display);
-  font-size: 17px;
+  font-size: 1.0625rem;
   font-weight: 600;
 }
 
@@ -47,21 +47,21 @@
   border-radius: 8px;
   cursor: pointer;
   text-decoration: none;
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 13px;
+  color: rgba(var(--color-white-rgb), 0.6);
+  font-size: 0.8125rem;
   font-weight: 600;
-  transition: background var(--transition-fast, 0.15s ease), color var(--transition-fast, 0.15s ease);
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
 
 .sidebar-nav-item:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.85);
+  background: rgba(var(--color-white-rgb), 0.06);
+  color: rgba(var(--color-white-rgb), 0.85);
 }
 
 .sidebar-nav-item--active,
 .sidebar-nav-item--active:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+  background: rgba(var(--color-white-rgb), 0.1);
+  color: var(--color-text-inverse);
 }
 
 .sidebar-nav-item svg {
@@ -74,7 +74,7 @@
   gap: 4px;
   margin-top: 14px;
   padding-top: 14px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid rgba(var(--color-white-rgb), 0.1);
 }
 
 .sidebar-utility-wrapper {
@@ -91,17 +91,17 @@
   border: none;
   background: transparent;
   cursor: pointer;
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 13px;
+  color: rgba(var(--color-white-rgb), 0.6);
+  font-size: 0.8125rem;
   font-weight: 600;
   font-family: inherit;
   position: relative;
-  transition: background var(--transition-fast, 0.15s ease), color var(--transition-fast, 0.15s ease);
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
 
 .sidebar-utility-button:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.85);
+  background: rgba(var(--color-white-rgb), 0.06);
+  color: rgba(var(--color-white-rgb), 0.85);
 }
 
 .sidebar-utility-button svg {
@@ -112,8 +112,8 @@
   position: absolute;
   right: 10px;
   background: var(--color-accent);
-  color: #fff;
-  font-size: 10px;
+  color: var(--color-text-inverse);
+  font-size: 0.625rem;
   font-weight: 700;
   min-width: 16px;
   height: 16px;
@@ -132,7 +132,7 @@
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  box-shadow: var(--shadow-lg, 0 12px 32px rgba(0, 0, 0, 0.18));
+  box-shadow: var(--shadow-lg));
   z-index: 920;
   overflow: hidden;
 }
@@ -182,7 +182,7 @@
 }
 
 .sidebar-notif-item.unread {
-  background: rgba(194, 65, 12, 0.04);
+  background: rgba(var(--color-accent-rgb), 0.04);
 }
 
 .sidebar-notif-item-title {
@@ -199,7 +199,7 @@
 }
 
 .sidebar-notif-item-time {
-  font-size: var(--text-xs, 11px);
+  font-size: var(--text-xs);
   color: var(--color-text-subtle);
 }
 
@@ -230,7 +230,7 @@
   align-items: center;
   gap: 10px;
   padding: 10px 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid rgba(var(--color-white-rgb), 0.1);
   border-left: none;
   border-right: none;
   border-bottom: none;
@@ -243,19 +243,19 @@
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.12);
-  color: #fff;
+  background: rgba(var(--color-white-rgb), 0.12);
+  color: var(--color-text-inverse);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 600;
   flex-shrink: 0;
 }
 
 .sidebar-user-name {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.7);
+  font-size: var(--text-caption);
+  color: rgba(var(--color-white-rgb), 0.7);
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -270,7 +270,7 @@
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  box-shadow: var(--shadow-lg, 0 12px 32px rgba(0, 0, 0, 0.18));
+  box-shadow: var(--shadow-lg));
   z-index: 920;
   overflow: hidden;
   padding: var(--space-1);

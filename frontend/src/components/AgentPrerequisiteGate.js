@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { API_CONFIG } from '../config/apiConfig';
 import { authJsonHeaders } from '../core/authHeaders';
+import Button from './Button';
 import './AgentPrerequisiteGate.css';
 
 /**
@@ -96,9 +97,9 @@ function AgentPrerequisiteGate({ agentId, children, onReady }) {
         </div>
 
         <div className="prerequisite-actions">
-          <button className="btn btn-secondary" onClick={() => setDismissed(true)}>
+          <Button variant="secondary" onClick={() => setDismissed(true)}>
             Continue Anyway
-          </button>
+          </Button>
           {status.missing[0]?.providers?.[0] && (
             <Link
               to={getAgentRoute(status.missing[0].providers[0])}

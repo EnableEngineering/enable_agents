@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import './Team.css';
 import { showToast } from '../core/toast';
 import { authJsonHeaders, authOptionalHeaders } from '../core/authHeaders';
-import { Modal } from '../components';
+import { Modal, EmptyState, Button, Spinner } from '../components';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
@@ -231,7 +231,7 @@ function Team() {
         </header>
 
         {loading ? (
-          <div className="loading">Loading...</div>
+          <div className="loading"><Spinner size="lg" /></div>
         ) : (
           <>
             {/* Members */}
@@ -239,16 +239,11 @@ function Team() {
               <h2>Members</h2>
               <div className="members-list">
                 {members.length === 0 ? (
-                  <div className="empty-state">
-                    <Icon name="User" />
-                    <p>No team members yet</p>
-                    {canManageTeam && (
-                      <button type="button" className="btn-invite btn-invite-inline" onClick={() => setShowInviteModal(true)}>
-                        <Icon name="Plus" />
-                        Invite your first member
-                      </button>
-                    )}
-                  </div>
+                  <EmptyState
+                    icon={<Icon name="User" />}
+                    title="No team members yet"
+                    action={canManageTeam ? { label: 'Invite your first member', onClick: () => setShowInviteModal(true) } : undefined}
+                  />
                 ) : (
                   members.map(member => (
                     <div key={member.id} className="member-row">
@@ -337,10 +332,10 @@ function Team() {
         title="Invite team member"
         footer={
           <>
-            <button type="button" className="btn-secondary" onClick={() => setShowInviteModal(false)}>Cancel</button>
-            <button type="button" className="btn-primary" onClick={handleInvite} disabled={!inviteEmail.trim() || inviting}>
+            <Button variant="secondary" onClick={() => setShowInviteModal(false)}>Cancel</Button>
+            <Button variant="primary" onClick={handleInvite} disabled={!inviteEmail.trim() || inviting}>
               {inviting ? 'Sending...' : 'Send invite'}
-            </button>
+            </Button>
           </>
         }
       >

@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { BackButton, ProjectGate, ProjectSelector, WorkflowExecutionBanner, WorkflowContextCard } from '../components';
+import { AgentOutcomesStrip, AgentPrefillBanner, BackButton, ProjectGate, ProjectSelector, WorkflowExecutionBanner, WorkflowContextCard, Button } from '../components';
 import { API_CONFIG } from '../config/apiConfig';
 import { authJsonHeaders, authOptionalHeaders } from '../core/authHeaders';
 import { showToast } from '../core/toast';
-import { useWorkflowContext } from '../hooks';
+import { useWorkflowContext, usePendingAgentPrefill, notifyAgentCompleted } from '../hooks';
 import './EmailOutreachAgent.css';
 
 // Built-in starter email templates
@@ -23,6 +23,14 @@ function EmailOutreachAgent() {
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [emailSubject, setEmailSubject] = useState('');
   const [emailBody, setEmailBody] = useState('');
+
+  const { prefill, dismiss: dismissPrefill } = usePendingAgentPrefill('emailOutreach', (fields) => {
+    if (isHistoryView) return;
+    fields.forEach((f) => {
+      if (f.field_key === 'subject') setEmailSubject(f.field_value);
+      if (f.field_key === 'body') setEmailBody(f.field_value);
+    });
+  });
   const [sending, setSending] = useState(false);
 
   // Saved lead lists (from Market Research) - the real recipient source in live mode
@@ -171,6 +179,9 @@ function EmailOutreachAgent() {
       ));
 
       showToast(result.message || `Sent ${result.count} emails`, 'success');
+      notifyAgentCompleted('emailOutreach', `Sent ${result.count} emails`, [
+        { field_key: 'inputMessage', field_value: `Help me rank replies to my "${emailSubject}" email campaign` },
+      ]);
 
       // Save to workflow if in workflow context
       if (isInWorkflow) {
@@ -210,6 +221,20 @@ function EmailOutreachAgent() {
           <ProjectSelector agentKey="emailOutreach" />
         </div>
       </div>
+
+      <AgentOutcomesStrip
+        items={[
+          { iconSrc: '/assets/icons/mail.png', title: 'Bulk sending', description: 'Send personalized emails to a whole list at once.' },
+          { iconSrc: '/assets/icons/checklist.png', title: 'Templates', description: 'Reusable templates for common outreach types.' },
+          { iconSrc: '/assets/icons/monitoring.png', title: 'Delivery tracking', description: 'See what was sent, opened, and replied to.' },
+        ]}
+      />
+
+      <AgentPrefillBanner
+        prefill={prefill}
+        onDismiss={dismissPrefill}
+        labels={{ subject: 'Subject', body: 'Body' }}
+      />
 
       <ProjectGate agentLabel="Email Outreach workspace">
         <div className="email-outreach-page">
@@ -299,13 +324,13 @@ function EmailOutreachAgent() {
               )}
               {isHistoryView && (
                 <div style={{
-                  background: '#f0f9ff',
-                  border: '1px solid #0ea5e9',
+                  background: 'rgba(var(--color-primary-rgb), 0.04)',
+                  border: '1px solid var(--color-primary)',
                   borderRadius: '6px',
                   padding: '12px',
                   marginBottom: '12px',
-                  fontSize: '13px',
-                  color: '#0c4a6e'
+                  fontSize: '0.8125rem',
+                  color: 'var(--color-primary)'
                 }}>
                   <strong>📧 Campaign Summary:</strong> {recipients.filter(r => r.status === 'sent').length} emails marked as sent
                   {emailSubject && <div style={{marginTop: '4px'}}><strong>Subject:</strong> {emailSubject}</div>}
@@ -329,13 +354,13 @@ function EmailOutreachAgent() {
 
             {/* Actions */}
             <div className="email-actions">
-              <button
-                className="btn btn-primary"
+              <Button
+                variant="primary"
                 onClick={handleSendEmails}
                 disabled={sending || !emailSubject || !emailBody || recipients.filter(r => r.status === 'pending').length === 0 || isHistoryView}
               >
                 {sending ? 'Sending...' : `Send to ${recipients.filter(r => r.status === 'pending').length} Recipients`}
-              </button>
+              </Button>
             </div>
           </div>
         </div>

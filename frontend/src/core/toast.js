@@ -35,6 +35,20 @@ function getContainer() {
       flex-direction: column;
       gap: 12px;
       pointer-events: none;
+      transition: right 0.2s ease;
+    }
+    /* The AI Assistant panel docks at the same top-right corner (see
+       AiAssistantPanel.js, which toggles this class on <body>) - without
+       this offset every toast renders on top of the panel's header. */
+    body.ai-panel-open #ea-toast-root {
+      right: calc(var(--ai-panel-width, 360px) + 20px);
+    }
+    @media (max-width: 1024px) {
+      /* Panel becomes a full-viewport overlay below this breakpoint - offsetting
+         would push toasts off-screen instead of just under the panel header. */
+      body.ai-panel-open #ea-toast-root {
+        right: 20px;
+      }
     }
     .ea-toast {
       display: flex;

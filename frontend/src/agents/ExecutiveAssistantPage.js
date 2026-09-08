@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import '../styles/ExecutiveAssistantPage.css';
 import { showToast } from '../core/toast';
-import { Input, Textarea, BackButton, ProjectSelector, LiveModeHint, AgentOutcomesStrip, EmptyState, ProjectGate, WorkflowExecutionBanner, WorkflowContextCard } from '../components';
+import { Input, Textarea, BackButton, ProjectSelector, LiveModeHint, AgentPrefillBanner, AgentOutcomesStrip, EmptyState, ProjectGate, WorkflowExecutionBanner, WorkflowContextCard, Button } from '../components';
 import ReminderModal from '../components/ReminderModal';
 import { setAgentData, AGENT_KEYS } from '../utils';
 import { formatDate } from '../utils/dateFormat';
 import { useProjectData } from '../hooks/useProjectData';
 import { useSelectedProjectId } from '../hooks/useSelectedProjectId';
-import { useWorkflowContext } from '../hooks';
+import { useWorkflowContext, usePendingAgentPrefill } from '../hooks';
 
 function ExecutiveAssistantPage() {
   // Workflow context - for saving results back to workflow
@@ -63,6 +63,12 @@ function ExecutiveAssistantPage() {
     dueDate: '',
     priority: 'Medium',
     status: 'Pending'
+  });
+
+  const { prefill, dismiss: dismissPrefill } = usePendingAgentPrefill('executiveAssistant', (fields) => {
+    if (isHistoryView) return;
+    const title = fields.find((f) => f.field_key === 'title');
+    if (title) setNewTask((prev) => ({ ...prev, title: title.field_value }));
   });
 
   const [newPerson, setNewPerson] = useState({
@@ -292,6 +298,12 @@ function ExecutiveAssistantPage() {
       <LiveModeHint
         requireProject
         message="Choose a project above, or create one with + New Project."
+      />
+
+      <AgentPrefillBanner
+        prefill={prefill}
+        onDismiss={dismissPrefill}
+        labels={{ title: 'Task' }}
       />
 
       <div className="ea-container">
@@ -577,7 +589,7 @@ function ExecutiveAssistantPage() {
                                     {getInitials(assignedPerson.name)}
                                   </span>
                                 ) : (
-                                  <span className="unassigned-chip" title="Unassigned">—</span>
+                                  <span className="unassigned-chip" title="Unassigned">-</span>
                                 )}
                                 {task.dueDate && <span className="kanban-due">{formatDate(task.dueDate)}</span>}
                               </div>
@@ -693,8 +705,8 @@ function ExecutiveAssistantPage() {
                   </div>
                 </div>
                 <div className="inline-panel-footer">
-                  <button type="button" className="btn btn-ghost" onClick={() => setShowPersonForm(false)}>Cancel</button>
-                  <button type="button" className="btn btn-primary" onClick={handleAddPerson} disabled={!newPerson.name.trim() || !newPerson.email.trim() || isHistoryView}>
+                  <Button variant="ghost" onClick={() => setShowPersonForm(false)}>Cancel</Button>
+                  <Button variant="primary" onClick={handleAddPerson} disabled={!newPerson.name.trim() || !newPerson.email.trim() || isHistoryView}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
                       <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
                       <circle cx="8.5" cy="7" r="4" />
@@ -702,7 +714,7 @@ function ExecutiveAssistantPage() {
                       <line x1="23" y1="11" x2="17" y2="11" />
                     </svg>
                     Add Person
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}

@@ -104,7 +104,8 @@ function Login() {
         if (data.session_token) {
           localStorage.setItem('sessionToken', data.session_token);
         }
-        localStorage.setItem('firstName', data.username || data.first_name || 'User');
+        localStorage.setItem('firstName', data.first_name || data.username || 'User');
+        localStorage.setItem('lastName', data.last_name || '');
         localStorage.setItem('userEmail', values.email);
         window.dispatchEvent(new Event('authChange'));
         navigateAfterLogin(navigate);

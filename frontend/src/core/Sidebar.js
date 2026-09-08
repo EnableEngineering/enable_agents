@@ -2,8 +2,6 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { API_CONFIG } from '../config/apiConfig';
 import { authJsonHeaders } from './authHeaders';
-import { Modal, ModalTabs } from '../components/Modal';
-import { Card, CardGrid } from '../components/Card';
 import '../styles/Header.css';
 import './Sidebar.css';
 
@@ -158,47 +156,6 @@ function Sidebar() {
     }
   };
 
-  // System overview modal (tools landscape + AI-recommended agents)
-  const [showSystemModal, setShowSystemModal] = useState(false);
-  const [systemTools, setSystemTools] = useState([]);
-  const [toolsSortAsc, setToolsSortAsc] = useState(true);
-  const [selectedSystemTab, setSelectedSystemTab] = useState('tools');
-  const [recommendedAgents, setRecommendedAgents] = useState(null);
-
-  const handleSystemClick = async () => {
-    setShowSystemModal(true);
-    setRecommendedAgents(null);
-    try {
-      const toolsRes = await fetch(`${API_CONFIG.API_URL}/get_tools_landscape`, {
-        headers: authJsonHeaders(),
-      });
-      const toolsResult = await toolsRes.json();
-      const tools = Array.isArray(toolsResult.tools) ? toolsResult.tools : [];
-      setSystemTools(tools);
-
-      const storedContext = localStorage.getItem('enableAgentsBusinessContext');
-      const context = storedContext ? JSON.parse(storedContext) : {};
-
-      const payload = {
-        tools,
-        industry: context.industry || '',
-        product_service: context.productService || '',
-        role: context.role || '',
-      };
-      const agentsRes = await fetch(`${API_CONFIG.API_URL}/recommend_agents`, {
-        method: 'POST',
-        headers: authJsonHeaders(),
-        body: JSON.stringify(payload),
-      });
-      const agentsResult = await agentsRes.json();
-      const recs = agentsResult.recommendations;
-      setRecommendedAgents(recs && typeof recs === 'object' ? recs : { error: 'No recommendations found.' });
-    } catch (error) {
-      setSystemTools([]);
-      setRecommendedAgents({ error: 'Error fetching recommendations.' });
-    }
-  };
-
   return (
     <>
       <nav className="sidebar" aria-label="Primary">
@@ -220,16 +177,6 @@ function Sidebar() {
         </div>
 
         <div className="sidebar-utilities">
-          <button
-            className="sidebar-utility-button"
-            onClick={handleSystemClick}
-            aria-label="System overview"
-            title="System overview: tools & recommended agents"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>
-            <span>System</span>
-          </button>
-
           <div className="sidebar-utility-wrapper" ref={notifDropdownRef}>
             <button
               className="sidebar-utility-button"
@@ -307,198 +254,6 @@ function Sidebar() {
         </div>
       </nav>
 
-      <Modal open={showSystemModal} onClose={() => setShowSystemModal(false)} title="System Overview" size="lg">
-        <ModalTabs
-          tabs={[
-            {
-              id: 'tools',
-              label: 'Software Tools',
-              content: (
-                <div className="system-tools-content">
-                  {systemTools.length === 0 ? (
-                    <div className="system-empty-state">
-                      <p>No tools detected yet.</p>
-                      <p className="system-empty-hint">Tools will appear here after browser scan or manual import.</p>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="tools-analytics-summary">
-                        <div className="tools-analytics-item">
-                          <span className="tools-analytics-value">{systemTools.length}</span>
-                          <span className="tools-analytics-label">Total Tools</span>
-                        </div>
-                        <div className="tools-analytics-item">
-                          <span className="tools-analytics-value">{Array.from(new Set(systemTools.map((t) => t.category))).length}</span>
-                          <span className="tools-analytics-label">Categories</span>
-                        </div>
-                      </div>
-                      <div className="tools-list">
-                        <div className="tools-list-header">
-                          <span className="tools-col-name">Tool</span>
-                          <span className="tools-col-category" onClick={() => setToolsSortAsc((asc) => !asc)}>
-                            Category {toolsSortAsc ? '▲' : '▼'}
-                          </span>
-                          <span className="tools-col-desc">Description</span>
-                        </div>
-                        <div className="tools-list-body">
-                          {[...systemTools]
-                            .sort((a, b) => {
-                              if (!a.category) return 1;
-                              if (!b.category) return -1;
-                              const cmp = a.category.toLowerCase().localeCompare(b.category.toLowerCase());
-                              return toolsSortAsc ? cmp : -cmp;
-                            })
-                            .map((tool, idx) => (
-                              <div key={idx} className="tools-list-row">
-                                <span className="tools-col-name">{tool.tool_name}</span>
-                                <span className="tools-col-category">
-                                  <span className="category-badge">{tool.category}</span>
-                                </span>
-                                <span className="tools-col-desc">{tool.description}</span>
-                              </div>
-                            ))}
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-              ),
-            },
-            {
-              id: 'context',
-              label: 'Business Context',
-              content: (
-                <div className="system-context-content">
-                  {(() => {
-                    const stored = localStorage.getItem('enableAgentsBusinessContext');
-                    const ctx = stored ? JSON.parse(stored) : null;
-                    const hasContext = ctx && (ctx.industry || ctx.role || ctx.productService);
-
-                    if (!hasContext) {
-                      return (
-                        <div className="system-empty-state">
-                          <p>No business context configured yet.</p>
-                          <button
-                            className="btn btn-primary"
-                            onClick={() => { setShowSystemModal(false); navigate('/settings?tab=business'); }}
-                          >
-                            Set Up Business Context
-                          </button>
-                        </div>
-                      );
-                    }
-
-                    return (
-                      <div className="context-display">
-                        <div className="context-display-row">
-                          <span className="context-display-label">Industry</span>
-                          <span className="context-display-value">{ctx.industry || '—'}</span>
-                        </div>
-                        <div className="context-display-row">
-                          <span className="context-display-label">Role</span>
-                          <span className="context-display-value">{ctx.role || '—'}</span>
-                        </div>
-                        <div className="context-display-row">
-                          <span className="context-display-label">Company Size</span>
-                          <span className="context-display-value">{ctx.companySize || '—'}</span>
-                        </div>
-                        <div className="context-display-row">
-                          <span className="context-display-label">Product/Service</span>
-                          <span className="context-display-value">{ctx.productService || '—'}</span>
-                        </div>
-                        <button
-                          className="btn btn-secondary"
-                          onClick={() => { setShowSystemModal(false); navigate('/settings?tab=business'); }}
-                        >
-                          Edit in Settings
-                        </button>
-                      </div>
-                    );
-                  })()}
-                </div>
-              ),
-            },
-            {
-              id: 'agents',
-              label: 'Recommended Agents',
-              content: (
-                <div className="system-agents-content">
-                  {!recommendedAgents && (
-                    <div className="system-empty-state">
-                      <p>Loading recommendations...</p>
-                      <p className="system-empty-hint">Set up your business context to get personalized agent recommendations.</p>
-                    </div>
-                  )}
-                  {recommendedAgents?.error && (
-                    <div className="system-empty-state">
-                      <p>{recommendedAgents.error}</p>
-                    </div>
-                  )}
-                  {recommendedAgents && !recommendedAgents.error && (
-                    <>
-                      {recommendedAgents.recommended_tools?.length > 0 && (
-                        <div className="recommendations-section">
-                          <h4 className="recommendations-section-title">Recommended Tools</h4>
-                          <CardGrid columns="auto" gap="sm">
-                            {recommendedAgents.recommended_tools.map((tool, idx) => (
-                              <Card key={idx} padding="sm">
-                                <div className="recommendation-card-title">{tool.name || tool.tool_name}</div>
-                                {tool.description && <p className="recommendation-card-desc">{tool.description}</p>}
-                                {tool.why_recommended && <p className="recommendation-card-why">{tool.why_recommended}</p>}
-                              </Card>
-                            ))}
-                          </CardGrid>
-                        </div>
-                      )}
-                      {recommendedAgents.integration_pairs?.length > 0 && (
-                        <div className="recommendations-section">
-                          <h4 className="recommendations-section-title">Integration Opportunities</h4>
-                          <CardGrid columns="auto" gap="sm">
-                            {recommendedAgents.integration_pairs.map((pair, idx) => (
-                              <Card key={idx} padding="sm">
-                                <div className="recommendation-card-title">
-                                  {(pair.tools || pair.pair || [pair.tool_1, pair.tool_2]).filter(Boolean).join(' + ')}
-                                </div>
-                                {(pair.integration || pair.integration_description) && (
-                                  <p className="recommendation-card-desc">{pair.integration || pair.integration_description}</p>
-                                )}
-                                {pair.data_shared && <p className="recommendation-card-why">Shares: {pair.data_shared}</p>}
-                              </Card>
-                            ))}
-                          </CardGrid>
-                        </div>
-                      )}
-                      {recommendedAgents.additional_tools?.length > 0 && (
-                        <div className="recommendations-section">
-                          <h4 className="recommendations-section-title">Other Useful Tools</h4>
-                          <CardGrid columns="auto" gap="sm">
-                            {recommendedAgents.additional_tools.map((tool, idx) => (
-                              <Card key={idx} padding="sm">
-                                <div className="recommendation-card-title">{tool.name || tool.tool_name}</div>
-                                {tool.description && <p className="recommendation-card-desc">{tool.description}</p>}
-                                {tool.why_needed && <p className="recommendation-card-why">{tool.why_needed}</p>}
-                              </Card>
-                            ))}
-                          </CardGrid>
-                        </div>
-                      )}
-                      {!recommendedAgents.recommended_tools?.length &&
-                        !recommendedAgents.integration_pairs?.length &&
-                        !recommendedAgents.additional_tools?.length && (
-                          <div className="system-empty-state">
-                            <p>No recommendations found.</p>
-                          </div>
-                        )}
-                    </>
-                  )}
-                </div>
-              ),
-            },
-          ]}
-          activeTab={selectedSystemTab}
-          onTabChange={setSelectedSystemTab}
-        />
-      </Modal>
     </>
   );
 }

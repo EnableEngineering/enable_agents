@@ -1,4 +1,5 @@
 import React from 'react';
+import Button from './Button';
 import './Card.css';
 
 /**
@@ -135,15 +136,15 @@ export function ModuleCard({
       <div className="module-card-footer">
         {isReady ? (
           <>
-            <button className="btn btn-primary btn-sm" onClick={onOpen} title={`Open ${title}`}>
+            <Button variant="primary" size="sm" onClick={onOpen} title={`Open ${title}`}>
               Open agent
-            </button>
+            </Button>
             {price && <span className="module-card-price">{price}</span>}
           </>
         ) : (
-          <button className="btn btn-secondary btn-sm" disabled title="Not available yet">
+          <Button variant="secondary" size="sm" disabled title="Not available yet">
             Notify me
-          </button>
+          </Button>
         )}
       </div>
     </div>

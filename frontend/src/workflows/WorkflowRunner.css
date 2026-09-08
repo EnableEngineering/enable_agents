@@ -24,19 +24,6 @@
   color: var(--color-text-muted);
 }
 
-.loading-spinner {
-  width: 28px;
-  height: 28px;
-  border: 3px solid var(--color-border);
-  border-top-color: var(--color-accent);
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
 /* Header */
 .wf-header {
   display: flex;
@@ -84,7 +71,7 @@
 }
 
 .wf-status-pending { background: var(--color-warning-bg); color: var(--color-accent-dark); }
-.wf-status-running { background: #dbeafe; color: #2563eb; }
+.wf-status-running { background: var(--color-info-bg); color: var(--role-member); }
 .wf-status-paused { background: var(--color-background); color: var(--color-text-muted); }
 .wf-status-completed { background: var(--color-success-bg); color: var(--color-success-text); }
 
@@ -245,7 +232,7 @@
 }
 
 .wf-stage-current {
-  background: #2563eb;
+  background: var(--role-member);
   color: white;
   font-size: var(--text-body);
   position: relative;
@@ -259,7 +246,7 @@
   right: 0;
   bottom: 0;
   border-radius: 50%;
-  background: #2563eb;
+  background: var(--role-member);
   opacity: 0.4;
   animation: pulse 2s ease-in-out infinite;
   z-index: -1;
@@ -341,7 +328,7 @@
   gap: var(--space-1);
   font-size: var(--text-caption);
   color: var(--color-primary);
-  background: rgba(var(--color-primary-rgb, 30, 58, 95), 0.06);
+  background: rgba(var(--color-primary-rgb), 0.06);
   padding: 2px 8px;
   border-radius: var(--radius-sm);
 }
@@ -689,8 +676,8 @@
 }
 
 .wf-detail-status.current {
-  background: #dbeafe;
-  color: #2563eb;
+  background: var(--color-info-bg);
+  color: var(--role-member);
 }
 
 .wf-detail-status.pending {
@@ -757,7 +744,7 @@
 }
 
 .wf-io-badge {
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.03em;
@@ -766,8 +753,8 @@
 }
 
 .wf-io-badge-input {
-  background: #dbeafe;
-  color: #2563eb;
+  background: var(--color-info-bg);
+  color: var(--role-member);
 }
 
 .wf-io-badge-output {
@@ -935,7 +922,7 @@ a.wf-btn {
 
 .wf-outputs .wf-data-item {
   background: var(--color-success-bg);
-  border: 1px solid rgba(22, 163, 74, 0.2);
+  border: 1px solid rgba(var(--color-success-rgb), 0.2);
 }
 
 .wf-output-value {

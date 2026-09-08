@@ -41,6 +41,7 @@ export const AGENTS = {
     status: AGENT_STATUS.READY,
     price: '$29/month',
     features: ['Lead Generation', 'Competitor Analysis', 'Market Trends'],
+    nextStep: { agentKey: 'emailOutreach', reason: 'reach out to the leads you just found' },
   },
 
   salesHelper: {
@@ -53,6 +54,7 @@ export const AGENTS = {
     status: AGENT_STATUS.READY,
     price: '$45/month',
     features: ['CRM Integration', 'Lead Scoring', 'Sales Analytics'],
+    nextStep: { agentKey: 'emailOutreach', reason: 'reach out to your ranked prospects' },
   },
 
   contentMarketing: {
@@ -65,6 +67,7 @@ export const AGENTS = {
     status: AGENT_STATUS.READY,
     price: '$35/month',
     features: ['Content Generation', 'Campaign Management', 'Analytics'],
+    nextStep: { agentKey: 'emailOutreach', reason: 'send what you just generated' },
   },
 
   communityNetwork: {
@@ -77,6 +80,7 @@ export const AGENTS = {
     status: AGENT_STATUS.READY,
     price: '$25/month',
     features: ['Community Building', 'Engagement Tools', 'Network Analysis'],
+    nextStep: { agentKey: 'eventNetworking', reason: 'turn these connections into an event' },
   },
 
   eventNetworking: {
@@ -89,6 +93,7 @@ export const AGENTS = {
     status: AGENT_STATUS.READY,
     price: '$30/month',
     features: ['Attendee Matching', 'Follow-up Automation', 'Event Analytics'],
+    nextStep: { agentKey: 'emailOutreach', reason: 'send post-event follow-ups' },
   },
 
   executiveAssistant: {
@@ -101,6 +106,7 @@ export const AGENTS = {
     status: AGENT_STATUS.READY,
     price: 'Free',
     features: ['Task Management', 'WhatsApp Integration', 'Scheduling'],
+    nextStep: null,
   },
 
   dataInsights: {
@@ -113,6 +119,7 @@ export const AGENTS = {
     status: AGENT_STATUS.READY,
     price: '$49/month',
     features: ['Data Visualization', 'Predictive Analytics', 'Reports'],
+    nextStep: { agentKey: 'contentMarketing', reason: 'act on what the document revealed' },
   },
 
   emailOutreach: {
@@ -125,6 +132,7 @@ export const AGENTS = {
     status: AGENT_STATUS.READY,
     price: '$25/month',
     features: ['Email Templates', 'Bulk Sending', 'Response Tracking'],
+    nextStep: { agentKey: 'salesHelper', reason: 'track responses and follow up' },
   },
 
   supplyChainAudit: {
@@ -137,6 +145,7 @@ export const AGENTS = {
     status: AGENT_STATUS.READY,
     price: '$40/month',
     features: ['Supplier Audits', 'Compliance Scoring', 'Qualification Tracking'],
+    nextStep: { agentKey: 'executiveAssistant', reason: 'track follow-up tasks from the audit' },
   },
 
   // Hidden - placeholder only
@@ -182,6 +191,7 @@ export const AGENTS = {
     status: AGENT_STATUS.READY,
     price: '$40/month',
     features: ['Customer Support', 'Lead Qualification', 'Multi-channel'],
+    nextStep: null,
   },
 };
 

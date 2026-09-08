@@ -65,7 +65,7 @@
 }
 
 .spinner-white .spinner-track {
-  stroke: rgba(255, 255, 255, 0.2);
+  stroke: rgba(var(--color-white-rgb), 0.2);
 }
 
 /* Button spinner */
@@ -90,7 +90,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(var(--color-white-rgb), 0.9);
   z-index: var(--z-modal);
   animation: fade-in var(--transition-fast);
 }

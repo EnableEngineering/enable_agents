@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import './Usage.css';
 import { authOptionalHeaders } from '../core/authHeaders';
 import { API_CONFIG } from '../config/apiConfig';
+import { Spinner } from '../components';
 
 const DAY_OPTIONS = [7, 30, 90];
 
@@ -201,10 +202,10 @@ function Usage() {
           </select>
         </header>
 
-        <div className="usage-tabs">
-          <button className={`usage-tab ${tab === 'me' ? 'active' : ''}`} onClick={() => setTab('me')}>My usage</button>
-          <button className={`usage-tab ${tab === 'project' ? 'active' : ''}`} onClick={() => setTab('project')}>By project</button>
-          <button className={`usage-tab ${tab === 'team' ? 'active' : ''}`} onClick={() => setTab('team')}>Team</button>
+        <div className="module-tabs">
+          <button className={`module-tab ${tab === 'me' ? 'module-tab--active' : ''}`} onClick={() => setTab('me')}>My usage</button>
+          <button className={`module-tab ${tab === 'project' ? 'module-tab--active' : ''}`} onClick={() => setTab('project')}>By project</button>
+          <button className={`module-tab ${tab === 'team' ? 'module-tab--active' : ''}`} onClick={() => setTab('team')}>Team</button>
         </div>
 
         {tab === 'project' && (
@@ -222,7 +223,7 @@ function Usage() {
         )}
 
         {loading ? (
-          <div className="loading">Loading...</div>
+          <div className="loading"><Spinner size="lg" /></div>
         ) : error ? (
           <div className="usage-card-section usage-error">
             <p>{error}</p>

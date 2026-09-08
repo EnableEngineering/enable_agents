@@ -42,7 +42,7 @@
 
 .chatroute-bubble.user {
   background: var(--color-primary);
-  color: #fff;
+  color: var(--color-text-inverse);
   border-radius: 16px 16px 4px 16px;
 }
 
@@ -53,21 +53,6 @@
   border-radius: 16px 16px 16px 4px;
 }
 
-.chatroute-thinking {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.chatroute-dots span {
-  animation: chatroute-blink 1.4s infinite both;
-}
-.chatroute-dots span:nth-child(2) { animation-delay: 0.2s; }
-.chatroute-dots span:nth-child(3) { animation-delay: 0.4s; }
-@keyframes chatroute-blink {
-  0%, 80%, 100% { opacity: 0.2; }
-  40% { opacity: 1; }
-}
 
 .chatroute-project-picker {
   max-width: 78%;
@@ -93,15 +78,16 @@
   background: var(--color-surface-alt);
   color: var(--color-text-muted);
   font-size: var(--text-caption);
-  font-weight: 600;
+  font-weight: var(--font-semibold);
   cursor: pointer;
   font-family: inherit;
+  white-space: nowrap;
 }
 
 .chatroute-project-tabs button.active {
   background: var(--color-primary);
   border-color: var(--color-primary);
-  color: #fff;
+  color: var(--color-text-inverse);
 }
 
 .chatroute-project-picker select,
@@ -117,10 +103,21 @@
   box-sizing: border-box;
 }
 
-.chatroute-project-confirmed {
-  font-size: var(--text-caption);
-  font-weight: 600;
+.chatroute-project-confirmed-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 78%;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: var(--color-success-bg);
   color: var(--color-success-text);
+  font-size: var(--text-caption);
+  font-weight: var(--font-semibold);
+}
+
+.chatroute-project-confirmed-chip svg {
+  flex-shrink: 0;
 }
 
 .chatroute-recap-block {
@@ -133,7 +130,7 @@
 
 .chatroute-recap-fields {
   background: var(--color-background-subtle);
-  border: 1px dashed var(--color-border-strong, var(--color-border));
+  border: 1px dashed var(--color-border);
   border-radius: var(--radius-lg);
   padding: 12px 16px;
   display: flex;
@@ -155,7 +152,7 @@
 
 .chatroute-recap-value {
   color: var(--color-text);
-  font-weight: 600;
+  font-weight: var(--font-semibold);
 }
 
 .chatroute-recap-actions {
@@ -165,7 +162,7 @@
 
 .chatroute-btn-ghost {
   font-size: var(--text-caption);
-  font-weight: 600;
+  font-weight: var(--font-semibold);
   color: var(--color-text);
   background: var(--color-surface);
   border: 1.5px solid var(--color-border);
@@ -177,7 +174,7 @@
 
 .chatroute-btn-confirm {
   font-size: var(--text-caption);
-  font-weight: 600;
+  font-weight: var(--font-semibold);
   color: var(--color-success-text);
   background: var(--color-success-bg);
   border: none;
@@ -193,7 +190,7 @@
 
 .chatroute-card {
   background: var(--color-surface);
-  border: 1.5px solid var(--color-border-strong, var(--color-border));
+  border: 1.5px solid var(--color-border);
   border-radius: 16px;
   padding: 22px;
 }
@@ -207,7 +204,7 @@
 
 .chatroute-card-kicker {
   font-size: var(--text-caption);
-  font-weight: 600;
+  font-weight: var(--font-semibold);
   color: var(--color-text-subtle);
   text-transform: uppercase;
   letter-spacing: 0.03em;
@@ -215,14 +212,14 @@
 
 .chatroute-card-stages {
   font-size: var(--text-caption);
-  font-weight: 600;
+  font-weight: var(--font-semibold);
   color: var(--color-accent);
 }
 
 .chatroute-card-title {
   font-family: var(--font-display);
   font-size: var(--text-page-title);
-  font-weight: 600;
+  font-weight: var(--font-semibold);
   color: var(--color-primary);
   margin: 4px 0 14px;
 }
@@ -244,9 +241,9 @@
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: rgba(30, 58, 95, 0.08);
+  background: rgba(var(--color-primary-rgb), 0.08);
   color: var(--color-primary);
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: 700;
   display: flex;
   align-items: center;
@@ -278,11 +275,11 @@
   padding: 10px 18px;
   font-family: var(--font-body);
   font-size: var(--text-body);
-  font-weight: 600;
+  font-weight: var(--font-semibold);
   border-radius: var(--radius-md);
   border: none;
   cursor: pointer;
-  color: #fff;
+  color: var(--color-text-inverse);
   background: var(--gradient-accent);
 }
 
@@ -323,7 +320,7 @@
   border: none;
   padding: 0;
   color: var(--color-accent);
-  font-weight: 600;
+  font-weight: var(--font-semibold);
   font-size: inherit;
   cursor: pointer;
   font-family: inherit;

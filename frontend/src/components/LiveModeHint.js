@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import Button from './Button';
 import './LiveModeHint.css';
 
 const DISMISS_KEY = 'enableAgentsLiveHintDismissed';
@@ -27,9 +28,9 @@ function LiveModeHint({ message, requireProject = false }) {
       <div className="live-mode-hint" role="status">
         <p>{message || 'Select a project to get started'}</p>
         <div className="live-mode-hint-actions">
-          <button type="button" className="btn btn-ghost btn-sm" onClick={handleDismiss}>
+          <Button variant="ghost" size="sm" onClick={handleDismiss} aria-label="Dismiss">
             ✕
-          </button>
+          </Button>
         </div>
       </div>
     </div>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import BackButton from '../components/BackButton';
-import { LiveModeHint, AgentOutcomesStrip, ProjectSelector, ProjectGate, EmptyState } from '../components';
+import { LiveModeHint, AgentOutcomesStrip, ProjectSelector, ProjectGate, EmptyState, Spinner } from '../components';
 import '../styles/RequirementsGathering.css';
 import { API_CONFIG } from '../config/apiConfig';
 import { formatDate, formatDateTime } from '../utils/dateFormat';
@@ -166,11 +166,11 @@ function CampaignDashboard() {
           message="Choose a project above, or create one with + New Project."
         />
 
-        <ProjectGate agentLabel="Campaign data">
+        <ProjectGate agentLabel="Campaign">
         <div className="main-workspace-area">
-          <div className="tabs-container">
-            <button type="button" className="workspace-tab" onClick={() => navigate('/market-research')}>Market Research</button>
-            <button type="button" className="workspace-tab active-tab">Campaign Dashboard</button>
+          <div className="module-tabs">
+            <button type="button" className="module-tab" onClick={() => navigate('/market-research')}>Market Research</button>
+            <button type="button" className="module-tab module-tab--active">Campaign Dashboard</button>
           </div>
 
           <div className="workspace-content-box">
@@ -180,7 +180,7 @@ function CampaignDashboard() {
                   <h2 className="section-title">Campaign Performance</h2>
                   <p className="section-subtitle">Reply data auto-refreshes every 30 seconds.</p>
                   {isLoading ? (
-                    <p>Loading...</p>
+                    <Spinner size="md" />
                   ) : loadError ? (
                     <p className="error-text">{loadError}</p>
                   ) : campaigns.length === 0 ? (

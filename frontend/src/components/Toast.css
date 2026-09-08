@@ -14,6 +14,22 @@
   gap: var(--space-2);
   max-width: 400px;
   pointer-events: none;
+  transition: right var(--transition-normal);
+}
+
+/* The AI Assistant panel docks at the right edge too (see AiAssistantPanel.js,
+   which toggles this class on <body>) - without this offset every toast
+   renders on top of the panel's header instead of beside it. */
+body.ai-panel-open .toast-container {
+  right: calc(var(--ai-panel-width, 360px) + var(--space-4));
+}
+
+@media (max-width: 1024px) {
+  /* Panel becomes a full-viewport overlay below this breakpoint (see
+     AiAssistantPanel.css) - offsetting would push toasts off-screen. */
+  body.ai-panel-open .toast-container {
+    right: var(--space-4);
+  }
 }
 
 /* Individual toast */

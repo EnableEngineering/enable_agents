@@ -1,8 +1,6 @@
 import React from 'react';
 import { AgentPlaceholderShell } from '../components';
 
-const parameterNames = Array.from({ length: 11 }, (_, i) => `Parameter ${i + 1}`);
-
 function InvestAgent() {
   return (
     <AgentPlaceholderShell
@@ -18,14 +16,6 @@ function InvestAgent() {
         <span className="agent-placeholder-badge">Coming soon</span>
         <h2>Invest Agent Dashboard</h2>
         <p>Parameter-driven financial instrument assessment is under development. Check back for scoring models and portfolio tools.</p>
-        <div className="parameters-grid">
-          {parameterNames.map((param, idx) => (
-            <div className="parameter-card" key={idx}>
-              <div className="parameter-label">{param}</div>
-              <input className="parameter-input" type="text" placeholder="Enter value..." disabled />
-            </div>
-          ))}
-        </div>
       </div>
     </AgentPlaceholderShell>
   );

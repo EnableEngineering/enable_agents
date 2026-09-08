@@ -364,39 +364,8 @@
 }
 
 
-/* Module Tabs - Pill style */
-.module-tabs {
-  display: flex;
-  gap: var(--space-2);
-  padding: var(--space-1);
-  background: var(--color-background-subtle);
-  border-radius: var(--radius-lg);
-  width: fit-content;
-}
-
-.module-tab {
-  padding: var(--space-2) var(--space-5);
-  border: none;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--color-text-muted);
-  font-size: var(--text-body);
-  font-weight: var(--font-medium);
-  font-family: var(--font-body);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  white-space: nowrap;
-}
-
-.module-tab:hover {
-  color: var(--color-text);
-}
-
-.module-tab--active {
-  background: var(--color-surface);
-  color: var(--color-text);
-  box-shadow: var(--shadow-sm);
-}
+/* Module Tabs - .module-tabs/.module-tab/.module-tab--active are the
+   shared pattern from tokens.css - don't redefine them here. */
 
 .module-tab--business.module-tab--active {
   color: var(--color-accent);
@@ -421,7 +390,7 @@
   height: 32px;
   cursor: pointer;
   transition: transform 0.2s ease;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+  filter: drop-shadow(0 2px 4px rgba(var(--color-primary-rgb), 0.1));
 }
 
 .top-right-icons .icon:hover {
@@ -729,7 +698,7 @@
 
 .try-button:hover:not(:disabled) {
   color: var(--color-accent);
-  background: rgba(194, 65, 12, 0.08);
+  background: rgba(var(--color-accent-rgb), 0.08);
 }
 
 .try-button:disabled {
@@ -910,7 +879,7 @@
   display: flex;
   align-items: center;
   padding: 0 3px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.10);
+  box-shadow: 0 2px 6px rgba(var(--color-primary-rgb), 0.10);
   border: 1.5px solid var(--color-primary);
 }
 
@@ -1000,8 +969,8 @@
 }
 
 .modern-toggle-button.active .toggle-circle {
-  background: #fff;
-  box-shadow: 0 0 6px rgba(255, 255, 255, 0.5);
+  background: var(--color-text-inverse);
+  box-shadow: 0 0 6px rgba(var(--color-white-rgb), 0.5);
 }
 
 .toggle-label {
@@ -1075,55 +1044,55 @@
 .process-map-visual {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4, 16px);
+  gap: var(--space-4);
 }
 
 .process-map-info p {
-  margin: 0 0 var(--space-2, 8px);
-  color: var(--color-text, #1f2937);
+  margin: 0 0 var(--space-2);
+  color: var(--color-text);
 }
 
 .process-map-info strong {
-  color: var(--color-text-subtle, #64748b);
+  color: var(--color-text-subtle);
   font-weight: 500;
 }
 
 .process-map-steps {
-  margin-top: var(--space-3, 12px);
+  margin-top: var(--space-3);
 }
 
 .process-map-steps h4 {
-  margin: 0 0 var(--space-3, 12px);
+  margin: 0 0 var(--space-3);
   font-size: var(--text-heading);
   font-weight: 600;
-  color: var(--color-text, #1f2937);
+  color: var(--color-text);
 }
 
 .process-map-steps ol {
   margin: 0;
-  padding-left: var(--space-5, 20px);
+  padding-left: var(--space-5);
 }
 
 .process-map-steps li {
-  margin-bottom: var(--space-2, 8px);
+  margin-bottom: var(--space-2);
   line-height: 1.5;
-  color: var(--color-text, #1f2937);
+  color: var(--color-text);
 }
 
 .process-step-owner {
-  margin-left: var(--space-2, 8px);
-  color: var(--color-text-subtle, #64748b);
+  margin-left: var(--space-2);
+  color: var(--color-text-subtle);
   font-size: var(--text-body);
 }
 
 .process-map-json {
-  background: var(--color-background, #f8fafc);
-  border: 1px solid var(--color-border, #e2e8f0);
-  border-radius: var(--radius-md, 8px);
-  padding: var(--space-4, 16px);
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
   margin: 0;
   font-size: var(--text-body);
-  color: var(--color-text, #334155);
+  color: var(--color-text);
   overflow: auto;
   max-height: 320px;
 }

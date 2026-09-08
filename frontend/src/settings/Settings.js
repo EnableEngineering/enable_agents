@@ -5,6 +5,7 @@ import { showToast } from '../core/toast';
 import { showConfirm } from '../components/ConfirmDialog';
 import FormField from '../components/FormField';
 import Skeleton from '../components/SkeletonLoader';
+import Button from '../components/Button';
 import { authJsonHeaders, authOptionalHeaders } from '../core/authHeaders';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
@@ -23,6 +24,13 @@ const FRONTEND_TABS = {
     label: 'Business Context',
     icon: 'briefcase',
     description: 'Your industry, role, and business information',
+    isFrontend: true,
+  },
+  notifications: {
+    id: 'notifications',
+    label: 'Notifications',
+    icon: 'bell',
+    description: 'Recent activity and alerts',
     isFrontend: true,
   },
 };
@@ -116,6 +124,12 @@ const Icons = {
       <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
     </svg>
   ),
+  bell: () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+      <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+    </svg>
+  ),
   Logout: () => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
@@ -129,6 +143,35 @@ const Icons = {
       <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
       <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
       <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+    </svg>
+  ),
+  google: () => (
+    <svg viewBox="0 0 24 24" fill="currentColor">
+      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+    </svg>
+  ),
+  bing: () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="11" cy="11" r="7"/>
+      <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+    </svg>
+  ),
+  hubspot: () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="5.5" r="2.5"/>
+      <circle cx="5.5" cy="17" r="2.5"/>
+      <circle cx="18.5" cy="17" r="2.5"/>
+      <path d="M12 8v3.5M9.2 15.3L10.6 12.8M14.8 15.3L13.4 12.8"/>
+    </svg>
+  ),
+  linkedin: () => (
+    <svg viewBox="0 0 24 24" fill="currentColor">
+      <rect x="2" y="9" width="4" height="12"/>
+      <circle cx="4" cy="4" r="2.2"/>
+      <path d="M9 9h4v2c.7-1.4 2.2-2.3 4-2.3 3 0 5 2 5 5.6V21h-4v-5.8c0-1.6-.6-2.7-2-2.7-1.1 0-1.8.8-2.1 1.5-.1.3-.1.7-.1 1.1V21H9V9z"/>
     </svg>
   ),
 };
@@ -147,6 +190,59 @@ function Settings() {
   // Support ?tab=account URL param (for Header dropdown link)
   const initialTab = searchParams.get('tab') || 'account';
   const [activeCategory, setActiveCategory] = useState(initialTab);
+
+  // Notifications tab state
+  const [notifications, setNotifications] = useState([]);
+  const [notifLoading, setNotifLoading] = useState(true);
+  const [notifUnreadCount, setNotifUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (activeCategory !== 'notifications') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/notifications?unread_only=false`, {
+          headers: authJsonHeaders(),
+        });
+        const data = await res.json();
+        if (!cancelled && data.success) {
+          setNotifications(data.notifications || []);
+          setNotifUnreadCount(data.unread_count || 0);
+        }
+      } catch (err) {
+        console.error('Error fetching notifications:', err);
+      } finally {
+        if (!cancelled) setNotifLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [activeCategory]);
+
+  const handleNotifMarkRead = async (notifId) => {
+    try {
+      await fetch(`${API_URL}/api/notifications/${notifId}/read`, {
+        method: 'POST',
+        headers: authJsonHeaders(),
+      });
+      setNotifications((prev) => prev.map((n) => (n.id === notifId ? { ...n, is_read: true } : n)));
+      setNotifUnreadCount((prev) => Math.max(0, prev - 1));
+    } catch (err) {
+      console.error('Error marking notification read:', err);
+    }
+  };
+
+  const handleNotifMarkAllRead = async () => {
+    try {
+      await fetch(`${API_URL}/api/notifications/read-all`, {
+        method: 'POST',
+        headers: authJsonHeaders(),
+      });
+      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+      setNotifUnreadCount(0);
+    } catch (err) {
+      console.error('Error marking all notifications read:', err);
+    }
+  };
 
   // Account state
   const userEmail = localStorage.getItem('userEmail') || '';
@@ -363,20 +459,21 @@ function Settings() {
               <span className="status-badge success">
                 <Icons.Check /> Connected
               </span>
-              <button
-                className="btn-secondary btn-small"
+              <Button
+                variant="secondary"
+                className="btn-small"
                 onClick={() => deleteSetting(category, key)}
               >
                 Disconnect
-              </button>
+              </Button>
             </div>
           ) : (
-            <button
-              className="btn-primary"
+            <Button
+              variant="primary"
               onClick={() => window.location.href = `${API_URL}/api/connectors/${setting.provider}/auth-url?redirect_uri=${window.location.origin}/settings`}
             >
               Connect {setting.label}
-            </button>
+            </Button>
           )}
         </div>
       );
@@ -667,13 +764,13 @@ function Settings() {
               </div>
 
               <div className="section-actions">
-                <button className="btn-primary" onClick={saveAccountInfo}>
+                <Button variant="primary" onClick={saveAccountInfo}>
                   Save Changes
-                </button>
-                <button className="btn-danger" onClick={handleSignOut}>
+                </Button>
+                <Button variant="danger" onClick={handleSignOut}>
                   <Icons.Logout />
                   Sign Out
-                </button>
+                </Button>
               </div>
             </section>
           )}
@@ -779,10 +876,52 @@ function Settings() {
               </div>
 
               <div className="section-actions">
-                <button className="btn-primary" onClick={saveBusinessContext}>
+                <Button variant="primary" onClick={saveBusinessContext}>
                   Save Business Context
-                </button>
+                </Button>
               </div>
+            </section>
+          )}
+
+          {activeCategory === 'notifications' && (
+            <section className="settings-section">
+              <div className="section-header">
+                <div className="section-icon">{getIcon('bell')}</div>
+                <div>
+                  <h2>Notifications</h2>
+                  <p>Recent activity and alerts</p>
+                </div>
+                {notifUnreadCount > 0 && (
+                  <button className="sidebar-notif-mark-all" style={{ marginLeft: 'auto' }} onClick={handleNotifMarkAllRead}>
+                    Mark all read
+                  </button>
+                )}
+              </div>
+
+              {notifLoading ? (
+                <Skeleton.Paragraph lines={3} />
+              ) : notifications.length === 0 ? (
+                <div className="sidebar-notif-empty">No notifications</div>
+              ) : (
+                <div className="sidebar-notif-list" style={{ maxHeight: 'none' }}>
+                  {notifications.map((notif) => (
+                    <div
+                      key={notif.id}
+                      className={`sidebar-notif-item ${notif.is_read ? '' : 'unread'}`}
+                      onClick={() => {
+                        if (!notif.is_read) handleNotifMarkRead(notif.id);
+                        if (notif.link) navigate(notif.link);
+                      }}
+                    >
+                      <div className="sidebar-notif-item-title">{notif.title}</div>
+                      <div className="sidebar-notif-item-message">{notif.message}</div>
+                      <div className="sidebar-notif-item-time">
+                        {new Date(notif.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </section>
           )}
 
@@ -809,28 +948,28 @@ function Settings() {
                       <div className="connector-card-action">
                         {setting.type === 'oauth' ? (
                           setting.configured ? (
-                            <button
-                              className="btn-secondary"
+                            <Button
+                              variant="secondary"
                               onClick={() => deleteSetting(activeCategory, key)}
                             >
                               Disconnect
-                            </button>
+                            </Button>
                           ) : (
-                            <button
-                              className="btn-primary"
+                            <Button
+                              variant="primary"
                               onClick={() => window.location.href = `${API_URL}/api/connectors/${setting.provider}/auth-url?redirect_uri=${window.location.origin}/settings`}
                             >
                               Connect
-                            </button>
+                            </Button>
                           )
                         ) : (
                           setting.configured ? (
-                            <button
-                              className="btn-secondary"
+                            <Button
+                              variant="secondary"
                               onClick={() => deleteSetting(activeCategory, key)}
                             >
                               Remove
-                            </button>
+                            </Button>
                           ) : (
                             renderSettingInput(activeCategory, key, setting)
                           )
@@ -855,14 +994,17 @@ function Settings() {
                         <div className="setting-description">
                           {setting.description}
                           {setting.help_url && (
-                            <a
-                              href={setting.help_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="help-link"
-                            >
-                              Get connection key <Icons.ExternalLink />
-                            </a>
+                            <>
+                              {' '}
+                              <a
+                                href={setting.help_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="help-link"
+                              >
+                                Get connection key <Icons.ExternalLink />
+                              </a>
+                            </>
                           )}
                         </div>
                       </div>

@@ -76,33 +76,9 @@
   background-position: right 10px center;
 }
 
-/* Tabs */
-.usage-tabs {
-  display: flex;
-  gap: 4px;
+/* .module-tabs/.module-tab are the shared pattern from tokens.css */
+.usage-page .module-tabs {
   margin-bottom: 16px;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.usage-tab {
-  padding: 10px 16px;
-  background: transparent;
-  border: none;
-  border-bottom: 2px solid transparent;
-  font-size: var(--text-body);
-  font-weight: 500;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.usage-tab:hover {
-  color: var(--color-text);
-}
-
-.usage-tab.active {
-  color: var(--color-accent);
-  border-bottom-color: var(--color-accent);
 }
 
 .usage-project-picker {
@@ -176,7 +152,7 @@
 }
 
 .usage-error {
-  color: var(--color-error, #dc2626);
+  color: var(--color-error, var(--color-error));
 }
 
 .usage-breakdown-list {
@@ -255,7 +231,7 @@
 }
 
 .usage-budget-amounts.over {
-  color: var(--color-error, #dc2626);
+  color: var(--color-error, var(--color-error));
   font-weight: 600;
 }
 
@@ -264,7 +240,7 @@
 }
 
 .usage-breakdown-bar-fill.over {
-  background: var(--color-error, #dc2626);
+  background: var(--color-error, var(--color-error));
 }
 
 /* Responsive */

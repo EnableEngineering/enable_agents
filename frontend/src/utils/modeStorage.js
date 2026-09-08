@@ -100,14 +100,23 @@ export const useModeStorage = (agentKey) => {
   };
 };
 
-// Agent key constants for consistency
+// Agent key constants for consistency. Values must match the `id`s in
+// frontend/src/config/agentsConfig.js's AGENTS registry (that file is the
+// canonical source per its own docstring) - CHATBOT was drifted to
+// 'chatbot' instead of 'aiChatbot' and several ready agents were missing
+// entirely. Neither the drifted value nor the gap had a live consumer
+// (nothing currently reads AGENT_KEYS.CHATBOT), so this is a safe,
+// no-blast-radius correction, not a behavior change.
 export const AGENT_KEYS = {
   MARKET_RESEARCH: 'marketResearch',
-  CHATBOT: 'chatbot',
+  CHATBOT: 'aiChatbot',
   CAMPAIGNS: 'campaigns',
   SALES_HELPER: 'salesHelper',
   EXECUTIVE_ASSISTANT: 'executiveAssistant',
   CONTENT_MARKETING: 'contentMarketing',
   COMMUNITY_NETWORK: 'communityNetwork',
   DATA_INSIGHTS: 'dataInsights',
+  EVENT_NETWORKING: 'eventNetworking',
+  EMAIL_OUTREACH: 'emailOutreach',
+  SUPPLY_CHAIN_AUDIT: 'supplyChainAudit',
 };

@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { BackButton, ProjectGate, ProjectSelector, WorkflowExecutionBanner, WorkflowContextCard } from '../components';
+import { AgentOutcomesStrip, AgentPrefillBanner, BackButton, ProjectGate, ProjectSelector, WorkflowExecutionBanner, WorkflowContextCard, EmptyState, Spinner, Modal, Button } from '../components';
 import { API_CONFIG } from '../config/apiConfig';
 import { authJsonHeaders } from '../core/authHeaders';
 import { showToast } from '../core/toast';
-import { useWorkflowContext } from '../hooks';
+import { useWorkflowContext, usePendingAgentPrefill, notifyAgentCompleted } from '../hooks';
 import { useSelectedProjectId } from '../hooks/useSelectedProjectId';
 import './SupplyChainAgent.css';
 
@@ -26,6 +26,13 @@ function SupplyChainAgent() {
   const [showAuditModal, setShowAuditModal] = useState(false);
   const [showAddSupplierModal, setShowAddSupplierModal] = useState(false);
   const [newSupplier, setNewSupplier] = useState({ name: '', location: '', capacity: '', certifications: '', capabilities: '' });
+
+  const { prefill, dismiss: dismissPrefill } = usePendingAgentPrefill('supplyChainAudit', (fields) => {
+    if (isHistoryView) return;
+    const map = Object.fromEntries(fields.map((f) => [f.field_key, f.field_value]));
+    setNewSupplier((prev) => ({ ...prev, ...map }));
+    setShowAddSupplierModal(true);
+  });
   const [isLoadingSuppliers, setIsLoadingSuppliers] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -202,6 +209,9 @@ function SupplyChainAgent() {
 
     setShowAuditModal(false);
     showToast(`Audit completed: ${auditResult === 'passed' ? 'Passed' : 'Failed'} (${totalScore}%)`, auditResult === 'passed' ? 'success' : 'warning');
+    notifyAgentCompleted('supplyChainAudit', `Completed audit for ${selectedSupplier.name} (${totalScore}%)`, [
+      { field_key: 'title', field_value: `Follow up on ${selectedSupplier.name} audit (${totalScore}%)` },
+    ]);
   };
 
   const getStatusBadge = (status) => {
@@ -237,6 +247,20 @@ function SupplyChainAgent() {
         </div>
       </div>
 
+      <AgentOutcomesStrip
+        items={[
+          { iconSrc: '/assets/icons/checklist.png', title: 'Capability audits', description: 'Score suppliers against your qualification criteria.' },
+          { iconSrc: '/assets/icons/data-security.png', title: 'Compliance checks', description: 'Flag risk and compliance gaps before you commit.' },
+          { iconSrc: '/assets/icons/reports.png', title: 'Audit reports', description: 'Exportable summaries for procurement decisions.' },
+        ]}
+      />
+
+      <AgentPrefillBanner
+        prefill={prefill}
+        onDismiss={dismissPrefill}
+        labels={{ name: 'Name', location: 'Location', capacity: 'Capacity', certifications: 'Certifications', capabilities: 'Capabilities' }}
+      />
+
       <ProjectGate agentLabel="Supply Chain workspace">
         <div className="supply-chain-page">
           <WorkflowExecutionBanner />
@@ -269,17 +293,20 @@ function SupplyChainAgent() {
                 <img src="/assets/icons/supply-chain-management.png" alt="" />
                 Supplier Qualification Status
               </h2>
-              <button className="btn btn-primary btn-sm" onClick={() => setShowAddSupplierModal(true)}>
+              <Button variant="primary" size="sm" onClick={() => setShowAddSupplierModal(true)}>
                 + Add Supplier
-              </button>
+              </Button>
             </div>
 
             {isLoadingSuppliers ? (
-              <p className="text-muted">Loading suppliers...</p>
+              <Spinner size="md" />
             ) : suppliers.length === 0 ? (
-              <div className="empty-state-compact">
-                <p>No suppliers yet. Add one to start tracking qualification audits.</p>
-              </div>
+              <EmptyState
+                iconType="data"
+                title="No suppliers yet"
+                description="Add one to start tracking qualification audits."
+                size="sm"
+              />
             ) : (
             <div className="suppliers-grid">
               {suppliers.map(supplier => {
@@ -326,19 +353,19 @@ function SupplyChainAgent() {
 
                     <div className="supplier-actions">
                       {supplier.auditStatus === 'pending' && (
-                        <button className="btn btn-primary btn-sm" onClick={() => handleStartAudit(supplier)}>
+                        <Button variant="primary" size="sm" onClick={() => handleStartAudit(supplier)}>
                           Start Audit
-                        </button>
+                        </Button>
                       )}
                       {supplier.auditStatus === 'scheduled' && (
-                        <button className="btn btn-primary btn-sm" onClick={() => handleStartAudit(supplier)}>
+                        <Button variant="primary" size="sm" onClick={() => handleStartAudit(supplier)}>
                           Conduct Audit
-                        </button>
+                        </Button>
                       )}
                       {['passed', 'failed'].includes(supplier.auditStatus) && (
-                        <button className="btn btn-secondary btn-sm" onClick={() => handleStartAudit(supplier)}>
+                        <Button variant="secondary" size="sm" onClick={() => handleStartAudit(supplier)}>
                           Re-audit
-                        </button>
+                        </Button>
                       )}
                     </div>
                   </div>
@@ -349,140 +376,132 @@ function SupplyChainAgent() {
           </div>
 
           {/* Add Supplier Modal */}
-          {showAddSupplierModal && (
-            <div className="modal-overlay" onClick={() => setShowAddSupplierModal(false)}>
-              <div className="audit-modal" onClick={e => e.stopPropagation()}>
-                <div className="modal-header">
-                  <h2>Add Supplier</h2>
-                  <button className="modal-close" onClick={() => setShowAddSupplierModal(false)}>×</button>
-                </div>
-                <div className="modal-body">
-                  <div className="criteria-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '4px' }}>
-                    <label>Supplier Name *</label>
-                    <input
-                      type="text"
-                      className="criteria-score"
-                      style={{ width: '100%' }}
-                      value={newSupplier.name}
-                      onChange={(e) => setNewSupplier(prev => ({ ...prev, name: e.target.value }))}
-                      placeholder="e.g., Precision Components Ltd"
-                    />
-                  </div>
-                  <div className="criteria-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '4px' }}>
-                    <label>Location</label>
-                    <input
-                      type="text"
-                      className="criteria-score"
-                      style={{ width: '100%' }}
-                      value={newSupplier.location}
-                      onChange={(e) => setNewSupplier(prev => ({ ...prev, location: e.target.value }))}
-                      placeholder="e.g., Pune, India"
-                    />
-                  </div>
-                  <div className="criteria-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '4px' }}>
-                    <label>Capacity</label>
-                    <input
-                      type="text"
-                      className="criteria-score"
-                      style={{ width: '100%' }}
-                      value={newSupplier.capacity}
-                      onChange={(e) => setNewSupplier(prev => ({ ...prev, capacity: e.target.value }))}
-                      placeholder="e.g., 50,000 units/month"
-                    />
-                  </div>
-                  <div className="criteria-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '4px' }}>
-                    <label>Certifications (comma separated)</label>
-                    <input
-                      type="text"
-                      className="criteria-score"
-                      style={{ width: '100%' }}
-                      value={newSupplier.certifications}
-                      onChange={(e) => setNewSupplier(prev => ({ ...prev, certifications: e.target.value }))}
-                      placeholder="e.g., ISO 9001, IATF 16949"
-                    />
-                  </div>
-                  <div className="criteria-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '4px' }}>
-                    <label>Capabilities (comma separated)</label>
-                    <input
-                      type="text"
-                      className="criteria-score"
-                      style={{ width: '100%' }}
-                      value={newSupplier.capabilities}
-                      onChange={(e) => setNewSupplier(prev => ({ ...prev, capabilities: e.target.value }))}
-                      placeholder="e.g., CNC Machining, Assembly"
-                    />
-                  </div>
-                </div>
-                <div className="modal-footer">
-                  <button className="btn btn-secondary" onClick={() => setShowAddSupplierModal(false)}>Cancel</button>
-                  <button className="btn btn-primary" onClick={handleAddSupplier}>Add Supplier</button>
-                </div>
-              </div>
+          <Modal
+            open={showAddSupplierModal}
+            onClose={() => setShowAddSupplierModal(false)}
+            title="Add Supplier"
+            size="md"
+            footer={
+              <>
+                <Button variant="secondary" onClick={() => setShowAddSupplierModal(false)}>Cancel</Button>
+                <Button variant="primary" onClick={handleAddSupplier}>Add Supplier</Button>
+              </>
+            }
+          >
+            <div className="criteria-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '4px' }}>
+              <label>Supplier Name *</label>
+              <input
+                type="text"
+                className="criteria-score"
+                style={{ width: '100%' }}
+                value={newSupplier.name}
+                onChange={(e) => setNewSupplier(prev => ({ ...prev, name: e.target.value }))}
+                placeholder="e.g., Precision Components Ltd"
+              />
             </div>
-          )}
+            <div className="criteria-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '4px' }}>
+              <label>Location</label>
+              <input
+                type="text"
+                className="criteria-score"
+                style={{ width: '100%' }}
+                value={newSupplier.location}
+                onChange={(e) => setNewSupplier(prev => ({ ...prev, location: e.target.value }))}
+                placeholder="e.g., Pune, India"
+              />
+            </div>
+            <div className="criteria-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '4px' }}>
+              <label>Capacity</label>
+              <input
+                type="text"
+                className="criteria-score"
+                style={{ width: '100%' }}
+                value={newSupplier.capacity}
+                onChange={(e) => setNewSupplier(prev => ({ ...prev, capacity: e.target.value }))}
+                placeholder="e.g., 50,000 units/month"
+              />
+            </div>
+            <div className="criteria-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '4px' }}>
+              <label>Certifications (comma separated)</label>
+              <input
+                type="text"
+                className="criteria-score"
+                style={{ width: '100%' }}
+                value={newSupplier.certifications}
+                onChange={(e) => setNewSupplier(prev => ({ ...prev, certifications: e.target.value }))}
+                placeholder="e.g., ISO 9001, IATF 16949"
+              />
+            </div>
+            <div className="criteria-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '4px' }}>
+              <label>Capabilities (comma separated)</label>
+              <input
+                type="text"
+                className="criteria-score"
+                style={{ width: '100%' }}
+                value={newSupplier.capabilities}
+                onChange={(e) => setNewSupplier(prev => ({ ...prev, capabilities: e.target.value }))}
+                placeholder="e.g., CNC Machining, Assembly"
+              />
+            </div>
+          </Modal>
 
           {/* Audit Modal */}
-          {showAuditModal && selectedSupplier && (
-            <div className="modal-overlay" onClick={() => setShowAuditModal(false)}>
-              <div className="audit-modal" onClick={e => e.stopPropagation()}>
-                <div className="modal-header">
-                  <h2>Supplier Audit: {selectedSupplier.name}</h2>
-                  <button className="modal-close" onClick={() => setShowAuditModal(false)}>×</button>
-                </div>
+          <Modal
+            open={showAuditModal && !!selectedSupplier}
+            onClose={() => setShowAuditModal(false)}
+            title={selectedSupplier ? `Supplier Audit: ${selectedSupplier.name}` : 'Supplier Audit'}
+            size="md"
+            footer={
+              <>
+                <Button variant="secondary" onClick={() => setShowAuditModal(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={handleSubmitAudit}
+                  disabled={saving || Object.keys(auditScores).length < AUDIT_CRITERIA.length || isHistoryView}
+                >
+                  {saving ? 'Saving...' : 'Submit Audit'}
+                </Button>
+              </>
+            }
+          >
+            <p className="audit-instructions">
+              Score each criteria from 0-100. A total weighted score of 70+ is required to pass.
+            </p>
 
-                <div className="modal-body">
-                  <p className="audit-instructions">
-                    Score each criteria from 0-100. A total weighted score of 70+ is required to pass.
-                  </p>
-
-                  <div className="audit-criteria-list">
-                    {AUDIT_CRITERIA.map(criteria => (
-                      <div key={criteria.id} className="criteria-row">
-                        <div className="criteria-info">
-                          <span className="criteria-name">{criteria.name}</span>
-                          <span className="criteria-weight">Weight: {criteria.weight}%</span>
-                        </div>
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          value={auditScores[criteria.id] || ''}
-                          onChange={(e) => handleScoreChange(criteria.id, e.target.value)}
-                          placeholder="0-100"
-                          className="criteria-score"
-                        />
-                      </div>
-                    ))}
+            <div className="audit-criteria-list">
+              {AUDIT_CRITERIA.map(criteria => (
+                <div key={criteria.id} className="criteria-row">
+                  <div className="criteria-info">
+                    <span className="criteria-name">{criteria.name}</span>
+                    <span className="criteria-weight">Weight: {criteria.weight}%</span>
                   </div>
-
-                  <div className="audit-total">
-                    <span>Total Weighted Score:</span>
-                    <span className={`total-score ${calculateTotalScore() >= 70 ? 'pass' : 'fail'}`}>
-                      {calculateTotalScore()}/100
-                      {Object.keys(auditScores).length === AUDIT_CRITERIA.length && (
-                        <span className="score-result">
-                          {calculateTotalScore() >= 70 ? ' (Pass)' : ' (Fail)'}
-                        </span>
-                      )}
-                    </span>
-                  </div>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={auditScores[criteria.id] || ''}
+                    onChange={(e) => handleScoreChange(criteria.id, e.target.value)}
+                    placeholder="0-100"
+                    className="criteria-score"
+                  />
                 </div>
-
-                <div className="modal-footer">
-                  <button className="btn btn-secondary" onClick={() => setShowAuditModal(false)}>
-                    Cancel
-                  </button>
-                  <button
-                    className="btn btn-primary"
-                    onClick={handleSubmitAudit}
-                    disabled={saving || Object.keys(auditScores).length < AUDIT_CRITERIA.length || isHistoryView}
-                  >
-                    {saving ? 'Saving...' : 'Submit Audit'}
-                  </button>
-                </div>
-              </div>
+              ))}
             </div>
-          )}
+
+            <div className="audit-total">
+              <span>Total Weighted Score:</span>
+              <span className={`total-score ${calculateTotalScore() >= 70 ? 'pass' : 'fail'}`}>
+                {calculateTotalScore()}/100
+                {Object.keys(auditScores).length === AUDIT_CRITERIA.length && (
+                  <span className="score-result">
+                    {calculateTotalScore() >= 70 ? ' (Pass)' : ' (Fail)'}
+                  </span>
+                )}
+              </span>
+            </div>
+          </Modal>
         </div>
       </ProjectGate>
     </>

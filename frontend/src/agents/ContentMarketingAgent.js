@@ -1,12 +1,12 @@
 import { API_CONFIG } from '../config/apiConfig';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { BackButton, Textarea, ProjectSelector, LiveModeHint, AgentOutcomesStrip, ProjectGate, Modal } from '../components';
+import { BackButton, Textarea, ProjectSelector, LiveModeHint, AgentPrefillBanner, AgentOutcomesStrip, ProjectGate, Modal, Button, TypingIndicator } from '../components';
 import '../styles/ContentMarketingAgent.css';
 import { showToast } from '../core/toast';
 import { formatTime, getRelativeDateLabel, isSameDay } from '../utils/dateFormat';
 import { useSelectedProjectId } from '../hooks/useSelectedProjectId';
-import { useWorkflowContext } from '../hooks';
+import { useWorkflowContext, usePendingAgentPrefill, notifyAgentCompleted } from '../hooks';
 import { authJsonHeaders, authOptionalHeaders } from '../core/authHeaders';
 
 // Storage key for state persistence
@@ -45,6 +45,15 @@ function ContentMarketingAgent() {
   const [contentType, setContentType] = useState(savedState.contentType || 'post');
   const [userContext, setUserContext] = useState('');
   const [generatedContent, setGeneratedContent] = useState(null);
+
+  const { prefill, dismiss: dismissPrefill } = usePendingAgentPrefill('contentMarketing', (fields) => {
+    if (isHistoryView) return;
+    fields.forEach((f) => {
+      if (f.field_key === 'userContext') setUserContext(f.field_value);
+      if (f.field_key === 'selectedChannel') setSelectedChannel(f.field_value);
+      if (f.field_key === 'contentType') setContentType(f.field_value);
+    });
+  });
 
   const [inputMessage, setInputMessage] = useState('');
   const defaultMessages = [{
@@ -321,6 +330,10 @@ function ContentMarketingAgent() {
           `I also generated ${data.variations.length} variations. Type 'show variations' to see them.`,
           'agent'
         );
+        notifyAgentCompleted('contentMarketing', `Generated ${contentType} content for ${selectedChannel}`, [
+          { field_key: 'subject', field_value: `Check out our latest ${contentType}` },
+          { field_key: 'body', field_value: data.content },
+        ]);
         if (isInWorkflow) {
           saveStageData({
             personalized_content: data.content,
@@ -567,6 +580,12 @@ function ContentMarketingAgent() {
         message="Choose a project above, or create one with + New Project."
       />
 
+      <AgentPrefillBanner
+        prefill={prefill}
+        onDismiss={dismissPrefill}
+        labels={{ userContext: 'Context', selectedChannel: 'Channel', contentType: 'Content type' }}
+      />
+
       <ProjectGate agentLabel="Content Marketing workspace">
       <div className="cma-main-content">
         {renderWorkspace()}
@@ -600,9 +619,7 @@ function ContentMarketingAgent() {
               })}
               {isLoading && (
                 <div className="message message-agent">
-                  <div className="typing-indicator">
-                    <span></span><span></span><span></span>
-                  </div>
+                  <TypingIndicator />
                 </div>
               )}
               <div ref={messagesEndRef} />
@@ -628,7 +645,7 @@ function ContentMarketingAgent() {
 
         {!isChatOpen && projectId && (
           <button type="button" className="floating-chat-btn" onClick={() => setIsChatOpen(true)} aria-label="Open chat">
-            <img src="/assets/icons/chat.png" alt="" className="chat-btn-icon" />
+            <img src="/assets/icons/message.png" alt="" className="chat-btn-icon" />
           </button>
         )}
       </div>
@@ -640,15 +657,14 @@ function ContentMarketingAgent() {
         title="Send to Email Campaign"
         footer={
           <>
-            <button type="button" className="btn btn-secondary" onClick={() => setShowCampaignModal(false)}>Cancel</button>
-            <button
-              type="button"
-              className="btn btn-primary"
+            <Button variant="secondary" onClick={() => setShowCampaignModal(false)}>Cancel</Button>
+            <Button
+              variant="primary"
               onClick={handleSendToCampaign}
               disabled={!selectedCampaignId || isSendingToCampaign}
             >
               {isSendingToCampaign ? 'Sending...' : 'Send to Campaign'}
-            </button>
+            </Button>
           </>
         }
       >

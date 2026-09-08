@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import './Projects.css';
 import { showToast } from '../core/toast';
 import { authJsonHeaders, authOptionalHeaders } from '../core/authHeaders';
-import { BackButton, showConfirm } from '../components';
+import { BackButton, showConfirm, Modal, Spinner, Button } from '../components';
 import { AGENTS } from '../config/agentsConfig';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
@@ -384,15 +384,15 @@ function Projects() {
         </header>
 
         {loading ? (
-          <div className="loading">Loading...</div>
+          <div className="loading"><Spinner size="lg" /></div>
         ) : projects.length === 0 ? (
           <div className="empty-state-card">
             <Icon name="Folder" />
             <h3>No projects yet</h3>
             <p>Create a project to share work across agents and team members.</p>
-            <button className="btn-primary" onClick={() => setShowCreateModal(true)}>
+            <Button variant="primary" onClick={() => setShowCreateModal(true)}>
               Create First Project
-            </button>
+            </Button>
           </div>
         ) : (
           <div className="projects-grid">
@@ -403,7 +403,7 @@ function Projects() {
                     <Icon name="Folder" />
                   </div>
                   <div className="project-title">
-                    <h3>{project.name}</h3>
+                    <h3 title={project.name}>{project.name}</h3>
                     <span className={`status-badge ${project.status}`}>
                       {project.status}
                     </span>
@@ -443,8 +443,9 @@ function Projects() {
                 </div>
 
                 <div className="project-actions">
-                  <button
-                    className="btn btn-primary"
+                  <Button
+                    variant="primary"
+                    size="sm"
                     onClick={() => {
                       // Navigate to first enabled agent with this project
                       const firstAgent = project.agents[0];
@@ -455,7 +456,7 @@ function Projects() {
                     }}
                   >
                     Open Project
-                  </button>
+                  </Button>
                 </div>
               </div>
             ))}
@@ -464,134 +465,127 @@ function Projects() {
       </div>
 
       {/* Create Project Modal */}
-      {showCreateModal && (
-        <div className="modal-overlay" onClick={() => setShowCreateModal(false)}>
-          <div className="modal modal-lg" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>Create New Project</h3>
-              <button className="btn-icon" onClick={() => setShowCreateModal(false)}>
-                <Icon name="X" />
-              </button>
-            </div>
-            <div className="modal-body">
-              <div className="field">
-                <label>Project Name *</label>
-                <input
-                  type="text"
-                  value={newProject.name}
-                  onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
-                  placeholder="e.g., Q3 Marketing Campaign"
-                  autoFocus
-                />
-              </div>
-              <div className="field">
-                <label>Description</label>
-                <textarea
-                  value={newProject.description}
-                  onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
-                  placeholder="Brief description of the project"
-                  rows={2}
-                />
-              </div>
-              <div className="field">
-                <label>Team</label>
-                <div className="team-select-row">
-                  <select
-                    value={newProject.team_id}
-                    onChange={(e) => setNewProject({ ...newProject, team_id: e.target.value })}
-                    disabled={loadingTeams}
-                  >
-                    <option value="">Select team...</option>
-                    {teams.map(team => (
-                      <option key={team.id} value={team.id}>{team.name}</option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    className="btn-link"
-                    onClick={() => navigate('/team')}
-                  >
-                    Manage Team
-                  </button>
-                </div>
-              </div>
-
-              <div className="field-group-divider">
-                <span>Business context (optional)</span>
-                <span className="field-hint">Helps the AI Assistant recommend agents for this project's workflows</span>
-              </div>
-              <div className="field-row">
-                <div className="field">
-                  <label>Industry</label>
-                  <input
-                    type="text"
-                    value={newProject.business_context.industry}
-                    onChange={(e) => setNewProject({
-                      ...newProject,
-                      business_context: { ...newProject.business_context, industry: e.target.value }
-                    })}
-                    placeholder="e.g., Manufacturing"
-                  />
-                </div>
-                <div className="field">
-                  <label>Your role</label>
-                  <input
-                    type="text"
-                    value={newProject.business_context.role}
-                    onChange={(e) => setNewProject({
-                      ...newProject,
-                      business_context: { ...newProject.business_context, role: e.target.value }
-                    })}
-                    placeholder="e.g., Sales Manager"
-                  />
-                </div>
-              </div>
-              <div className="field">
-                <label>Product / service</label>
-                <input
-                  type="text"
-                  value={newProject.business_context.productService}
-                  onChange={(e) => setNewProject({
-                    ...newProject,
-                    business_context: { ...newProject.business_context, productService: e.target.value }
-                  })}
-                  placeholder="e.g., Industrial pumps for manufacturers"
-                />
-              </div>
-
-              <p className="field-hint" style={{ marginTop: '8px', color: 'var(--color-text-muted)' }}>
-                All agents will have access to this project.
-              </p>
-            </div>
-            <div className="modal-footer">
-              <button className="btn-secondary" onClick={() => setShowCreateModal(false)}>
-                Cancel
-              </button>
-              <button
-                className="btn-primary"
-                onClick={handleCreate}
-                disabled={!newProject.name.trim() || creating}
-              >
-                {creating ? 'Creating...' : 'Create Project'}
-              </button>
-            </div>
+      <Modal
+        open={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        title="Create New Project"
+        size="lg"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setShowCreateModal(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleCreate}
+              disabled={!newProject.name.trim() || creating}
+            >
+              {creating ? 'Creating...' : 'Create Project'}
+            </Button>
+          </>
+        }
+      >
+        <div className="field">
+          <label>Project Name *</label>
+          <input
+            type="text"
+            value={newProject.name}
+            onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
+            placeholder="e.g., Q3 Marketing Campaign"
+            autoFocus
+          />
+        </div>
+        <div className="field">
+          <label>Description</label>
+          <textarea
+            value={newProject.description}
+            onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
+            placeholder="Brief description of the project"
+            rows={2}
+          />
+        </div>
+        <div className="field">
+          <label>Team</label>
+          <div className="team-select-row">
+            <select
+              value={newProject.team_id}
+              onChange={(e) => setNewProject({ ...newProject, team_id: e.target.value })}
+              disabled={loadingTeams}
+            >
+              <option value="">Select team...</option>
+              {teams.map(team => (
+                <option key={team.id} value={team.id}>{team.name}</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="btn-link"
+              onClick={() => navigate('/team')}
+            >
+              Manage Team
+            </button>
           </div>
         </div>
-      )}
+
+        <div className="field-group-divider">
+          <span>Business context (optional)</span>
+          <span className="field-hint">Helps the AI Assistant recommend agents for this project's workflows</span>
+        </div>
+        <div className="field-row">
+          <div className="field">
+            <label>Industry</label>
+            <input
+              type="text"
+              value={newProject.business_context.industry}
+              onChange={(e) => setNewProject({
+                ...newProject,
+                business_context: { ...newProject.business_context, industry: e.target.value }
+              })}
+              placeholder="e.g., Manufacturing"
+            />
+          </div>
+          <div className="field">
+            <label>Your role</label>
+            <input
+              type="text"
+              value={newProject.business_context.role}
+              onChange={(e) => setNewProject({
+                ...newProject,
+                business_context: { ...newProject.business_context, role: e.target.value }
+              })}
+              placeholder="e.g., Sales Manager"
+            />
+          </div>
+        </div>
+        <div className="field">
+          <label>Product / service</label>
+          <input
+            type="text"
+            value={newProject.business_context.productService}
+            onChange={(e) => setNewProject({
+              ...newProject,
+              business_context: { ...newProject.business_context, productService: e.target.value }
+            })}
+            placeholder="e.g., Industrial pumps for manufacturers"
+          />
+        </div>
+
+        <p className="field-hint" style={{ marginTop: '8px', color: 'var(--color-text-muted)' }}>
+          All agents will have access to this project.
+        </p>
+      </Modal>
 
       {/* Project AI Settings Modal */}
-      {settingsProject && (
-        <div className="modal-overlay" onClick={closeProjectSettings}>
-          <div className="modal modal-lg" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>AI Settings — {settingsProject.name}</h3>
-              <button className="btn-icon" onClick={closeProjectSettings}>
-                <Icon name="X" />
-              </button>
-            </div>
-            <div className="modal-body">
-              {settingsLoading ? (
-                <div className="loading">Loading...</div>
+      <Modal
+        open={!!settingsProject}
+        onClose={closeProjectSettings}
+        title={settingsProject ? `AI Settings: ${settingsProject.name}` : 'AI Settings'}
+        size="lg"
+        footer={<Button variant="secondary" onClick={closeProjectSettings}>Close</Button>}
+      >
+        {settingsProject && (
+              settingsLoading ? (
+                <Spinner size="md" />
               ) : (
                 <>
                   <p className="field-hint" style={{ marginBottom: '12px', color: 'var(--color-text-muted)' }}>
@@ -611,9 +605,9 @@ function Projects() {
                           value={budgetInput}
                           onChange={(e) => setBudgetInput(e.target.value)}
                         />
-                        <button type="button" className="btn-primary" onClick={handleSaveBudget} disabled={savingBudget}>
+                        <Button variant="primary" onClick={handleSaveBudget} disabled={savingBudget}>
                           {savingBudget ? 'Saving...' : 'Save'}
-                        </button>
+                        </Button>
                       </div>
                     ) : (
                       <p className="field-hint">
@@ -653,14 +647,13 @@ function Projects() {
                               ))}
                             </select>
                             {canManageSettings && isEditing && (
-                              <button
-                                type="button"
-                                className="btn-primary"
+                              <Button
+                                variant="primary"
                                 onClick={() => handleSaveProjectSetting(field.key)}
                                 disabled={isSaving}
                               >
                                 {isSaving ? 'Saving...' : 'Save'}
-                              </button>
+                              </Button>
                             )}
                           </div>
                         ) : (
@@ -676,31 +669,28 @@ function Projects() {
                                     setSettingsTestResults(prev => ({ ...prev, [field.key]: null }));
                                   }}
                                 />
-                                <button
-                                  type="button"
-                                  className="btn-secondary"
+                                <Button
+                                  variant="secondary"
                                   onClick={() => handleTestProjectSetting(field.key)}
                                   disabled={settingsTestingKey === field.key || !settingsEditValues[field.key]?.trim()}
                                 >
                                   {settingsTestingKey === field.key ? 'Testing...' : 'Test'}
-                                </button>
-                                <button
-                                  type="button"
-                                  className="btn-primary"
+                                </Button>
+                                <Button
+                                  variant="primary"
                                   onClick={() => handleSaveProjectSetting(field.key)}
                                   disabled={isSaving || !settingsEditValues[field.key]?.trim()}
                                 >
                                   {isSaving ? 'Saving...' : 'Save'}
-                                </button>
+                                </Button>
                                 {setting.configured && (
-                                  <button
-                                    type="button"
-                                    className="btn-secondary"
+                                  <Button
+                                    variant="secondary"
                                     onClick={() => handleRemoveProjectSetting(field.key)}
                                     disabled={isSaving}
                                   >
                                     Remove
-                                  </button>
+                                  </Button>
                                 )}
                               </div>
                               {settingsTestResults[field.key] && (
@@ -712,20 +702,15 @@ function Projects() {
                           )
                         )}
                         {!canManageSettings && !setting.configured && (
-                          <p className="field-hint">Not configured — falls back to each member's personal key or the platform default.</p>
+                          <p className="field-hint">Not configured. Falls back to each member's personal key or the platform default.</p>
                         )}
                       </div>
                     );
                   })}
                 </>
-              )}
-            </div>
-            <div className="modal-footer">
-              <button className="btn-secondary" onClick={closeProjectSettings}>Close</button>
-            </div>
-          </div>
-        </div>
-      )}
+              )
+        )}
+      </Modal>
     </div>
   );
 }

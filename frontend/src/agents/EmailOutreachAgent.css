@@ -12,11 +12,11 @@
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-3);
-  background: #dbeafe;
+  background: var(--color-info-bg);
   border-radius: var(--radius-md);
   margin-bottom: var(--space-4);
   font-size: var(--text-caption);
-  color: #2563eb;
+  color: var(--role-member);
 }
 
 .email-outreach-page .workflow-context-banner img {

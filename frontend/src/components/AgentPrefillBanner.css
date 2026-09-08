@@ -1,0 +1,62 @@
+/* AgentPrefillBanner - confirmation banner after the AI Assistant hands
+   off extracted fields to an agent page. Mirrors LiveModeHint's layout,
+   in the app's success color language (a positive confirmation, not a
+   neutral hint). */
+
+.agent-prefill-banner-wrapper {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0 var(--space-4);
+}
+
+.agent-prefill-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-success-bg);
+  border-radius: var(--radius-lg, 12px);
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--color-success-text);
+  margin: 0 auto var(--space-4);
+  max-width: min(100%, 900px);
+  box-sizing: border-box;
+}
+
+.agent-prefill-banner-text p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.agent-prefill-banner-text p + p,
+.agent-prefill-banner-text p + ul {
+  margin-top: var(--space-1);
+}
+
+.agent-prefill-banner-fields {
+  margin: 0;
+  padding-left: var(--space-4);
+  line-height: 1.5;
+}
+
+.agent-prefill-banner-missing {
+  color: var(--color-text-muted);
+}
+
+.agent-prefill-banner .btn-sm {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-xs, 0.75rem);
+  border-radius: var(--radius-full, 12px);
+  flex-shrink: 0;
+}
+
+.agent-prefill-banner .btn-ghost {
+  color: var(--color-success-text);
+  opacity: 0.7;
+}
+
+.agent-prefill-banner .btn-ghost:hover {
+  opacity: 1;
+}

@@ -4,6 +4,7 @@
  */
 import React, { useState, useMemo } from 'react';
 import { Textarea } from './index';
+import Button from './Button';
 import {
   sendReminder,
   buildReminderMessage,
@@ -102,7 +103,7 @@ function ReminderModal({
       <div className="reminder-modal" onClick={(e) => e.stopPropagation()}>
         <div className="reminder-modal-header">
           <h3>Send Reminder</h3>
-          <button type="button" className="btn-close" onClick={handleClose}>×</button>
+          <button type="button" className="btn-close" onClick={handleClose} aria-label="Close">×</button>
         </div>
 
         <div className="reminder-modal-body">
@@ -171,22 +172,21 @@ function ReminderModal({
         )}
 
         <div className="reminder-modal-footer">
-          <button type="button" className="btn-secondary" onClick={handleClose}>
+          <Button variant="secondary" onClick={handleClose}>
             Cancel
-          </button>
+          </Button>
           {failedDraft ? (
-            <button type="button" className="btn-primary" onClick={handleOpenMailto}>
+            <Button variant="primary" onClick={handleOpenMailto}>
               Open in email client
-            </button>
+            </Button>
           ) : (
-            <button
-              type="button"
-              className="btn-primary"
+            <Button
+              variant="primary"
               onClick={handleSend}
               disabled={sending || availableChannels.length === 0}
             >
               {sending ? 'Sending...' : 'Send'}
-            </button>
+            </Button>
           )}
         </div>
       </div>

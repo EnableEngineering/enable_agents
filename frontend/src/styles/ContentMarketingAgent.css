@@ -44,12 +44,6 @@
   position: relative;
 }
 
-/* Legacy - removed */
-
-.cma-step-tabs {
-  margin-bottom: var(--space-4);
-}
-
 .chat-panel-header {
   display: flex;
   justify-content: space-between;
@@ -155,7 +149,7 @@
   outline: none;
   border-color: var(--color-accent);
   background-color: var(--color-background);
-  box-shadow: 0 0 0 3px rgba(194, 65, 12, 0.1);
+  box-shadow: 0 0 0 3px rgba(var(--color-accent-rgb), 0.1);
 }
 
 .form-group textarea {
@@ -408,45 +402,6 @@
   margin-bottom: 0;
 }
 
-/* ========== TYPING INDICATOR ========== */
-.typing-indicator {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-3) var(--space-4);
-  background: var(--color-surface);
-  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-lg) var(--radius-sm);
-  width: fit-content;
-  border: 1px solid var(--color-border);
-}
-
-.typing-indicator span {
-  width: 8px;
-  height: 8px;
-  border-radius: var(--radius-full);
-  background: var(--color-accent);
-  animation: typing 1.4s infinite;
-}
-
-.typing-indicator span:nth-child(2) {
-  animation-delay: 0.2s;
-}
-
-.typing-indicator span:nth-child(3) {
-  animation-delay: 0.4s;
-}
-
-@keyframes typing {
-  0%, 60%, 100% {
-    opacity: 0.5;
-    transform: translateY(0);
-  }
-  30% {
-    opacity: 1;
-    transform: translateY(-8px);
-  }
-}
-
 /* ========== CHAT INPUT ========== */
 .chat-input-form {
   display: flex;
@@ -472,7 +427,7 @@
 .chat-input-form input:focus {
   outline: none;
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px rgba(194, 65, 12, 0.1);
+  box-shadow: 0 0 0 3px rgba(var(--color-accent-rgb), 0.1);
 }
 
 .chat-input-form input:disabled {
@@ -494,7 +449,7 @@
 }
 
 .chat-input-form button:hover:not(:disabled) {
-  background: var(--color-accent-dark, #9a3412);
+  background: var(--color-accent-dark);
 }
 
 .chat-input-form button:disabled {
@@ -538,11 +493,11 @@
 .btn-send-campaign {
   padding: 8px 16px;
   background: var(--color-primary);
-  color: #fff;
+  color: var(--color-text-inverse);
   border: none;
   border-radius: 6px;
   font-size: var(--text-body);
-  font-weight: 500;
+  font-weight: var(--font-semibold);
   cursor: pointer;
   transition: background 0.15s;
 }
@@ -555,7 +510,7 @@
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(var(--color-primary-rgb), 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -568,7 +523,7 @@
   border-radius: 12px;
   width: 100%;
   max-width: 450px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 20px 40px rgba(var(--color-primary-rgb), 0.2);
 }
 
 .modal-header {
@@ -650,7 +605,7 @@
 
 .campaign-option.selected {
   border-color: var(--color-accent);
-  background: rgba(180, 83, 9, 0.05);
+  background: rgba(var(--color-accent-dark-rgb), 0.05);
 }
 
 .campaign-option input {
@@ -784,7 +739,7 @@
 
 .channel-card.selected {
   border-color: var(--color-accent);
-  background: rgba(180, 83, 9, 0.05);
+  background: rgba(var(--color-accent-dark-rgb), 0.05);
 }
 
 .channel-icon {

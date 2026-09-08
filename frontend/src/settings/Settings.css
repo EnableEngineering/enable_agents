@@ -80,7 +80,7 @@
   padding: 12px;
   background: var(--color-surface);
   border-radius: 14px;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  box-shadow: var(--shadow-sm);
 }
 
 .nav-item {
@@ -126,7 +126,7 @@
 }
 
 .nav-badge {
-  background: rgba(255,255,255,0.25);
+  background: rgba(var(--color-white-rgb), 0.25);
   padding: 2px 8px;
   border-radius: 6px;
   font-size: var(--text-xs);
@@ -152,7 +152,7 @@
 .settings-section {
   background: var(--color-surface);
   border-radius: 14px;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  box-shadow: var(--shadow-sm);
   overflow: hidden;
 }
 
@@ -283,7 +283,7 @@
 .setting-select:focus {
   outline: none;
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px rgba(200, 80, 50, 0.1);
+  box-shadow: 0 0 0 3px var(--color-focus-ring);
 }
 
 .setting-input:disabled {
@@ -466,8 +466,8 @@
 }
 
 .google-connect-btn:hover {
-  border-color: #4285f4;
-  background: #f8faff;
+  border-color: var(--color-accent);
+  background: var(--color-surface-alt);
 }
 
 .google-connect-btn svg {
@@ -493,7 +493,6 @@
 .google-connected-badge {
   gap: 6px;
   padding: 0 16px;
-  margin-top: 15px;
   background: var(--color-success-bg);
   color: var(--color-success-text);
   border-radius: 8px;
@@ -555,37 +554,35 @@
   gap: 16px;
   padding: 14px 18px;
   background: var(--color-background);
-  border: 1px solid transparent;
   border-radius: 12px;
   transition: all 0.15s ease;
 }
 
 .connector-card:hover {
   background: var(--color-surface);
-  border-color: var(--color-border);
+  box-shadow: var(--shadow-sm);
 }
 
 .connector-card.connected {
-  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
-  border-color: #bbf7d0;
+  background: var(--color-success-bg);
 }
 
 .connector-card-icon {
   width: 44px;
   height: 44px;
-  background: linear-gradient(135deg, var(--color-accent) 0%, #a8523a 100%);
+  background: var(--gradient-accent);
   border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: white;
   flex-shrink: 0;
-  box-shadow: 0 2px 6px rgba(200, 80, 50, 0.2);
+  box-shadow: var(--shadow-accent-sm);
 }
 
 .connector-card.connected .connector-card-icon {
-  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
-  box-shadow: 0 2px 6px rgba(22, 163, 74, 0.25);
+  background: var(--color-success);
+  box-shadow: var(--shadow-sm);
 }
 
 .connector-card-icon svg {
@@ -625,7 +622,7 @@
   font-size: var(--text-xs);
   font-weight: 600;
   color: var(--color-success-text);
-  background: rgba(22, 163, 74, 0.1);
+  background: var(--color-success-bg);
   padding: 2px 8px;
   border-radius: 10px;
   text-transform: uppercase;

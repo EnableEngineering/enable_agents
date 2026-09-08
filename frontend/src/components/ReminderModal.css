@@ -3,7 +3,7 @@
 .reminder-modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(var(--color-primary-rgb), 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -22,7 +22,7 @@
   border-radius: var(--radius-lg);
   width: 100%;
   max-width: 420px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 20px 40px rgba(var(--color-primary-rgb), 0.2);
   animation: slideUp 0.2s ease;
 }
 
@@ -152,7 +152,7 @@
 
 .channel-btn:hover {
   border-color: var(--color-primary);
-  background: rgba(30, 58, 95, 0.05);
+  background: rgba(var(--color-primary-rgb), 0.05);
 }
 
 .channel-btn.active {

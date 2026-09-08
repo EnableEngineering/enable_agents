@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
-import { BackButton, Textarea, Select, ProjectSelector, LiveModeHint, AgentOutcomesStrip, ProjectGate, EmptyState, WorkflowExecutionBanner, WorkflowContextCard } from '../components';
+import { BackButton, Textarea, Select, ProjectSelector, LiveModeHint, AgentPrefillBanner, AgentOutcomesStrip, ProjectGate, EmptyState, WorkflowExecutionBanner, WorkflowContextCard, TypingIndicator } from '../components';
 import '../styles/DataInsights.css';
 import { PDFDocument } from 'pdf-lib';
 import { API_CONFIG } from '../config/apiConfig';
 import { showToast } from '../core/toast';
 import { useSelectedProjectId } from '../hooks/useSelectedProjectId';
-import { useWorkflowContext } from '../hooks';
+import { useWorkflowContext, usePendingAgentPrefill, notifyAgentCompleted } from '../hooks';
 import { authJsonHeaders, authOptionalHeaders } from '../core/authHeaders';
 import { STRINGS } from '../constants/strings';
 
@@ -63,6 +63,15 @@ function DataInsights() {
 
   // Query state
   const [inputPrompt, setInputPrompt] = useState('');
+
+  const { prefill, dismiss: dismissPrefill } = usePendingAgentPrefill('dataInsights', (fields) => {
+    if (isHistoryView) return;
+    const prompt = fields.find((f) => f.field_key === 'prompt');
+    if (prompt) {
+      setInputPrompt(prompt.field_value);
+      if (selectedDocument) setActiveView('chat');
+    }
+  });
 
   // Results
   const [currentInsight, setCurrentInsight] = useState(null);
@@ -434,6 +443,9 @@ function DataInsights() {
 
       setConversationHistory(prev => [...prev, aiResponse]);
       setInputPrompt('');
+      notifyAgentCompleted('dataInsights', `Answered a question about ${selectedDocument.name}`, [
+        { field_key: 'userContext', field_value: `Create content based on this from ${selectedDocument.name}: ${String(data.answer).slice(0, 300)}` },
+      ]);
 
       // Save to workflow if in workflow context
       if (isInWorkflow) {
@@ -718,6 +730,14 @@ function DataInsights() {
         message="Choose a project, then upload documents to get started."
       />
 
+      <AgentPrefillBanner
+        prefill={prefill && !selectedDocument
+          ? { ...prefill, missingFields: [...prefill.missingFields, 'Select a document to ask this'] }
+          : prefill}
+        onDismiss={dismissPrefill}
+        labels={{ prompt: 'Question' }}
+      />
+
       <ProjectGate agentLabel="Data Insights workspace">
         <div className="di-container">
           <WorkflowExecutionBanner />
@@ -860,7 +880,7 @@ function DataInsights() {
                     <div className="di-pending-files">
                       <div className="di-pending-header">
                         <span>{files.length} file(s) ready</span>
-                        <button onClick={() => setFiles([])}>×</button>
+                        <button onClick={() => setFiles([])} aria-label="Clear selected files">×</button>
                       </div>
                       <ul>{files.map((f, i) => <li key={i}>{f.name}</li>)}</ul>
                       <button className="di-upload-btn" onClick={handleUploadFiles} disabled={isUploading || isHistoryView}>
@@ -1231,13 +1251,7 @@ function DataInsights() {
                   </div>
                 ))}
 
-                {isLoading && (
-                  <div className="di-chat-message di-chat-message--assistant di-chat-message--loading">
-                    <div className="di-loading-dots">
-                      <span></span><span></span><span></span>
-                    </div>
-                  </div>
-                )}
+                {isLoading && <TypingIndicator />}
               </div>
 
               {/* Enhanced Chat Input */}

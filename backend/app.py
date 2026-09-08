@@ -4018,132 +4018,427 @@ def rag_test():
         print(f"RAG test error: {e}")
         return jsonify({"error": f"Server error: {str(e)}"}), 500
 
-@app.route('/enterprise_chat', methods=['POST', 'OPTIONS'])
+
+# Compact per-agent field catalog for the assistant's tool-calling system
+# prompt. Keep entries terse - this whole block is resent as part of the
+# system prompt on every single /assistant_chat turn, so verbosity here is a
+# direct, per-message token cost. Field keys must stay byte-identical to
+# what each agent page's usePendingAgentPrefill(...) onApply callback
+# switches on (frontend/src/agents/*.js) - a drifted key here silently fails
+# to prefill on the frontend with no error surfaced anywhere.
+ASSISTANT_AGENT_FIELD_CATALOG = """
+- marketResearch (Market Research): overview (what to research), industries (e.g. "Fintech"), countries (region). Never fill responseFormat - always list "Research Type" in missing_fields.
+- salesHelper (Sales Helper Agent): inputMessage (free text for its own chat).
+- contentMarketing (Content Marketing Agent): userContext (free text), selectedChannel (one of: linkedin, email, social, ads), contentType (one of: post, article, ad_copy, email).
+- communityNetwork (Community Network): inputMessage (free text).
+- executiveAssistant (Executive Assistant Agent): title (task board quick-add).
+- eventNetworking (Event Networking Agent): name, description, location, date (YYYY-MM-DD) for creating an event; OR interests, goals for attendee matching - pick one set, never both.
+- emailOutreach (Email Outreach): subject, body. Never fill recipients - always missing.
+- supplyChainAudit (Supply Chain Audit): name, location, capacity, certifications, capabilities for adding a supplier. Never fill audit scores.
+- dataInsights (Data Insights): prompt (a question about an already-uploaded document).
+- aiChatbot (AI Chatbot): input.
+""".strip()
+
+# What people typically reach for right after each agent - not a hard
+# sequence, just enough for rule 7 to make a real suggestion on the very
+# first turn, before there's any conversation history to lean on.
+ASSISTANT_TYPICAL_NEXT_STEP = """
+- After marketResearch: emailOutreach or contentMarketing, to act on the leads/insights found.
+- After salesHelper: emailOutreach, to reach out to ranked prospects.
+- After contentMarketing: emailOutreach, to send the generated content.
+- After communityNetwork: eventNetworking, to turn connections into an event.
+- After executiveAssistant: nothing specific - only suggest if the conversation points somewhere.
+- After eventNetworking: emailOutreach, for post-event follow-ups.
+- After emailOutreach: dataInsights or salesHelper, to track replies/responses.
+- After supplyChainAudit: executiveAssistant, to track follow-up tasks from the audit.
+- After dataInsights: contentMarketing or marketResearch, to act on what the document revealed.
+- After aiChatbot: nothing specific - only suggest if the conversation points somewhere.
+""".strip()
+
+ASSISTANT_SYSTEM_PROMPT = (
+    "You are the AI Assistant embedded in an enterprise SaaS app (Enable) with these ready agents. "
+    "For each, here are the field keys you may fill via open_agent, in the SAME casing shown:\n\n"
+    + ASSISTANT_AGENT_FIELD_CATALOG +
+    "\n\nWhat people typically do right after each agent (for rule 7, when there's no conversation "
+    "history yet to go on):\n\n"
+    + ASSISTANT_TYPICAL_NEXT_STEP +
+    "\n\nRules:\n"
+    "1. Only call open_agent when the user is describing a concrete task for ONE of the above agents, "
+    "not when asking \"what can I do\" or general questions. Whenever you call open_agent, ALSO write a "
+    "reply in your message content - never leave content empty just because you made a tool call. That "
+    "reply is a short acknowledgment of what you filled in (1 sentence) plus, per rule 7, a next-step "
+    "suggestion when one genuinely applies.\n"
+    "2. Only extract field values you're reasonably confident about; put anything else in missing_fields "
+    "using a short human label (e.g. \"Research Type\", not \"responseFormat\").\n"
+    "3. If nothing matches an agent well, just answer conversationally - do not force a call.\n"
+    "4. Keep replies concise (2-4 sentences) unless the user asks for depth.\n"
+    "5. You only help with tasks these agents can do inside Enable. If asked something unrelated to "
+    "the product (general knowledge, current events, sports scores, personal advice, coding help, etc.), "
+    "say briefly that it's outside what you help with here and point back to what you can do - never "
+    "answer the unrelated question itself.\n"
+    "6. You cannot delete, wipe, modify, or export data, and open_agent never performs an action by "
+    "itself - it only opens a page with fields pre-filled for the user to review and submit themselves. "
+    "If asked to delete/destroy/wipe data or anything similarly irreversible, say plainly that you can't "
+    "do that and, only if it's a genuine account/project management need, point to Settings or Projects "
+    "where the user can do it themselves - never imply you performed it, and never give steps to bypass "
+    "safeguards elsewhere in the app.\n"
+    "7. Whenever you call open_agent, your reply MUST end with one short next-step sentence - this is "
+    "not optional, do it every time, even on the very first message with no conversation history yet. "
+    "Base it on the conversation and recent activity when there's a clear signal there; otherwise fall "
+    "back to the typical-next-step list above for the agent you just opened. Never skip it and never use "
+    "a generic \"let me know if you need anything else\" - always name a specific agent and why. For "
+    "plain conversational replies (no open_agent call), only add a next-step suggestion if one genuinely "
+    "fits; it's fine to skip it there. Never more than one suggestion either way."
+)
+
+ASSISTANT_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "open_agent",
+            "description": (
+                "Call this when you have identified which single agent the user wants to run AND can "
+                "extract at least one concrete field value for it from the conversation. Do not call this "
+                "just to list/recommend agents in the abstract - only when the user is describing an "
+                "actual task to run."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "agent_key": {
+                        "type": "string",
+                        "enum": [
+                            "marketResearch", "salesHelper", "contentMarketing", "communityNetwork",
+                            "eventNetworking", "executiveAssistant", "emailOutreach", "supplyChainAudit",
+                            "dataInsights", "aiChatbot",
+                        ],
+                    },
+                    "agent_display_name": {
+                        "type": "string",
+                        "description": "Human-readable name to show in the UI, e.g. 'Market Research'.",
+                    },
+                    "fields": {
+                        "type": "array",
+                        "description": (
+                            "Only fields you are reasonably confident about, one entry per field. "
+                            "ALWAYS use this array shape - never add the field as a separate top-level "
+                            "property of the tool call (e.g. never return {\"inputMessage\": \"...\"} "
+                            "alongside agent_key; put it in fields as {\"field_key\": \"inputMessage\", "
+                            "\"field_value\": \"...\"})."
+                        ),
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "field_key": {"type": "string"},
+                                "field_value": {"type": "string"},
+                                "confidence": {"type": "string", "enum": ["high", "medium"]},
+                            },
+                            "required": ["field_key", "field_value"],
+                        },
+                    },
+                    "missing_fields": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Human labels for fields relevant to this agent that you could NOT extract.",
+                    },
+                    "clarifying_question": {
+                        "type": "string",
+                        "description": "Optional single follow-up question, e.g. asking them to pick Research Type.",
+                    },
+                    "reply": {
+                        "type": "string",
+                        "description": (
+                            "REQUIRED chat reply to show the user alongside this action, 2 sentences. "
+                            "Sentence 1: acknowledge what you filled in. Sentence 2: per rule 7, ALWAYS a "
+                            "next-step suggestion naming a specific other agent - use the typical-next-step "
+                            "list from the system prompt if the conversation itself doesn't suggest one. "
+                            "This is the only reply text the user sees for this turn - never leave it "
+                            "generic, empty, or without sentence 2."
+                        ),
+                    },
+                },
+                "required": ["agent_key", "fields", "reply"],
+            },
+        },
+    }
+]
+
+
+ASSISTANT_AGENT_DISPLAY_NAMES = {
+    "marketResearch": "Market Research",
+    "salesHelper": "Sales Helper Agent",
+    "contentMarketing": "Content Marketing Agent",
+    "communityNetwork": "Community Network",
+    "eventNetworking": "Event Networking Agent",
+    "executiveAssistant": "Executive Assistant Agent",
+    "emailOutreach": "Email Outreach",
+    "supplyChainAudit": "Supply Chain Audit",
+    "dataInsights": "Data Insights",
+    "aiChatbot": "AI Chatbot",
+}
+_TOOL_RESULT_META_KEYS = {"agent_key", "agent_display_name", "fields", "missing_fields", "clarifying_question", "reply"}
+
+
+def _normalize_tool_result(tool_result):
+    """
+    gpt-4o-mini doesn't always follow the fields:[{field_key,field_value}]
+    array shape strictly - it sometimes returns extracted values as extra
+    top-level keys directly on the tool_result object instead (e.g.
+    {"agent_key": "salesHelper", "inputMessage": "..."} rather than
+    {"agent_key": "salesHelper", "fields": [{"field_key": "inputMessage", ...}]}).
+    Salvage those into the expected shape rather than silently showing an
+    empty action card. Also backfills agent_display_name from a static map
+    when the model omits it.
+    """
+    if not isinstance(tool_result, dict):
+        return tool_result
+
+    fields = tool_result.get('fields')
+    if not isinstance(fields, list) or not fields:
+        salvaged = []
+        for key, value in tool_result.items():
+            if key in _TOOL_RESULT_META_KEYS or value in (None, ''):
+                continue
+            salvaged.append({"field_key": key, "field_value": value})
+        tool_result['fields'] = salvaged
+    else:
+        tool_result['fields'] = [f for f in fields if isinstance(f, dict) and f.get('field_key') and f.get('field_value')]
+
+    if not tool_result.get('agent_display_name'):
+        tool_result['agent_display_name'] = ASSISTANT_AGENT_DISPLAY_NAMES.get(tool_result.get('agent_key'), 'the agent')
+
+    if not isinstance(tool_result.get('missing_fields'), list):
+        tool_result['missing_fields'] = []
+
+    return tool_result
+
+
+@app.route('/assistant_chat', methods=['POST', 'OPTIONS'])
 @cross_origin()
 @require_auth
-def enterprise_chat():
+def assistant_chat():
     """
-    Enterprise chat API that collects business context from the user.
-    User can answer any of the key questions first; the API will detect which question was answered,
-    store it, and then ask the remaining unanswered questions.
-    Once all questions are answered, sends chat_state to OpenAI to generate a summary and auto-fill missing fields.
+    Real conversational AI Assistant endpoint. Stateless like /enterprise_chat
+    was (client resends the full message list every call - no server-side
+    session table), but uses OpenAI tool-calling instead of a fixed 5-question
+    wizard: the model can either reply conversationally, or call open_agent
+    once it has identified a specific agent + concrete field(s) to prefill.
     """
-    data = request.get_json()
-    chat_state = data.get('chat_state', {})
-    last_answer = data.get('last_answer', '').strip()
-    last_question_key = data.get('last_question_key', '').strip()
+    data = request.get_json() or {}
+    history = data.get('messages', [])
 
-    # Define the sequence and mapping of questions
-    questions = [
-        {"key": "industry", "question": "To get a bit of context, which industry does your business operate in?"},
-        {"key": "product_service", "question": "What primary product or service does your business offer to customers?"},
-        {"key": "role_department", "question": "What is your role within the company, and what is your department mainly focused on right now?"},
-        {"key": "tools", "question": "What tools or software do you and your team rely on most, and what do you use them for?"},
-        {"key": "business_need", "question": "If you could change or improve one thing about how your team works today, what would it be?"}
-    ]
-    question_keys = [q['key'] for q in questions]
+    # Lightweight page-visit breadcrumb from the frontend (see
+    # frontend/src/hooks/useActivityTrail.js) - page-level only (which
+    # screens the user has been on this session, oldest to newest), not
+    # click-level. Gives the model situational awareness for next-step
+    # suggestions without instrumenting every interaction in the app.
+    recent_activity = data.get('recent_activity')
+    system_content = ASSISTANT_SYSTEM_PROMPT
+    if isinstance(recent_activity, list) and recent_activity:
+        trail = ' -> '.join(str(p) for p in recent_activity[-5:] if p)
+        if trail:
+            system_content += (
+                f"\n\nThe user's recent activity in the app this session, oldest to newest: {trail}. "
+                "The last entry is roughly where they are now. Use this only for relevance (e.g. don't "
+                "suggest an agent they were just on), never state it back to them as a fact."
+            )
 
-    # If the user answered a question, store it in chat_state
-    if last_question_key in question_keys and last_answer:
-        chat_state[last_question_key] = last_answer
+    openai_messages = [{"role": "system", "content": system_content}]
+    for m in history:
+        role = 'assistant' if m.get('role') == 'assistant' else 'user'
+        text = m.get('text', '')
+        if text:
+            openai_messages.append({"role": role, "content": text})
 
-    # If the user sent an answer but didn't specify which question, try to infer
-    if not last_question_key and last_answer:
-        for q in questions:
-            if q['key'] not in chat_state or not chat_state.get(q['key']):
-                chat_state[q['key']] = last_answer
-                break
-
-    # Find the next unanswered question
-    for q in questions:
-        if q['key'] not in chat_state or not chat_state[q['key']]:
-            return jsonify({
-                "success": True,
-                "next_question": q['question'],
-                "next_question_key": q['key'],
-                "chat_state": chat_state,
-                "completed": False
-            })
-
-    # If all questions answered, auto-fill and format chat_state using OpenAI
     try:
-        import openai
-        openai.api_key = os.environ.get("OPENAI_API_KEY")
-        # Prompt to format and auto-fill chat_state
-        autofill_prompt = (
-            "Given the following user answers, format the business context as a JSON object with these keys: "
-            "industry, product_service, role, department_context, business_need, and tools (as a list of objects with tool_name and description). "
-            "If any field is missing or vague, infer and auto-fill it based on the other answers. "
-            "Example format:\n"
-            "{\n"
-            '  "tools": [\n'
-            '    {"tool_name": "Slack", "description": "Team communication and collaboration platform"},\n'
-            '    {"tool_name": "Salesforce", "description": "CRM for managing customer relationships and sales pipeline"}\n'
-            "  ],\n"
-            '  "industry": "Technology",\n'
-            '  "product_service": "B2B workflow automation software for sales and operations teams",\n'
-            '  "role": "Sales Manager",\n'
-            '  "department_context": "Our sales department is focused on improving lead conversion and automating reporting.",\n'
-            '  "business_need": "We want to integrate our communication and CRM tools, automate sales reporting, and identify missing modules for analytics."\n'
-            "}\n"
-            "User answers:\n"
-            f"Industry: {chat_state.get('industry', '')}\n"
-            f"Product/Service: {chat_state.get('product_service', '')}\n"
-            f"Role and Department Context: {chat_state.get('role_department', '')}\n"
-            f"Tools: {chat_state.get('tools', '')}\n"
-            f"Business Need: {chat_state.get('business_need', '')}\n"
-            "Return only valid JSON."
-        )
-
         from core.ai_client import ai_chat_completion
         response = ai_chat_completion(
-            user_id=g.user_id, project_id=None, agent="enterprise_chat.autofill",
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "You are a business analyst assistant."},
-                {"role": "user", "content": autofill_prompt}
-            ],
-            max_tokens=300,
-            temperature=0.2
+            user_id=g.user_id, project_id=None, agent="assistant_chat.turn",
+            model="gpt-4o-mini",
+            messages=openai_messages,
+            tools=ASSISTANT_TOOLS,
+            tool_choice="auto",
+            parallel_tool_calls=False,
+            max_tokens=400,
+            temperature=0.3,
         )
-        # Extract JSON from response
-        import re
-        raw_content = response.choices[0].message.content.strip()
-        match = re.search(r'\{[\s\S]*\}', raw_content)
-        if match:
-            formatted_state = json.loads(match.group(0))
-        else:
-            formatted_state = chat_state  # fallback
-
-        # Summarize the context for search_summary
-        summary_prompt = (
-            "Summarize the following business context in 2-3 sentences for agent recommendation:\n\n"
-            f"{json.dumps(formatted_state, indent=2)}"
-        )
-        summary_response = ai_chat_completion(
-            user_id=g.user_id, project_id=None, agent="enterprise_chat.summarize",
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "You are a business analyst assistant."},
-                {"role": "user", "content": summary_prompt}
-            ],
-            max_tokens=150,
-            temperature=0.3
-        )
-        search_summary = summary_response.choices[0].message.content.strip()
-        print(formatted_state)
-
     except Exception as e:
-        formatted_state = chat_state
-        search_summary = f"Could not generate summary: {str(e)}"
+        return jsonify({"success": False, "error": str(e)}), 500
 
-    return jsonify({
-        "success": True,
-        "message": "Thank you! Here is the summary of your business context.",
-        "chat_state": formatted_state,
-        "completed": True,
-        "search_summary": search_summary
-    })
+    msg = response.choices[0].message
+    tool_result = None
+    tool_calls = getattr(msg, 'tool_calls', None)
+    if tool_calls:
+        try:
+            tool_result = json.loads(tool_calls[0].function.arguments)
+        except (json.JSONDecodeError, AttributeError, IndexError):
+            tool_result = None
+        else:
+            tool_result = _normalize_tool_result(tool_result)
+
+    # Prefer the reply the model wrote INSIDE the tool call (required by the
+    # open_agent schema) over msg.content - models frequently return empty
+    # content on a tool-calling turn even when told not to in the system
+    # prompt, so a prompt-only instruction wasn't reliable. Putting "reply"
+    # in the required tool parameters forces it every time instead.
+    tool_reply = tool_result.pop('reply', None) if tool_result else None
+    reply = tool_reply or msg.content or (
+        f"I've filled in what I could for {tool_result.get('agent_display_name', 'the agent')}."
+        if tool_result else "Sorry, I couldn't process that - could you rephrase?"
+    )
+
+    # Deliberately terse, single-line application log (distinct from the
+    # werkzeug access log line, which only shows status code) - the goal is
+    # answering "did this call get a tool call, and did it use the model's
+    # own reply text or a fallback" from `docker logs` alone, no request/
+    # response bodies (which could contain user-entered text).
+    print(
+        f"[assistant_chat] user={g.user_id} tool_call={'yes:' + tool_result['agent_key'] if tool_result else 'no'} "
+        f"reply_source={'tool_reply' if tool_reply else ('model_content' if msg.content else 'fallback_template')} "
+        f"reply_len={len(reply)}"
+    )
+
+    return jsonify({"success": True, "reply": reply, "tool_result": tool_result})
+
+
+@app.route('/api/agent_suggestion_feedback', methods=['POST', 'OPTIONS'])
+@cross_origin()
+@require_auth
+def agent_suggestion_feedback():
+    """
+    Records accept/dismiss on a proactive next-step suggestion card (see
+    frontend/src/components/AiAssistantPanel.js). Used to suppress a pairing
+    the user has already said "not now" to - see the GET route below.
+    """
+    data = request.get_json() or {}
+    from_agent = data.get('from_agent')
+    to_agent = data.get('to_agent')
+    action = data.get('action')
+    if not from_agent or not to_agent or action not in ('accepted', 'dismissed'):
+        return jsonify({"success": False, "error": "from_agent, to_agent and a valid action are required"}), 400
+
+    from core.models import AgentSuggestionFeedback
+    from core.database import db
+    db.session.add(AgentSuggestionFeedback(
+        user_id=g.user_id, from_agent=from_agent, to_agent=to_agent, action=action,
+    ))
+    db.session.commit()
+    return jsonify({"success": True})
+
+
+@app.route('/api/agent_suggestion_feedback/dismissed_pairs', methods=['GET'])
+@cross_origin()
+@require_auth
+def agent_suggestion_dismissed_pairs():
+    """
+    Pairs whose most recent feedback row for this user is 'dismissed' - the
+    AI Assistant panel skips suggesting these again until the user is shown
+    (and accepts) that pairing some other way.
+    """
+    from core.models import AgentSuggestionFeedback
+    rows = (
+        AgentSuggestionFeedback.query
+        .filter_by(user_id=g.user_id)
+        .order_by(AgentSuggestionFeedback.created_at.asc())
+        .all()
+    )
+    latest_action = {}
+    for row in rows:
+        latest_action[(row.from_agent, row.to_agent)] = row.action
+
+    dismissed = [
+        {"from_agent": pair[0], "to_agent": pair[1]}
+        for pair, action in latest_action.items()
+        if action == 'dismissed'
+    ]
+    return jsonify({"success": True, "dismissed_pairs": dismissed})
+
+
+@app.route('/api/ai_assistant_messages', methods=['GET'])
+@cross_origin()
+@require_auth
+def get_ai_assistant_messages():
+    """
+    Server-side AI Assistant chat log - see AiAssistantMessage docstring.
+    Scoped by ?project_id= (omit/empty for the project-less "general" bucket -
+    Dashboard, Team, Settings, etc.).
+    """
+    from core.models import AiAssistantMessage
+    project_id = request.args.get('project_id') or None
+    rows = (
+        AiAssistantMessage.query
+        .filter_by(user_id=g.user_id, project_id=project_id)
+        .order_by(AiAssistantMessage.created_at.asc())
+        .limit(200)
+        .all()
+    )
+    messages = []
+    for row in rows:
+        try:
+            tool_result = json.loads(row.tool_result) if row.tool_result else None
+        except json.JSONDecodeError:
+            tool_result = None
+        messages.append({
+            "id": row.message_id, "role": row.role, "text": row.text,
+            "toolResult": tool_result, "timestamp": row.created_at.isoformat(),
+        })
+    return jsonify({"success": True, "messages": messages})
+
+
+@app.route('/api/ai_assistant_messages', methods=['POST', 'OPTIONS'])
+@cross_origin()
+@require_auth
+def upsert_ai_assistant_message():
+    """
+    Upsert one message (create, or update in place if message_id already
+    exists for this user) - used both for new messages and for in-place
+    edits like marking a suggestion card dismissed/opened.
+    """
+    from core.models import AiAssistantMessage
+    from core.database import db
+
+    data = request.get_json() or {}
+    message_id = data.get('id')
+    role = data.get('role')
+    text = data.get('text', '')
+    tool_result = data.get('toolResult')
+    project_id = data.get('project_id') or None
+    if not message_id or role not in ('user', 'assistant'):
+        return jsonify({"success": False, "error": "id and a valid role are required"}), 400
+
+    # Matched on (user_id, message_id) only, deliberately not also
+    # project_id - a message never moves between projects once created, and
+    # requiring project_id to match here made the lookup fragile against a
+    # client-side project_id misread on an update-only call (e.g. marking a
+    # card opened/dismissed shortly after a project switch), which silently
+    # created an orphaned duplicate row instead of updating the real one.
+    row = AiAssistantMessage.query.filter_by(user_id=g.user_id, message_id=message_id).first()
+    tool_result_json = json.dumps(tool_result) if tool_result is not None else None
+    if row:
+        row.text = text
+        row.tool_result = tool_result_json
+    else:
+        db.session.add(AiAssistantMessage(
+            user_id=g.user_id, project_id=project_id, message_id=message_id, role=role,
+            text=text, tool_result=tool_result_json,
+        ))
+    db.session.commit()
+    return jsonify({"success": True})
+
+
+@app.route('/api/ai_assistant_messages', methods=['DELETE'])
+@cross_origin()
+@require_auth
+def clear_ai_assistant_messages():
+    """Backs the AI Assistant panel's clear-chat (↻) button - clears only the
+    current project's conversation (or the general bucket), not every
+    project's history at once."""
+    from core.models import AiAssistantMessage
+    from core.database import db
+    project_id = request.args.get('project_id') or None
+    AiAssistantMessage.query.filter_by(user_id=g.user_id, project_id=project_id).delete()
+    db.session.commit()
+    return jsonify({"success": True})
 
 
 @app.route('/chat_api', methods=['POST', 'OPTIONS'])
@@ -4782,8 +5077,9 @@ def register():
 
     if not password or not email:
         return jsonify({'error': 'Email and password required'}), 400
-    if User.query.filter_by(username=username).first():
-        return jsonify({'error': 'Username already exists'}), 400
+    # username is always the email address (see `username = data.get('email')`
+    # above) - a single check avoids ever surfacing the confusing "Username
+    # already exists" message for what the user only ever typed as an email.
     if User.query.filter_by(email=email).first():
         return jsonify({'error': 'Email already registered'}), 400
 
@@ -4846,6 +5142,8 @@ def login():
             'message': 'Login successful',
             'username': user.username,
             'email': user.email,
+            'first_name': user.first_name,
+            'last_name': user.last_name,
             'session_token': token,
         }), 200
     else:
@@ -5298,160 +5596,8 @@ def save_tools_landscape_for_user(user_id, tools_data):
     except Exception as e:
         return {'success': False, 'error': str(e)}
 
-@app.route('/get_tools_landscape', methods=['GET'])
-@cross_origin()
-@require_auth
-def get_tools_landscape():
-    """
-    GET API to read tools landscape from tools_landscape.json and return
-    a list of tools with tool_name, description, and category.
-    """
-    try:
-        file_path = os.path.join(DATA_DIR, 'user_data', 'tools_landscape', 'tools_landscape.json')
-        if not os.path.exists(file_path):
-            return jsonify({'success': False, 'error': 'tools_landscape.json not found'}), 404
-
-        with open(file_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-
-        # Extract tools info
-        tools = []
-        for item in data.get('data', []):
-            if item.get('tool_name'):
-                tools.append({
-                    'tool_name': item.get('tool_name'),
-                    'description': item.get('description'),
-                    'category': item.get('category')
-                })
-
-        return jsonify({'success': True, 'tools': tools})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-    
 import openai
 
-
-@app.route('/recommend_agents', methods=['POST'])
-@cross_origin()
-@require_auth
-def recommend_agents():
-    """
-    Recommend agents/modules based on user's tools, industry/domain, role, department/company context, and business need.
-    Input JSON payload:
-    {
-        "tools": [ {"tool_name": "ToolA", "description": "..."}, ... ],
-        "industry": "...",
-        "product_service": "...",
-        "role": "...",
-        "department_context": "...",  # e.g. 'My company/department is doing X and is responsible for Y'
-        "business_need": "..."         # e.g. 'I want to track this business task and generate insights'
-    }
-    Output JSON:
-    {
-        "success": true,
-        "recommendations": {
-            "recommended_tools": [ {"tool_name": "...", "description": "...", "why_recommended": "..."}, ... ],
-            "integration_pairs": [ {"tools": ["ToolA", "ToolB"], "integration": "...", "data_shared": "..."}, ... ],
-            "additional_tools": [ {"tool_name": "...", "description": "...", "why_needed": "..."}, ... ]
-        }
-    }
-    """
-    try:
-        openai.api_key = get_credentials()
-        data = request.json
-        tools = data.get('tools', [])
-        industry = data.get('industry', '')
-        product_service = data.get('product_service', '')
-        role = data.get('role', '')
-        department_context = data.get('department_context', '')
-        business_need = data.get('business_need', '')
-
-        # Load available modules (from agents_modules.json). If missing, use a safe fallback catalog.
-        modules_file = os.path.join(DATA_DIR, 'agents_modules.json')
-        if os.path.exists(modules_file):
-            with open(modules_file, 'r', encoding='utf-8') as f:
-                modules = json.load(f)
-        else:
-            # Mirrors frontend/src/data/agentCatalog.js exactly - the recommendation
-            # must use the catalog's real names, since the frontend matches a
-            # recommended tool_name to a card via an exact-string lookup
-            # (findModuleByName); any name that drifts from the catalog silently
-            # disappears from the recommended list instead of erroring loudly.
-            modules = [
-                {"name": "Market Research", "description": "Discover market trends, analyze competitors, and gather customer insights to make data-driven decisions."},
-                {"name": "Sales Helper Agent", "description": "Supercharge your sales with lead management, CRM integration, and intelligent sales strategy recommendations."},
-                {"name": "Content Marketing Agent", "description": "Create compelling content, manage campaigns, and boost your brand presence with AI-powered marketing."},
-                {"name": "Community Network", "description": "Build and engage your community, manage relationships, and grow customer loyalty organically."},
-                {"name": "Executive Assistant Agent", "description": "AI-powered executive assistant for task management, reminders, and stakeholder coordination via email."},
-                {"name": "Event Networking Agent", "description": "Maximize event ROI with smart attendee matching and follow-up automation."},
-                {"name": "Email Outreach", "description": "Send personalized bulk emails to suppliers, leads, or contacts with templates and tracking."},
-                {"name": "Supply Chain Audit", "description": "Qualify suppliers through capability and compliance audits with weighted scoring."},
-                {"name": "Data Insights", "description": "Explore your data, uncover hidden patterns, and generate actionable business insights with AI-powered document analysis."},
-                {"name": "AI Chatbot", "description": "General-purpose assistant for quick questions across your uploaded documents."},
-                {"name": "Investment Agent", "description": "Make smarter investment decisions with AI-powered market analysis and portfolio recommendations. (Coming soon)"},
-                {"name": "Team Performance", "description": "Track team productivity, evaluate performance, and identify areas for improvement with analytics. (Coming soon)"}
-            ]
-
-        # Prepare context for OpenAI
-        context = {
-            "tools": tools,
-            "industry": industry,
-            "product_service": product_service,
-            "role": role,
-            "department_context": department_context,
-            "business_need": business_need,
-            "available_modules": modules
-        }
-        prompt = (
-            "You are a technology consultant. Based on the following user context, "
-            "recommend a set of software modules (tools/agents) that can cater to the business need, "
-            "considering the existing tools, missing necessary tools, and possible integrations. "
-            "For each recommendation, provide: "
-            "1. recommended_tools: list of modules/tools with name, description, and why recommended. "
-            "For recommended_tools specifically, only choose from `available_modules` and copy each "
-            "chosen module's \"name\" field character-for-character - do not paraphrase, rename, or "
-            "invent a module not in that list, since the caller matches on the exact name. "
-            "2. integration_pairs: pairs of tools/modules that should be integrated, with integration description and data shared. "
-            "3. additional_tools: genuinely external tools/services that are needed but missing (not "
-            "already in `available_modules`), with name, description, names of companies offering it, and why needed. "
-            "Return the output as a JSON object with a 'recommendations' key containing these three lists. "
-            "Here is the user context and available modules:\n\n" + json.dumps(context, indent=2)
-        )
-        from core.ai_client import ai_chat_completion
-        response = ai_chat_completion(
-            user_id=None, project_id=None, agent="module_recommendation.generate",
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": "You are a technology consultant for business software and workflow automation."},
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=1000,
-            temperature=0.3
-        )
-
-        # Try to parse the response as JSON
-        import ast
-        import re
-        raw_content = response.choices[0].message.content
-        # Extract JSON from response (in case LLM returns extra text)
-        match = re.search(r'\{[\s\S]*\}', raw_content)
-        if match:
-            recommendations_json = match.group(0)
-            try:
-                recommendations = json.loads(recommendations_json)
-            except Exception:
-                recommendations = {"raw": raw_content}
-        else:
-            recommendations = {"raw": raw_content}
-
-        print(recommendations)
-
-        return jsonify({
-            "success": True,
-            "recommendations": recommendations.get('recommendations', recommendations)
-        })
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
 
 # @app.route('/AI_ML', methods=['GET'])
 # def yfinance_test():
