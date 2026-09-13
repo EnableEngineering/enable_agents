@@ -18,6 +18,14 @@
 /* Shifts main content right to make room for the fixed left Sidebar */
 #main-content.main-content--sidebar-open {
   margin-left: 240px;
+  transition: margin-left var(--transition-fast);
+}
+
+/* Manual collapse (see Sidebar.js) - same 72px the sidebar already falls
+   back to below the 1024px breakpoint, just user-triggered instead of
+   viewport-triggered. */
+#main-content.main-content--sidebar-open.main-content--sidebar-collapsed {
+  margin-left: 72px;
 }
 
 /* Shifts main content left to make room for the docked AI Assistant panel */

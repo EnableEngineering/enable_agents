@@ -60,7 +60,7 @@ function getActiveNavId(pathname) {
   return null;
 }
 
-function Sidebar() {
+function Sidebar({ collapsed = false, onCollapseToggle }) {
   const navigate = useNavigate();
   const location = useLocation();
   const activeNavId = getActiveNavId(location.pathname);
@@ -158,7 +158,7 @@ function Sidebar() {
 
   return (
     <>
-      <nav className="sidebar" aria-label="Primary">
+      <nav className={`sidebar${collapsed ? ' sidebar--collapsed' : ''}`} aria-label="Primary">
         <Link to="/home" className="sidebar-logo" aria-label="Enable home">
           <img src={`${process.env.PUBLIC_URL}/logo192.svg`} alt="Enable" />
         </Link>
@@ -169,6 +169,7 @@ function Sidebar() {
               key={item.id}
               to={item.to}
               className={`sidebar-nav-item ${activeNavId === item.id ? 'sidebar-nav-item--active' : ''}`}
+              title={collapsed ? item.label : undefined}
             >
               {item.icon}
               <span>{item.label}</span>
@@ -231,12 +232,27 @@ function Sidebar() {
 
         <div style={{ flex: 1 }} />
 
+        {onCollapseToggle && (
+          <button
+            type="button"
+            className="sidebar-collapse-toggle"
+            onClick={onCollapseToggle}
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: collapsed ? 'rotate(180deg)' : 'none' }}>
+              <path d="M15 18l-6-6 6-6" />
+            </svg>
+          </button>
+        )}
+
         <div className="sidebar-user-wrapper" ref={userMenuRef}>
           <button
             className="sidebar-user"
             onClick={() => setShowUserMenu((v) => !v)}
             aria-haspopup="true"
             aria-expanded={showUserMenu}
+            title={collapsed ? (firstName || userEmail || 'Account') : undefined}
           >
             <span className="sidebar-user-avatar">{initials}</span>
             <span className="sidebar-user-name">{firstName || userEmail || 'Account'}</span>

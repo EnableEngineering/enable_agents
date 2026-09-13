@@ -11,6 +11,62 @@
   flex-direction: column;
   gap: 4px;
   z-index: 910;
+  transition: width var(--transition-fast), padding var(--transition-fast);
+}
+
+/* Manual collapse toggle (Sidebar.js) - identical treatment to the
+   72px-icon-only state the 1024px breakpoint below already forces, just
+   user-triggered instead of viewport-triggered. Kept as its own class
+   (rather than only relying on the media query) so the two compose
+   cleanly: same rules either way, so nothing conflicts when both apply. */
+.sidebar--collapsed {
+  width: 72px;
+  padding: 16px 10px;
+}
+/* logo192.svg is a single wide wordmark graphic (icon + "Enable." text
+   baked into one image, no separate span) - at 72px width the full
+   wordmark scales down and clips mid-word. Crop to just its left (icon)
+   edge instead of showing a half-cut word. */
+.sidebar--collapsed .sidebar-logo img {
+  width: 22px;
+  height: 22px;
+  object-fit: cover;
+  object-position: left center;
+}
+.sidebar--collapsed .sidebar-logo span,
+.sidebar--collapsed .sidebar-nav-item span,
+.sidebar--collapsed .sidebar-utility-button span:not(.sidebar-notif-badge),
+.sidebar--collapsed .sidebar-user-name {
+  display: none;
+}
+.sidebar--collapsed .sidebar-nav-item,
+.sidebar--collapsed .sidebar-utility-button,
+.sidebar--collapsed .sidebar-user {
+  justify-content: center;
+}
+
+.sidebar-collapse-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin: 4px 0 0 auto;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: rgba(var(--color-white-rgb), 0.5);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.sidebar-collapse-toggle:hover {
+  background: rgba(var(--color-white-rgb), 0.08);
+  color: rgba(var(--color-white-rgb), 0.9);
+}
+
+.sidebar--collapsed .sidebar-collapse-toggle {
+  margin: 4px auto 0;
 }
 
 .sidebar-logo {
@@ -320,5 +376,10 @@
   }
   .sidebar-user {
     justify-content: center;
+  }
+  /* Already forced icon-only here regardless of the manual toggle's state
+     - showing the toggle would let it be clicked with no visible effect. */
+  .sidebar-collapse-toggle {
+    display: none;
   }
 }

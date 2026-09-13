@@ -69,6 +69,17 @@ function App() {
     // by default covers the entire page with no hint of what's underneath.
     return typeof window === 'undefined' || window.innerWidth > 1024;
   });
+  // Per-device only (localStorage, not synced server-side) - a pure layout
+  // preference, unlike the AI Assistant chat history which is per-account.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('sidebarCollapsed') === 'true');
+
+  const handleSidebarCollapseToggle = () => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      localStorage.setItem('sidebarCollapsed', String(next));
+      return next;
+    });
+  };
 
   // isLoggedIn() reads localStorage, which doesn't trigger a React re-render
   // on its own - listen for the same custom event used for same-tab
@@ -96,12 +107,14 @@ function App() {
         loggedIn={loggedIn}
         panelOpen={panelOpen}
         onPanelToggle={handlePanelToggle}
+        sidebarCollapsed={sidebarCollapsed}
+        onSidebarCollapseToggle={handleSidebarCollapseToggle}
       />
     </Router>
   );
 }
 
-function AppShell({ loggedIn, panelOpen, onPanelToggle }) {
+function AppShell({ loggedIn, panelOpen, onPanelToggle, sidebarCollapsed, onSidebarCollapseToggle }) {
   const location = useLocation();
   useActivityTrail();
   const isAuthOnlyPath = AUTH_ONLY_PATHS.includes(location.pathname);
@@ -113,11 +126,14 @@ function AppShell({ loggedIn, panelOpen, onPanelToggle }) {
       <SkipLink />
       <div className="App">
         <ErrorBoundary>
-          {showShell && <Sidebar />}
+          {showShell && (
+            <Sidebar collapsed={sidebarCollapsed} onCollapseToggle={onSidebarCollapseToggle} />
+          )}
           <main
             id="main-content"
             className={[
               showShell ? 'main-content--sidebar-open' : '',
+              showShell && sidebarCollapsed ? 'main-content--sidebar-collapsed' : '',
               showPanel && panelOpen ? 'main-content--panel-open' : '',
               showPanel && !panelOpen ? 'main-content--panel-trigger' : '',
             ].filter(Boolean).join(' ')}

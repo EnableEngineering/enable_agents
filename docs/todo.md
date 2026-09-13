@@ -64,15 +64,17 @@ Four items requested in one pass: theme alignment to a reference app ("Reflectio
 - `App.css` already ties main-content margin to sidebar width: `#main-content.main-content--sidebar-open { margin-left: 240px }`.
 - **A responsive icon-only mode already exists** at `max-width: 1024px` (`Sidebar.css:~306-308`, collapses to `72px`) with a matching `margin-left: 72px` in `App.css` — this is real, reusable CSS for the collapsed visual state; the new work is making it a **manual, user-controlled toggle** rather than only a breakpoint-driven one.
 
-**Task list:**
+**Task list — ✅ DONE (2026-09-13):**
 
-- [ ] Add `collapsed` boolean state in `Sidebar.js`; persist to `localStorage` (e.g. `sidebarCollapsed`) so the choice survives reloads — confirm with the user whether this should be per-device only (simplest) or synced server-side per-account (more work, matches the precedent set by this session's chat-history persistence decision, but is a heavier lift for a pure layout preference).
-- [ ] Add a toggle affordance (chevron icon) — near the logo or at the bottom of the nav list.
-- [ ] When collapsed: hide each `<span>{item.label}</span>` and the "Notifications"/user-name text, keep icons + the unread badge visible; add `title`/tooltip on each icon so labels aren't lost for accessibility/discoverability.
-- [ ] Reuse the **existing** `72px` icon-only rule from the `1024px` breakpoint as the collapsed-state CSS (via a `.sidebar--collapsed` class) instead of writing new icon-only styles from scratch.
-- [ ] Add a `.main-content--sidebar-collapsed { margin-left: 72px }` rule mirroring the value already used at the mobile breakpoint.
-- [ ] Add a smooth width/margin transition (both sidebar and main-content) instead of an abrupt jump.
-- [ ] Reconcile with the existing `1024px` auto-collapse: below that breakpoint the sidebar is already forced to icon-only — decide whether the manual toggle is hidden there (since it's redundant) or the two states compose cleanly.
+- [x] `collapsed` boolean state lifted to `App.js` (`sidebarCollapsed`, alongside the existing `panelOpen` pattern) and passed down to `Sidebar` as a prop; persisted to `localStorage` (`sidebarCollapsed`) — confirmed with the user: per-device only, not synced server-side (this is a pure layout preference, unlike the chat history).
+- [x] Toggle affordance: a chevron button (`.sidebar-collapse-toggle`) at the bottom of the nav column, rotates 180° between states.
+- [x] When collapsed: nav item labels, "Notifications" text, and the user name are hidden via a `.sidebar--collapsed` class; icons + the unread badge stay visible; `title` tooltips added to nav links and the user button so labels aren't lost for accessibility/discoverability.
+- [x] Reused the **existing** `72px` icon-only rule from the `1024px` breakpoint as the collapsed-state CSS, via `.sidebar--collapsed` — same selectors, so the manual class and the media query never conflict (both apply identical rules when both happen to be true).
+- [x] Added `.main-content--sidebar-open.main-content--sidebar-collapsed { margin-left: 72px }` in `App.css`, mirroring the value already used at the mobile breakpoint.
+- [x] Added a `transition` on the sidebar's `width`/`padding` and main-content's `margin-left` for a smooth collapse/expand instead of an abrupt jump.
+- [x] Reconciled with the `1024px` auto-collapse: the toggle button itself is hidden below that breakpoint (`display: none`) since the sidebar is already forced to icon-only there and a visible-but-inert control would be confusing; the CSS states compose cleanly either way since they're identical rules.
+- [x] **Found and fixed a related bug while verifying visually:** `logo192.svg` is a full wordmark (icon + "Enable." text baked into one wide image, no separate DOM text), so it clipped mid-word at 72px width — pre-existing at the `1024px` breakpoint too, just rarely seen there. Cropped to just the icon's left edge (`object-fit: cover; object-position: left center`) when collapsed instead of leaving it visibly cut off.
+- Verified live via Playwright screenshots: expanded state, collapsed state, and state surviving a full page reload (localStorage persistence confirmed working).
 
 ---
 
