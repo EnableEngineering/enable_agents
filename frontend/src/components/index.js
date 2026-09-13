@@ -2,15 +2,15 @@
  * Component Library Index
  *
  * Usage:
- *   import { Toast, ToastContainer, Skeleton, EmptyState, Spinner, FormField } from '../components';
+ *   import { Skeleton, EmptyState, Spinner, FormField } from '../components';
  *   import { Card, CardGrid, ModuleCard, StatusIndicator } from '../components';
  *   import { Modal, ModalTabs } from '../components';
  *   import { ConfirmDialog, showConfirm, showAlert } from '../components';
  *   import { PageLayout, PageSection } from '../components';
+ *
+ * Toast notifications: use showToast(...) from '../core/toast' - the one
+ * live toast system in the app.
  */
-
-// Toast
-export { Toast, ToastContainer } from './Toast';
 
 // Loading states
 export { default as Skeleton } from './SkeletonLoader';

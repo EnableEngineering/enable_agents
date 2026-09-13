@@ -34,6 +34,12 @@ _registry: dict[str, dict[str, Any]] = {}
 
 _REQUIRED_MANIFEST_KEYS = {"id", "name", "description", "enabled", "routes_prefix"}
 
+# Keys satisfied by app surfaces that aren't Flask-blueprint agents (so they
+# can never appear in a manifest's "provides") - user_profile comes from the
+# Settings page, not an agent. Without this, every agent that consumes it
+# trips the "no enabled agent provides it" warning on every boot, forever.
+_EXTERNAL_PROVIDERS = {"user_profile"}
+
 
 def _load_manifests() -> None:
     """Read every agents/<name>/manifest.json and populate _registry."""
@@ -62,7 +68,7 @@ def _validate_dependencies() -> None:
     enabled agent 'provides'.  Logs a warning (not an error) so a missing
     dependency never prevents startup — it just surfaces clearly in logs.
     """
-    provided_keys: set[str] = set()
+    provided_keys: set[str] = set(_EXTERNAL_PROVIDERS)
     for manifest in _registry.values():
         if manifest.get("enabled"):
             provided_keys.update(manifest.get("provides", {}).keys())
