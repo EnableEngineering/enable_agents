@@ -160,7 +160,10 @@ function Sidebar({ collapsed = false, onCollapseToggle }) {
     <>
       <nav className={`sidebar${collapsed ? ' sidebar--collapsed' : ''}`} aria-label="Primary">
         <Link to="/home" className="sidebar-logo" aria-label="Enable home">
-          <img src={`${process.env.PUBLIC_URL}/logo192.svg`} alt="Enable" />
+          <img
+            src={`${process.env.PUBLIC_URL}/${collapsed ? 'logo-icon.svg' : 'logo192.svg'}`}
+            alt="Enable"
+          />
         </Link>
 
         <div className="sidebar-nav">

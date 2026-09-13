@@ -23,15 +23,13 @@
   width: 72px;
   padding: 16px 10px;
 }
-/* logo192.svg is a single wide wordmark graphic (icon + "Enable." text
-   baked into one image, no separate span) - at 72px width the full
-   wordmark scales down and clips mid-word. Crop to just its left (icon)
-   edge instead of showing a half-cut word. */
+/* logo192.svg is a single wordmark graphic (icon + "Enable." text baked
+   into one image, no separate span) - too wide for a 72px rail. Sidebar.js
+   swaps in logo-icon.svg (just the dot/caret/ring mark, no lettering)
+   when collapsed instead of cropping the wordmark down. */
 .sidebar--collapsed .sidebar-logo img {
-  width: 22px;
   height: 22px;
-  object-fit: cover;
-  object-position: left center;
+  width: auto;
 }
 .sidebar--collapsed .sidebar-logo span,
 .sidebar--collapsed .sidebar-nav-item span,
