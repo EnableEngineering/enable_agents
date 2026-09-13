@@ -2,9 +2,13 @@ name: CI
 
 on:
   push:
-    branches: [main, develop, platform-foundation, local-preview]
+    branches: [main, develop, platform-foundation]
   pull_request:
     branches: [main, develop]
+  # local-preview is intentionally not in the push trigger above - CI on
+  # that branch runs only on request, via `gh workflow run ci.yml --ref
+  # local-preview` (or the Actions tab's "Run workflow" button).
+  workflow_dispatch:
 
 env:
   NODE_VERSION: '20'
