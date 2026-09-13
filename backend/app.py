@@ -4233,7 +4233,8 @@ def assistant_chat():
     # click-level. Gives the model situational awareness for next-step
     # suggestions without instrumenting every interaction in the app.
     recent_activity = data.get('recent_activity')
-    system_content = ASSISTANT_SYSTEM_PROMPT
+    from core.settings import get_response_language_instruction
+    system_content = ASSISTANT_SYSTEM_PROMPT + "\n\n" + get_response_language_instruction(g.user_id)
     if isinstance(recent_activity, list) and recent_activity:
         trail = ' -> '.join(str(p) for p in recent_activity[-5:] if p)
         if trail:
@@ -6339,6 +6340,7 @@ def generate_content_marketing():
         }
         config = channel_config.get(channel, channel_config['linkedin'])
 
+        from core.settings import get_response_language_instruction
         prompt = f"""Generate marketing content for {channel} channel.
 Industry: {project.industry or 'General'}
 Tone: {config['tone']}
@@ -6346,6 +6348,8 @@ Max Length: {config['max_length']} characters
 Content Type: {content_type}
 User Context: {user_context}
 Documents Summary: {' '.join([doc[:200] for doc in doc_texts[:3]])}
+
+Language level: {get_response_language_instruction(g.user_id)}
 
 Generate compelling marketing {content_type} content."""
 
@@ -7097,12 +7101,17 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-def generate_email_content(business, sender_name):
+def generate_email_content(business, sender_name, user_id=None):
     import json
     import os
     from openai import OpenAI
-    
-    prompt = f"""We have a market research agent that scrapes company websites and 
+
+    language_instruction = ""
+    if user_id:
+        from core.settings import get_response_language_instruction
+        language_instruction = f"\nLanguage level for the generated email: {get_response_language_instruction(user_id)}\n"
+
+    prompt = f"""We have a market research agent that scrapes company websites and
 extracts leads including company name, industry, decision maker name, 
 email, and a short company summary from their website.
 
@@ -7149,7 +7158,7 @@ Content/Description: {business.get('description', '')} {business.get('summary', 
 Website: {business.get('website', 'Unknown')}
 Contact Name: {business.get('contact_name', 'There')}
 Industry: {business.get('industry', 'Unknown')}
-
+{language_instruction}
 Do not add any explanation, just return the JSON.
 """
 
@@ -7177,7 +7186,7 @@ def generate_email():
         business = data.get('business', {})
         sender_name = data.get('sender_name', 'Alex')
         
-        result = generate_email_content(business, sender_name)
+        result = generate_email_content(business, sender_name, user_id=g.user_id)
         return jsonify(result), 200
         
     except Exception as e:
@@ -7302,7 +7311,7 @@ def send_bulk_emails():
             current_body = body
             if use_ai_personalization:
                 try:
-                    result = generate_email_content(b, username)
+                    result = generate_email_content(b, username, user_id=g.user_id)
                     current_subject = result.get('subject', subject or 'Exclusive Offer')
                     current_body = result.get('body', current_body or '')
                 except Exception as e:

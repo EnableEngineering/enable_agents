@@ -479,6 +479,27 @@ function Settings() {
       );
     }
 
+    if (setting.type === 'segmented') {
+      const selected = setting.value ?? setting.default;
+      return (
+        <div className="setting-segmented" role="radiogroup" aria-label={setting.label}>
+          {setting.options?.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              role="radio"
+              aria-checked={selected === opt.value}
+              className={`setting-segmented-option${selected === opt.value ? ' setting-segmented-option--active' : ''}`}
+              disabled={isSaving}
+              onClick={() => saveSetting(category, key, opt.value)}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      );
+    }
+
     if (setting.type === 'select') {
       return (
         <div className="setting-input-group">

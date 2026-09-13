@@ -162,7 +162,60 @@ SETTING_DEFINITIONS = {
             },
         },
     },
+    "preferences": {
+        "label": "Preferences",
+        "description": "Personalize how Enable talks to you",
+        "icon": "sliders",
+        "settings": {
+            "response_language_level": {
+                "label": "Response language level",
+                "description": "How much business/technical jargon the AI uses in what it writes for you",
+                "type": "segmented",
+                "options": [
+                    {"value": "simple", "label": "Simple"},
+                    {"value": "moderate", "label": "Moderate"},
+                    {"value": "professional", "label": "Professional"},
+                ],
+                "default": "moderate",
+            },
+        },
+    },
 }
+
+# Instruction block appended to every user-facing-prose system prompt, keyed
+# by response_language_level (see RESPONSE_LANGUAGE_LEVEL_PROMPTS usage in
+# app.py's chat/content-generation endpoints). Kept alongside the setting
+# definition above so the two never drift apart.
+RESPONSE_LANGUAGE_LEVEL_PROMPTS = {
+    "simple": (
+        "Explain everything in plain, everyday language. Avoid business/technical "
+        "jargon entirely (say 'starter/sample data', never 'seed data'; say 'find "
+        "and download', never 'scrape'). Assume the reader runs a small business "
+        "with no technical or corporate background."
+    ),
+    "moderate": (
+        "Use clear, plain business language. Avoid unexplained jargon; if a "
+        "technical term is unavoidable, briefly explain it in the same sentence."
+    ),
+    "professional": (
+        "Standard business and technical terminology is fine without extra explanation."
+    ),
+}
+
+
+def get_response_language_instruction(user_id: str) -> str:
+    """
+    The instruction block to append to a user-facing-prose system prompt,
+    based on the caller's saved response-language-level preference.
+
+    Every prompt-construction point that produces prose the user reads
+    (chat replies, generated content/emails, proactive-suggestion text)
+    should call this and append the result to its system prompt - see
+    docs/todo.md's "Plain-language setting" section for the full list of
+    call sites this was wired into.
+    """
+    level = get_user_setting(user_id, "preferences", "response_language_level", "moderate")
+    return RESPONSE_LANGUAGE_LEVEL_PROMPTS.get(level, RESPONSE_LANGUAGE_LEVEL_PROMPTS["moderate"])
 
 
 class UserSettings:

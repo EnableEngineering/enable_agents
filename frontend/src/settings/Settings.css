@@ -306,6 +306,43 @@
   cursor: pointer;
 }
 
+.setting-segmented {
+  display: inline-flex;
+  padding: 3px;
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  gap: 2px;
+}
+
+.setting-segmented-option {
+  padding: 8px 16px;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  font-size: var(--text-body);
+  font-family: inherit;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.setting-segmented-option:hover:not(:disabled):not(.setting-segmented-option--active) {
+  color: var(--color-text);
+}
+
+.setting-segmented-option--active {
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-weight: 600;
+  box-shadow: var(--shadow-sm);
+}
+
+.setting-segmented-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .setting-textarea {
   min-height: 100px;
   resize: vertical;
