@@ -14,15 +14,18 @@
      COLORS — Brand Palette
      ═══════════════════════════════════════════════════════════════════════════ */
 
-  /* Primary — Deep ink blue (headers, primary actions) */
-  --color-primary: #1E3A5F;
-  --color-primary-light: #284A7A;
-  --color-primary-dark: #152A47;
+  /* Primary — Near-black (sidebar, headers) - Reflection-aligned (2026-09-13) */
+  --color-primary: #181C23;
+  --color-primary-light: #233A63;
+  --color-primary-dark: #101318;
 
-  /* Accent — Burnt ember (CTAs, highlights, active states) */
-  --color-accent: #C2410C;
-  --color-accent-dark: #B45309;
-  --color-accent-light: #DC580F;
+  /* Accent — Single royal blue, used for BOTH primary actions and
+     highlights (CTAs, active states) - Reflection-aligned (2026-09-13).
+     Previously a two-hue navy+ember split; see docs/todo.md for the
+     comparison this decision was made from. */
+  --color-accent: #2563EB;
+  --color-accent-dark: #1D4ED8;
+  --color-accent-light: #3B82F6;
 
   /* Neutrals */
   --color-grey: #475569;
@@ -33,20 +36,20 @@
   --color-surface: #FFFFFF;
   --color-surface-elevated: #FFFFFF;
   --color-surface-alt: #F3F5F7;
-  --color-background: #F7F8FA;
+  --color-background: #F9FAFB;
   --color-background-subtle: #EEF1F5;
 
   /* Borders */
-  --color-border: #E2E5EA;
+  --color-border: #E5E7EB;
   --color-border-light: #EDEFF3;
   --color-border-focus: var(--color-accent);
 
   /* Text */
-  --color-text: #1E3A5F;
-  --color-text-muted: #475569;
-  --color-text-subtle: #64748B;
+  --color-text: #181C23;
+  --color-text-muted: #6B7280;
+  --color-text-subtle: #8A93A3;
   --color-text-inverse: #FFFFFF;
-  --color-text-accent: #C2410C;
+  --color-text-accent: #2563EB;
 
   /* Status */
   --color-success: #16A34A;
@@ -60,7 +63,7 @@
   --color-error-bg-hover: #FECACA;
   --color-warning: #F59E0B;
   --color-warning-bg: #FEF3C7;
-  --color-accent-bg: rgba(194, 65, 12, 0.12);
+  --color-accent-bg: rgba(37, 99, 235, 0.12);
   --color-info-bg: #DBEAFE;
 
   /* Team role badge colors */
@@ -70,19 +73,19 @@
   --role-viewer: #64748B;
 
   /* Focus & Interactive */
-  --color-focus-ring: rgba(194, 65, 12, 0.4);
+  --color-focus-ring: rgba(37, 99, 235, 0.4);
 
   /* RGB triplets — for rgba() opacity variants of the palette above. Add
      one only when a real rgba(<literal>, alpha) usage needs to become
      token-driven; keep in sync with the hex values by hand. */
-  --color-primary-rgb: 30, 58, 95;
-  --color-accent-rgb: 194, 65, 12;
-  --color-accent-dark-rgb: 180, 83, 9;
+  --color-primary-rgb: 24, 28, 35;
+  --color-accent-rgb: 37, 99, 235;
+  --color-accent-dark-rgb: 29, 78, 216;
   --color-success-rgb: 22, 163, 74;
   --color-error-rgb: 220, 38, 38;
   --color-warning-rgb: 245, 158, 11;
   --color-grey-rgb: 71, 85, 105;
-  --color-border-rgb: 226, 229, 234;
+  --color-border-rgb: 229, 231, 235;
 
   /* Categorical palette — for tagging/visualizing distinct data types
      (e.g. entity kinds in Data Insights' graph/badges) where the brand's
@@ -109,10 +112,10 @@
   --color-skeleton-shine: #F7F8FA;
 
   /* Gradients */
-  --gradient-accent: linear-gradient(135deg, #C2410C 0%, #B45309 100%);
-  --gradient-primary: linear-gradient(135deg, #1E3A5F 0%, #284A7A 100%);
-  --gradient-surface: linear-gradient(135deg, #F7F8FA 0%, #EEF1F5 100%);
-  --gradient-header: linear-gradient(135deg, #1E3A5F 0%, #284A7A 100%);
+  --gradient-accent: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%);
+  --gradient-primary: linear-gradient(135deg, #181C23 0%, #233A63 100%);
+  --gradient-surface: linear-gradient(135deg, #F9FAFB 0%, #EEF1F5 100%);
+  --gradient-header: linear-gradient(135deg, #181C23 0%, #233A63 100%);
 
   /* ═══════════════════════════════════════════════════════════════════════════
      TYPOGRAPHY — Simplified (2 sizes only)
@@ -187,26 +190,29 @@
      BORDER RADIUS
      ═══════════════════════════════════════════════════════════════════════════ */
 
-  --radius-sm: 0.375rem;  /* 6px */
-  --radius-md: 0.5rem;    /* 8px */
-  --radius-lg: 0.75rem;   /* 12px */
-  --radius-xl: 1rem;      /* 16px */
-  --radius-2xl: 1.125rem; /* 18px */
+  /* Sharper, Reflection-aligned scale (2026-09-13) - was 6/8/12/16/18px.
+     .btn already references --radius-md, landing buttons at the spec's
+     6px without a separate button-radius token. */
+  --radius-sm: 0.25rem;   /* 4px */
+  --radius-md: 0.375rem;  /* 6px */
+  --radius-lg: 0.5rem;    /* 8px */
+  --radius-xl: 0.625rem;  /* 10px */
+  --radius-2xl: 0.75rem;  /* 12px */
   --radius-full: 9999px;
 
   /* ═══════════════════════════════════════════════════════════════════════════
      SHADOWS
      ═══════════════════════════════════════════════════════════════════════════ */
 
-  --shadow-sm: 0 1px 3px rgba(30, 58, 95, 0.08);
-  --shadow-md: 0 4px 12px rgba(30, 58, 95, 0.10);
-  --shadow-lg: 0 8px 24px rgba(30, 58, 95, 0.12);
-  --shadow-xl: 0 12px 32px rgba(30, 58, 95, 0.15);
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.08);
+  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
+  --shadow-lg: 0 8px 24px rgba(15, 23, 42, 0.10);
+  --shadow-xl: 0 18px 45px rgba(15, 23, 42, 0.12);
 
   /* Accent shadows (for buttons, cards on hover) */
-  --shadow-accent-sm: 0 2px 8px rgba(194, 65, 12, 0.15);
-  --shadow-accent-md: 0 4px 16px rgba(194, 65, 12, 0.20);
-  --shadow-accent-lg: 0 8px 24px rgba(194, 65, 12, 0.25);
+  --shadow-accent-sm: 0 2px 8px rgba(37, 99, 235, 0.15);
+  --shadow-accent-md: 0 4px 16px rgba(37, 99, 235, 0.20);
+  --shadow-accent-lg: 0 8px 24px rgba(37, 99, 235, 0.25);
 
   /* ═══════════════════════════════════════════════════════════════════════════
      TRANSITIONS

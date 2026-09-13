@@ -1243,7 +1243,7 @@ function RequirementsGathering() {
             row.summary
           ]),
           styles: { fontSize: 8, cellPadding: 4 },
-          headStyles: { fillColor: [30, 58, 95] }
+          headStyles: { fillColor: [24, 28, 35] } // --color-primary, kept in sync by hand (jsPDF can't read CSS custom properties)
         });
 
         doc.save(`${fileBaseName}.pdf`);

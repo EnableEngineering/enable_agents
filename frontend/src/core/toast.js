@@ -58,14 +58,14 @@ function getContainer() {
       max-width: 420px;
       padding: 14px 16px;
       border-radius: var(--radius-lg, 12px);
-      border: 1px solid var(--color-border, #D6C7B8);
+      border: 1px solid var(--color-border, #E5E7EB);
       border-left: 4px solid var(--ea-toast-accent);
       font-family: var(--font-body, inherit);
       font-size: var(--text-body, 0.9375rem);
       line-height: 1.45;
       background: var(--color-surface, #fff);
-      color: var(--color-text, #1E3A5F);
-      box-shadow: var(--shadow-lg, 0 8px 24px rgba(30, 58, 95, 0.16));
+      color: var(--color-text, #181C23);
+      box-shadow: var(--shadow-lg, 0 8px 24px rgba(15, 23, 42, 0.10));
       pointer-events: all;
       animation: ea-toast-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
       position: relative;
@@ -77,7 +77,7 @@ function getContainer() {
     .ea-toast--success { --ea-toast-accent: var(--color-success, #16A34A); }
     .ea-toast--error   { --ea-toast-accent: var(--color-error, #DC2626); }
     .ea-toast--warning { --ea-toast-accent: var(--color-warning, #F59E0B); }
-    .ea-toast--info    { --ea-toast-accent: var(--color-primary, #1E3A5F); }
+    .ea-toast--info    { --ea-toast-accent: var(--color-primary, #181C23); }
     .ea-toast__icon {
       flex-shrink: 0;
       width: 26px;
@@ -116,7 +116,7 @@ function getContainer() {
     }
     .ea-toast__close:hover {
       background: var(--color-surface-alt, #F8F9FA);
-      color: var(--color-text, #1E3A5F);
+      color: var(--color-text, #181C23);
     }
     .ea-toast__progress {
       position: absolute;
@@ -145,11 +145,13 @@ function getContainer() {
 
 /**
  * Show a platform toast notification.
+ * Position/duration convention (Reflection-aligned, 2026-09-13): top-right,
+ * 3000ms default - position already matched, duration is the change here.
  * @param {string} message  - Text to display
  * @param {'success'|'error'|'warning'|'info'} type - Visual variant
- * @param {number} duration - Auto-dismiss delay in ms (default 4000)
+ * @param {number} duration - Auto-dismiss delay in ms (default 3000)
  */
-export function showToast(message, type = 'info', duration = 4000) {
+export function showToast(message, type = 'info', duration = 3000) {
   const container = getContainer();
 
   const toast = document.createElement('div');

@@ -114,7 +114,9 @@
 
 .sidebar-nav-item--active,
 .sidebar-nav-item--active:hover {
-  background: rgba(var(--color-white-rgb), 0.1);
+  /* Reflection-aligned active-item treatment (2026-09-13) - a blue-to-navy
+     sweep rather than a flat white overlay. */
+  background: linear-gradient(90deg, var(--color-accent), var(--color-primary-light));
   color: var(--color-text-inverse);
 }
 

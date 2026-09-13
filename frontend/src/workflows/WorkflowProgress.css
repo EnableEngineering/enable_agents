@@ -93,10 +93,10 @@
 
 @keyframes pulse {
   0%, 100% {
-    box-shadow: 0 0 0 0 rgba(var(--color-primary-rgb, 30, 58, 95), 0.4);
+    box-shadow: 0 0 0 0 rgba(var(--color-primary-rgb, 24, 28, 35), 0.4);
   }
   50% {
-    box-shadow: 0 0 0 8px rgba(var(--color-primary-rgb, 30, 58, 95), 0);
+    box-shadow: 0 0 0 8px rgba(var(--color-primary-rgb, 24, 28, 35), 0);
   }
 }
 
