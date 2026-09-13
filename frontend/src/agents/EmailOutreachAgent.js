@@ -5,6 +5,7 @@ import { API_CONFIG } from '../config/apiConfig';
 import { authJsonHeaders, authOptionalHeaders } from '../core/authHeaders';
 import { showToast } from '../core/toast';
 import { useWorkflowContext, usePendingAgentPrefill, notifyAgentCompleted } from '../hooks';
+import AgentPrerequisiteGate from '../components/AgentPrerequisiteGate';
 import './EmailOutreachAgent.css';
 
 // Built-in starter email templates
@@ -203,6 +204,7 @@ function EmailOutreachAgent() {
   };
 
   return (
+    <AgentPrerequisiteGate agentId="email_outreach" hardBlockKeys={['gmail_connection']}>
     <>
 
       <div className="agent-page-header">
@@ -366,6 +368,7 @@ function EmailOutreachAgent() {
         </div>
       </ProjectGate>
     </>
+    </AgentPrerequisiteGate>
   );
 }
 

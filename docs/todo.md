@@ -1,5 +1,127 @@
 # Enable Agents — Work Backlog
 
+## Google-Only Auth + Gmail-Required Gating (2026-09-13) — ✅ COMPLETE
+
+Sales Helper's vendor-reply ranking and Email Outreach's sending both silently failed without a linked Gmail account (only placeholder SMTP creds existed; ranking needs a real inbox scan with no possible fallback). Decision: require Gmail account-wide, gate the three affected agents instead of a fallback, and drop the separate password login path since every account is Gmail-connected from signup anyway.
+
+- [x] Backend: added `gmail.readonly` to `SCOPES` (`backend/app.py`) — Sales Helper's reply-sync needs read access, not just `gmail.send`.
+- [x] Frontend: `Login.js` rewritten to Google-only sign-in (password form removed); `RegisterUser.js` deleted; `/register` route redirects to `/login`. `POST /register` and `POST /login` left live server-side (hidden, API-only — used for test-account creation).
+- [x] `backend/config/agent-dependencies.json`: added `gmail_connection` dependency, `required_by: [sales_helper, email_outreach, executive_assistant]`, `provided_by: [google_oauth]`, no fallback.
+- [x] `/auth/google/callback` (`user_login_flow` branch) now writes `ContextStore().set(email, 'google_oauth', 'gmail_connection', {...})` on every successful link/re-link.
+- [x] `AgentPrerequisiteGate.js`: added `hardBlockKeys` prop — when a missing dependency's key is in the list, the "Continue Anyway" bypass is suppressed and a "Connect Gmail" button (hits `/auth/google/start`) replaces the generic provider link. Sales Helper, Email Outreach, and Executive Assistant pages now wrap their content in `<AgentPrerequisiteGate hardBlockKeys={['gmail_connection']}>`.
+- [x] **Found and fixed two pre-existing bugs that made the whole prerequisite-gate feature inert regardless of this change:** the frontend fetched a route that doesn't exist (`/v1/agents/:id/dependencies` vs the real `/api/dependencies/status/:id`), and the backend's dependency lookup checked `ContextStore` under a literal `"*"` agent_id instead of the dependency's actual `provided_by` list — so no dependency, old or new, could ever resolve as satisfied. Both fixed in `AgentPrerequisiteGate.js` and `dependency_validator.py`.
+- [x] Verified live (headed Playwright + direct API calls against a fresh test account): unconnected account sees the hard-blocked "Gmail Connection Required" gate with no bypass on all three agents; after simulating a Gmail connection, Sales Helper (whose only dependency is `gmail_connection`) renders its real working page; Email Outreach / Executive Assistant correctly fall back to the soft-advisory ("Continue Anyway") gate once Gmail is connected but other unrelated soft dependencies (company profile, prospect list, etc.) are still missing.
+
+## Active Requests (2026-09-12) — NOT YET BUILT, planning only
+
+Four items requested in one pass: theme alignment to a reference app ("Reflection"), a collapsible sidebar, a plain-language setting, and a backlog reconciliation. Detail below; nothing in this section has been implemented yet.
+
+---
+
+### 1. Theme consistency with "Reflection" (KQSPL)
+
+**Reference:** `~/Projects/KQSPL/KQSPL`, branch `customer_kqspl_live` — a MUI/React app, different stack from ours (we're CSS-custom-properties, they're MUI `createTheme`), so this is a **principles-and-values port, not a copy-paste**. Their own style guide (`frontend/docs/STYLING-AND-THEME.md`) is exactly the kind of single-reference doc we should end up with too — worth reading in full, not just the excerpt below.
+
+**Reflection's actual values** (`frontend/src/theme.js` on that branch):
+
+| Token | Reflection value | Our current equivalent (`tokens.css`) |
+|---|---|---|
+| Primary/accent | **One** hue, `#2563eb` (royal blue), used for both primary actions and highlights | Two hues: `--color-primary` `#1E3A5F` (ink blue) + `--color-accent` `#C2410C` (ember) |
+| Background | `#f9fafb` default, `#fff` paper | `--color-background` `#F7F8FA`, `--color-surface` (similar already, post cooler-theme pass) |
+| Text | `#181c23` primary, `#6b7280` secondary | `--color-text`, `--color-text-muted` (already similar in spirit) |
+| Sidebar | dark bg `#181c23`, muted text `#b0b3b8`, active-item gradient `linear-gradient(90deg,#2563eb,#233a63)`, divider `#23272f` | Our Sidebar.js is already dark navy — worth a direct color-value diff, not just vibe-check |
+| Font | **One** family, "Cabin", numeric weight scale (h1 2.5rem/500 … h6 1rem/600, body1 1.125rem/400, button 1rem/600 sentence-case) | Two families: Fraunces (display) + IBM Plex Sans (body) |
+| Border radius | Sharp: Paper/Card `4px`, Button `6px` | Rounder throughout (`--radius-md`/`--radius-lg`/`--radius-full`) |
+| Shadows | Paper `0 18px 45px rgba(15,23,42,.12)`, Card `0 4px 12px rgba(15,23,42,.08)` | Comparable tokens exist (`--shadow-md` etc.) — diff the actual values |
+| Buttons | 5-tier: **Primary** (contained) / **Secondary** (outlined) / **Tertiary** (text) / **Destructive** (low-emphasis, inline "Remove") / **FilledDestructive** (high-emphasis, confirm-delete dialogs only). Two height tiers: 40px default (toolbars/rows), 56px `size="large"` (forms) | `Button.js` variants: primary/secondary/ghost/outline/danger — one destructive tier, no documented height-tier convention |
+| Status/priority | `Chip` + one semantic color map (`statusColors.js`): new=info, quoted=warning, accepted=primary, in_progress=secondary, completed=success, cancelled/closed=error; priority low=success…urgent=error | No single canonical status-color map — chosen per page today |
+| Toast | **One** system: react-toastify, top-right, `autoClose 3000` | **Two** systems today (see reconciliation below) — this alone is a quick, real win |
+| Section headers | `Typography h6` + `fontWeight bold` + `color primary.main` + optional `borderBottom` | No single documented convention |
+| Required/optional fields | `required` prop → asterisk; optional fields get `(Optional)` appended to the label text | Not consistently applied anywhere audited so far |
+| Detail-page header | Breadcrumbs + back button + primary actions in one row; status/priority chips live **in the header**, not buried in a sub-section | Varies per agent page |
+
+**Task list:**
+
+- [ ] **Judgment call — flag to the user, don't auto-decide:** single accent hue (Reflection) vs our current two-hue primary+accent split. This session already made a deliberate "keep navy+ember, don't rebrand" call once (the cooler-neutral-theme pass) — revisiting the accent system is a bigger identity decision than a token tweak and deserves the same real-preview-then-choose treatment, not a silent swap.
+- [ ] **Judgment call:** single font family (Cabin-style) vs keep the Fraunces/IBM Plex two-font system. Same treatment as above.
+- [ ] Border radius audit: decide whether to move toward Reflection's sharper 4–6px corners app-wide, or keep our current rounder look. Either way, stop mixing ad hoc radius values — enforce via tokens only.
+- [ ] Extend `Button.js`/`.btn-danger` to a genuine two-tier destructive model (low-emphasis inline "Remove" vs high-emphasis "Delete" in a confirm dialog) — we only have one danger tier today.
+- [ ] Document and enforce a two-tier button **height** convention (compact for toolbars/table rows, tall for standalone forms) — currently undocumented, sizes drift per page.
+- [ ] Build one canonical status/priority color map (equivalent of `statusColors.js`) covering every status surface in the app — workflow stage status, task status, audit pass/fail, supplier qualification status, notification read/unread — so nothing picks its own colors per page again.
+- [ ] **Toast system reconciliation (quick win, already root-caused this session):** `frontend/src/components/Toast.js` + `Toast.css` are dead code — confirmed zero imports anywhere in the app. `frontend/src/core/toast.js` (`#ea-toast-root`, vanilla DOM injection) is the one actually live everywhere `showToast(...)` is called. Action: delete the dead files, then decide on and document one standard position/duration (Reflection's is top-right / 3000ms) rather than leaving `core/toast.js`'s current `top:20px; right:20px` un-codified.
+- [ ] Write a section-header convention (`h6`-equivalent + bold + accent color + optional border) and apply it consistently — partially exists ad hoc from this session's tab-consolidation work but was never written down as a rule.
+- [ ] Audit forms (Settings, task creation, event creation, supplier add, etc.) for required/optional labeling; adopt Reflection's asterisk-for-required + "(Optional)"-in-label-for-optional convention everywhere.
+- [ ] Audit agent/workflow detail pages: do status/priority chips live in the page header next to the title, or buried lower? Standardize on "in the header."
+- [ ] Once the above settle, write our own `docs/STYLING-AND-THEME.md` — a single reference doc in the same spirit as Reflection's, so this doesn't need re-litigating file-by-file again.
+
+---
+
+### 2. Collapsible left sidebar (drawer)
+
+**Current state** (`frontend/src/core/Sidebar.js` + `.css`, `frontend/src/App.css`):
+- Fixed `240px` width (`Sidebar.css:6`), each nav item renders icon + `<span>{label}</span>` side by side.
+- `App.css` already ties main-content margin to sidebar width: `#main-content.main-content--sidebar-open { margin-left: 240px }`.
+- **A responsive icon-only mode already exists** at `max-width: 1024px` (`Sidebar.css:~306-308`, collapses to `72px`) with a matching `margin-left: 72px` in `App.css` — this is real, reusable CSS for the collapsed visual state; the new work is making it a **manual, user-controlled toggle** rather than only a breakpoint-driven one.
+
+**Task list:**
+
+- [ ] Add `collapsed` boolean state in `Sidebar.js`; persist to `localStorage` (e.g. `sidebarCollapsed`) so the choice survives reloads — confirm with the user whether this should be per-device only (simplest) or synced server-side per-account (more work, matches the precedent set by this session's chat-history persistence decision, but is a heavier lift for a pure layout preference).
+- [ ] Add a toggle affordance (chevron icon) — near the logo or at the bottom of the nav list.
+- [ ] When collapsed: hide each `<span>{item.label}</span>` and the "Notifications"/user-name text, keep icons + the unread badge visible; add `title`/tooltip on each icon so labels aren't lost for accessibility/discoverability.
+- [ ] Reuse the **existing** `72px` icon-only rule from the `1024px` breakpoint as the collapsed-state CSS (via a `.sidebar--collapsed` class) instead of writing new icon-only styles from scratch.
+- [ ] Add a `.main-content--sidebar-collapsed { margin-left: 72px }` rule mirroring the value already used at the mobile breakpoint.
+- [ ] Add a smooth width/margin transition (both sidebar and main-content) instead of an abrupt jump.
+- [ ] Reconcile with the existing `1024px` auto-collapse: below that breakpoint the sidebar is already forced to icon-only — decide whether the manual toggle is hidden there (since it's redundant) or the two states compose cleanly.
+
+---
+
+### 3. Plain-language setting (target audience: small business owners, not corporate users)
+
+**The concrete example given** — "seeding" — is a good test case: grep the codebase for user-facing "seed"/"seeding" copy (this doc's own **Demo mode** language elsewhere uses "seeded data" in a few places) as a first real instance to fix regardless of the setting below.
+
+**Naming flag:** the request used "naive / moderate / professional" as level names. "Naive" reads as a mild insult if it ever surfaces in-product (even in a settings dropdown) — recommend user-facing labels like **"Simple"**, **"Moderate" (default)**, **"Professional"**, and keep "naive" only as the internal/engineering name if needed. Flagging for sign-off, not deciding unilaterally.
+
+**Task list:**
+
+- [ ] Add a user preference — "Response language level": **Simple** / **Moderate** (default) / **Professional**.
+- [ ] Store via the **existing** mechanism — `UserSettingModel` (`backend/core/models.py`) + `UserSettings` class / `get_user_setting(user_id, category, key, default)` (`backend/core/settings.py`) — category e.g. `'preferences'`, key `'response_language_level'`. No new table or migration needed.
+- [ ] Surface it in the Settings UI as a simple 3-option control (segmented/radio, not a jargon-y dropdown).
+- [ ] Backend: every prompt-construction point that produces user-facing prose reads this setting and appends a matching instruction block to its system prompt — not just `/assistant_chat`'s `ASSISTANT_SYSTEM_PROMPT`, but also Content Marketing's generation prompt, Email Outreach's draft copy, and the AI Assistant's proactive-suggestion "reason" text (all built this session, all currently level-agnostic). Suggested instruction text per level:
+  - **Simple:** "Explain everything in plain, everyday language. Avoid business/technical jargon entirely (say 'starter/sample data', never 'seed data'; say 'find and download', never 'scrape'). Assume the reader runs a small business with no technical or corporate background."
+  - **Moderate (default):** "Use clear, plain business language. Avoid unexplained jargon; if a technical term is unavoidable, briefly explain it in the same sentence."
+  - **Professional:** "Standard business and technical terminology is fine without extra explanation."
+- [ ] Scope this to **AI-generated text only** — it does not rewrite static UI chrome/button labels, which should just be written correctly once regardless of level. Static-copy jargon is already tracked separately below (**Business-Friendly Language** section, further down this doc) — don't duplicate that pass, layer this on top of it.
+- [ ] Cross-check against the existing **Business-Friendly Language** section's terminology table (`❌ Avoid` / `✅ Use`) further down this doc so the two efforts agree on the same wordlist instead of drifting.
+
+---
+
+### 4. What else is pending — reconciliation against this doc
+
+This doc is large (1725+ lines pre-dating this note) and parts of it no longer reflect the current codebase. Sorted into three buckets rather than trusting the doc at face value:
+
+**Confirmed still genuinely open** (verified this session, not just inherited from old notes):
+- **`user_profile` provider gap** — live backend logs still show `[registry] WARNING: agent 'X' consumes 'user_profile' but no enabled agent provides it` for content_marketing, document_intelligence, email_outreach, executive_assistant, market_research. Real, current, unresolved.
+- **CI E2E status unknown post-push** — the `DATABASE_URI`/`DATABASE_URL` fallback fix (top of this doc) was noted "not yet pushed/verified green" as of 2026-08-22. `local-preview` has had many more commits since (including today's push) — needs a fresh CI-green check, not just trust in that one historical fix.
+- **Orchestration (Section 3) & Evaluation (Section 9)** from the Agentic Engineering Maturity audit — flagged 2026-08-22 as co-top-priority; no evidence either was touched this session.
+- **Two different `/api/content-marketing/generate-content` implementations** (new finding, not in this doc before today): one directly in `backend/app.py` (requires an uploaded document — this is the one actually live/routed), one in the `content_marketing` blueprint/`service.py` (doesn't require one). Worth resolving which is dead code before it becomes a landmine.
+- **Remote GCP deployment is stale** — `instance-20260419-210128` was running code from 2026-08-07 (over a month behind `local-preview`) as of last check. User explicitly said not to push there without further sign-off — still awaiting that go-ahead, not yet actioned.
+- **`backend/eval/` directory** (`report.json`/`report.md`, dated 2026-09-04, untracked) — pre-dates this session, purpose unclear from context. Worth asking the user directly rather than guessing whether it should be committed, gitignored, or deleted.
+- **`origin` remote URL** — GitHub reported the repo moved to `https://github.com/EnableEngineering/enable_agents.git`; push still succeeded via redirect but `origin` hasn't been updated to the new URL.
+
+**Stale — contradicted by this session's own work, should be marked resolved/removed rather than re-actioned:**
+- **System Overview modal** — this doc has three separate sections planning its rebuild/migration (P0 rewrite plan, hidden-UI inventory, per-page audit). It was **removed entirely** this session per explicit decision. All of those entries are moot now.
+- **"Chat-First Redesign — NOT YET BUILT"** — contradicted by commit history (`Add chat-first Home screen and the ChatRouting task-routing flow`); already shipped, this section needs a status flip, not a fresh build.
+- **"Persistent left sidebar" listed as a future idea** inside the Chat-First section — also already shipped (`Add persistent left Sidebar navigation, replacing per-page Header`) — directly relevant since it's the same sidebar item 2 above extends.
+- **"Projects Persistence" / "Teams Persistence" — `[ ]` Create SQLAlchemy model"** — contradicted by this session's extensive real use of `/api/projects` and `/api/team` against genuine DB-backed models all day.
+- **"RequirementsGathering.js empty file (0 bytes)"** in one audit table — a *later* section of this same doc already marks it restored/fixed. Internally inconsistent; the "empty file" framing should be deleted, not re-fixed.
+
+**New work from this session not yet logged anywhere in this doc** (added here so it isn't rediscovered/reinvented later):
+- AI Assistant chat history: was localStorage-only, now server-persisted **and project-scoped** (new `AiAssistantMessage` table + endpoints).
+- Proactive next-step suggestions (`notifyAgentCompleted` → suggestion cards), accept/dismiss feedback with per-pairing suppression, and permanent action-card locking (buttons hidden, full content kept) once a card is acted on — an entire feature area with no prior entry in this backlog.
+- Google Places API "New" vs "legacy" distinction — resolved itself (confirmed via a later successful live call) but never independently re-verified via `gcloud services list`; worth a final check rather than assuming it's still fine.
+
+---
+
 ## CI: E2E Tests always failing — ROOT-CAUSED AND FIXED (2026-08-22)
 
 Fixed in this pass. Root cause: `backend/app.py:256` read `os.getenv('DATABASE_URI')` only, with no fallback to `DATABASE_URL` — inconsistent with `backend/core/config.py`, `backend/core/database.py`, and `backend/core/celery_app.py`, which all correctly accept either name. CI's E2E job (`.github/workflows/ci.yml`) sets `DATABASE_URL`, so the Flask app raised `ValueError` at import time before a single test could run — every one of the 37 E2E tests failed identically for this one reason, not for 37 separate reasons.

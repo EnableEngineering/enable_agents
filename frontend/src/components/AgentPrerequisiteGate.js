@@ -12,20 +12,28 @@ import './AgentPrerequisiteGate.css';
  *   - agentId: The agent identifier (e.g., 'content_marketing')
  *   - children: Content to render when dependencies are satisfied
  *   - onReady: Optional callback when dependencies check completes
+ *   - hardBlockKeys: dependency keys that genuinely cannot be worked around
+ *     (e.g. 'gmail_connection' - Sales Helper's reply-ranking and Email
+ *     Outreach's sending have no fallback without a connected Gmail
+ *     account). When any missing dependency's key is in this list, the
+ *     "Continue Anyway" escape hatch is suppressed - unlike the default
+ *     soft-advisory behavior below ("works best with... complete these
+ *     steps for better results"), a hard-blocked dependency means the
+ *     agent literally cannot function, not just that results improve.
  *
  * Usage:
  *   <AgentPrerequisiteGate agentId="content_marketing">
  *     <ContentMarketingContent />
  *   </AgentPrerequisiteGate>
  */
-function AgentPrerequisiteGate({ agentId, children, onReady }) {
+function AgentPrerequisiteGate({ agentId, children, onReady, hardBlockKeys = [] }) {
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [dismissed, setDismissed] = useState(false);
 
   const checkDependencies = useCallback(async () => {
     try {
-      const res = await fetch(`${API_CONFIG.BASE_URL}/v1/agents/${agentId}/dependencies`, {
+      const res = await fetch(`${API_CONFIG.BASE_URL}/api/dependencies/status/${agentId}`, {
         headers: authJsonHeaders(),
       });
       if (res.ok) {
@@ -58,17 +66,22 @@ function AgentPrerequisiteGate({ agentId, children, onReady }) {
     return <>{children}</>;
   }
 
+  const blockingDep = status.missing.find((dep) => hardBlockKeys.includes(dep.key));
+  const isHardBlocked = !!blockingDep;
+
   // Show prerequisite warning
   return (
     <div className="prerequisite-gate">
       <div className="prerequisite-card">
         <div className="prerequisite-header">
-          <span className="prerequisite-icon">⚠️</span>
-          <h2>Prerequisites Required</h2>
+          <span className="prerequisite-icon">{isHardBlocked ? '🔒' : '⚠️'}</span>
+          <h2>{isHardBlocked ? 'Gmail Connection Required' : 'Prerequisites Required'}</h2>
         </div>
 
         <p className="prerequisite-message">
-          This agent works best with data from other agents. Complete these steps first for better results:
+          {isHardBlocked
+            ? "This agent needs a connected Gmail account to work - there's no way around this one."
+            : 'This agent works best with data from other agents. Complete these steps first for better results:'}
         </p>
 
         <div className="missing-dependencies">
@@ -78,7 +91,7 @@ function AgentPrerequisiteGate({ agentId, children, onReady }) {
                 <span className="dependency-name">{formatDependencyName(dep.key)}</span>
                 <span className="dependency-description">{dep.description}</span>
               </div>
-              {dep.providers && dep.providers.length > 0 && (
+              {dep.key !== 'gmail_connection' && dep.providers && dep.providers.length > 0 && (
                 <div className="dependency-providers">
                   <span className="provider-label">Get from:</span>
                   {dep.providers.map((provider) => (
@@ -97,20 +110,50 @@ function AgentPrerequisiteGate({ agentId, children, onReady }) {
         </div>
 
         <div className="prerequisite-actions">
-          <Button variant="secondary" onClick={() => setDismissed(true)}>
-            Continue Anyway
-          </Button>
-          {status.missing[0]?.providers?.[0] && (
-            <Link
-              to={getAgentRoute(status.missing[0].providers[0])}
-              className="btn btn-primary"
-            >
-              Go to {formatAgentName(status.missing[0].providers[0])}
-            </Link>
+          {!isHardBlocked && (
+            <Button variant="secondary" onClick={() => setDismissed(true)}>
+              Continue Anyway
+            </Button>
+          )}
+          {isHardBlocked ? (
+            <ConnectGmailButton />
+          ) : (
+            status.missing[0]?.providers?.[0] && (
+              <Link
+                to={getAgentRoute(status.missing[0].providers[0])}
+                className="btn btn-primary"
+              >
+                Go to {formatAgentName(status.missing[0].providers[0])}
+              </Link>
+            )
           )}
         </div>
       </div>
     </div>
+  );
+}
+
+/** Kicks off the same Google OAuth flow Login.js uses - re-consenting here
+ * re-links (or freshly links) Gmail for the current account without
+ * signing the user out. */
+function ConnectGmailButton() {
+  const [connecting, setConnecting] = useState(false);
+  const handleConnect = async () => {
+    setConnecting(true);
+    try {
+      const res = await fetch(`${API_CONFIG.BASE_URL}/auth/google/start`);
+      const data = await res.json();
+      if (data.auth_url) {
+        window.location.href = data.auth_url;
+      }
+    } finally {
+      setConnecting(false);
+    }
+  };
+  return (
+    <Button variant="primary" onClick={handleConnect} disabled={connecting}>
+      {connecting ? 'Redirecting…' : 'Connect Gmail'}
+    </Button>
   );
 }
 

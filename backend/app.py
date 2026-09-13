@@ -5165,7 +5165,11 @@ SCOPES = [
     "openid",
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/userinfo.profile",
-    "https://www.googleapis.com/auth/gmail.send"
+    "https://www.googleapis.com/auth/gmail.send",
+    # Read access - without this, Sales Helper's reply-sync (_sync_replies_for_campaign)
+    # can authenticate but every Gmail API read call (threads().get, etc.) fails with an
+    # insufficient-scope error, even for a fully connected account.
+    "https://www.googleapis.com/auth/gmail.readonly"
 ]
 
 @app.route('/auth/google/start', methods=['GET'])
@@ -6624,7 +6628,16 @@ def google_auth_callback():
             token_record.token_uri = "https://oauth2.googleapis.com/token"
             token_record.scopes = scopes_received
             db.session.commit()
-            
+
+            # Signal to the agent-dependency gate (AgentPrerequisiteGate /
+            # dependency_validator.check_dependencies) that this user now has
+            # a working Gmail connection - Sales Helper, Email Outreach and
+            # Executive Assistant all require this, see agent-dependencies.json.
+            try:
+                ContextStore().set(email, 'google_oauth', 'gmail_connection', {'connected': True})
+            except Exception as ctx_err:
+                print("ContextStore gmail_connection write failed:", ctx_err)
+
             from core.session_token import issue_browser_session_token
 
             session_tok = issue_browser_session_token(app.config['SECRET_KEY'], email)

@@ -9,6 +9,7 @@ import { useAgentChat } from '../hooks/useAgentChat';
 import MessageContent from '../components/MessageContent';
 import { formatTime, getRelativeDateLabel, isSameDay } from '../utils/dateFormat';
 import { useWorkflowContext, usePendingAgentPrefill, notifyAgentCompleted } from '../hooks';
+import AgentPrerequisiteGate from '../components/AgentPrerequisiteGate';
 
 function SalesHelperAgent() {
   const selectedProjectId = useSelectedProjectId();
@@ -532,6 +533,7 @@ function SalesHelperAgent() {
   }, [csvData, addMessage]);
 
   return (
+    <AgentPrerequisiteGate agentId="sales_helper" hardBlockKeys={['gmail_connection']}>
     <div className="sales-helper-agent">
 
       <div className="agent-page-header">
@@ -1045,6 +1047,7 @@ function SalesHelperAgent() {
         </ProjectGate>
       </div>
     </div>
+    </AgentPrerequisiteGate>
   );
 }
 

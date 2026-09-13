@@ -4,35 +4,11 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { API_CONFIG } from '../config/apiConfig';
 import { showToast } from './toast';
 import { navigateAfterLogin } from './authHeaders';
-import FormField from '../components/FormField';
-import useValidation, { validators } from '../hooks/useValidation';
 
 function Login() {
-  const [step, setStep] = useState('email');
   const [loading, setLoading] = useState(false);
-  const [submitted, setSubmitted] = useState(false); // Track form submission attempts
   const navigate = useNavigate();
   const location = useLocation();
-
-  // Form validation
-  const {
-    values,
-    errors,
-    touched,
-    handleChange,
-    handleBlur,
-    validate,
-    reset
-  } = useValidation({
-    email: {
-      value: '',
-      validators: [validators.required('Email is required'), validators.email()]
-    },
-    password: {
-      value: '',
-      validators: [validators.required('Password is required')]
-    }
-  });
 
   const bgImages = [
     `${process.env.PUBLIC_URL}/assets/background_images/pexels-googledeepmind-17483867.jpg`,
@@ -72,55 +48,7 @@ function Login() {
     return () => clearInterval(interval);
   }, [bgImages.length]);
 
-  const handleEmailSubmit = (e) => {
-    e.preventDefault();
-    setSubmitted(true);
-    // Validate just the email field
-    const emailError = validators.required('Email is required')(values.email) ||
-                       validators.email()(values.email);
-    if (!emailError) {
-      setSubmitted(false);
-      setStep('password');
-    }
-  };
-
-  const handleBackToEmail = () => {
-    setStep('email');
-    setSubmitted(false);
-  };
-
-  const handlePasswordSubmit = async (e) => {
-    e.preventDefault();
-    if (!validate()) return;
-    setLoading(true);
-    try {
-      const response = await fetch(`${API_CONFIG.API_URL}/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: values.email, password: values.password }),
-      });
-      const data = await response.json();
-      if (response.ok) {
-        if (data.session_token) {
-          localStorage.setItem('sessionToken', data.session_token);
-        }
-        localStorage.setItem('firstName', data.first_name || data.username || 'User');
-        localStorage.setItem('lastName', data.last_name || '');
-        localStorage.setItem('userEmail', values.email);
-        window.dispatchEvent(new Event('authChange'));
-        navigateAfterLogin(navigate);
-      } else {
-        showToast(data.error || 'Login failed. Please check your credentials.', 'error');
-      }
-    } catch {
-      showToast('Could not reach the server. Please try again.', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleGoogleLogin = async () => {
-    reset(); // Clear validation state before OAuth redirect
     setLoading(true);
     try {
       const response = await fetch(`${API_CONFIG.API_URL}/auth/google/start`);
@@ -153,99 +81,20 @@ function Login() {
           />
         </div>
 
-        {step === 'email' && (
-          <form onSubmit={handleEmailSubmit} className="login-form" noValidate>
-            <FormField
-              htmlFor="email"
-              error={submitted && errors.email}
-            >
-              <input
-                type="email"
-                name="email"
-                id="email"
-                placeholder="Email Address"
-                value={values.email}
-                onChange={handleChange}
-                onBlur={handleBlur}
-                className={`styled-input ${submitted && errors.email ? 'input-error' : ''}`}
-                autoFocus
-                disabled={loading}
-                aria-label="Email address"
-                aria-invalid={submitted && !!errors.email}
-              />
-            </FormField>
-            <button type="submit" className="primary-button" disabled={loading}>
-              {loading ? 'Please wait…' : 'Continue'}
-            </button>
-            <div className="form-divider">OR</div>
-            <button
-              type="button"
-              onClick={handleGoogleLogin}
-              className="google-button"
-              disabled={loading}
-            >
-              <img src="/assets/icons/google.png" alt="Google" className="google-icon" />
-              {loading ? 'Redirecting…' : 'Continue with Google'}
-            </button>
-            <p className="login-footer-text">
-              New to Enable?{' '}
-              <button type="button" className="new-user-link" onClick={() => navigate('/register')} aria-label="Create a new account">
-                Create account
-              </button>
-            </p>
-          </form>
-        )}
-
-        {step === 'password' && (
-          <form onSubmit={handlePasswordSubmit} className="login-form" noValidate>
-            <div className="login-email-display">
-              <span className="login-email-label">Signing in as</span>
-              <span className="login-email-value">{values.email}</span>
-            </div>
-            <FormField
-              htmlFor="password"
-              error={touched.password && errors.password}
-            >
-              <input
-                type="password"
-                name="password"
-                id="password"
-                placeholder="Enter your password"
-                value={values.password}
-                onChange={handleChange}
-                onBlur={handleBlur}
-                className={`styled-input ${touched.password && errors.password ? 'input-error' : ''}`}
-                autoFocus
-                disabled={loading}
-                aria-label="Password"
-                aria-invalid={touched.password && !!errors.password}
-              />
-            </FormField>
-            <button type="submit" className="primary-button" disabled={loading}>
-              {loading ? 'Signing in…' : 'Sign In'}
-            </button>
-            <div className="login-links">
-              <button
-                type="button"
-                className="text-link"
-                onClick={handleBackToEmail}
-                disabled={loading}
-              >
-                ← Use different email
-              </button>
-              {/* TODO: Implement password reset flow before enabling
-              <button
-                type="button"
-                className="text-link"
-                onClick={() => showToast('Password reset coming soon', 'info')}
-                disabled={loading}
-              >
-                Forgot password?
-              </button>
-              */}
-            </div>
-          </form>
-        )}
+        <div className="login-form">
+          <p className="login-footer-text" style={{ marginTop: 0 }}>
+            Sign in to Enable with your Google account.
+          </p>
+          <button
+            type="button"
+            onClick={handleGoogleLogin}
+            className="google-button"
+            disabled={loading}
+          >
+            <img src="/assets/icons/google.png" alt="Google" className="google-icon" />
+            {loading ? 'Redirecting…' : 'Continue with Google'}
+          </button>
+        </div>
       </div>
 
       <div className="footer-text">

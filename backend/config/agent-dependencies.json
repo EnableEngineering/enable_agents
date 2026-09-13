@@ -24,6 +24,12 @@
       "required_by": ["email_outreach"],
       "provided_by": ["content_marketing"],
       "fallback_provider": null
+    },
+    "gmail_connection": {
+      "description": "A connected Gmail account (for sending and tracking replies)",
+      "required_by": ["sales_helper", "email_outreach", "executive_assistant"],
+      "provided_by": ["google_oauth"],
+      "fallback_provider": null
     }
   },
   "enforcement": {

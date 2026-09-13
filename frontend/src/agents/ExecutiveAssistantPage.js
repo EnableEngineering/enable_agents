@@ -8,6 +8,7 @@ import { formatDate } from '../utils/dateFormat';
 import { useProjectData } from '../hooks/useProjectData';
 import { useSelectedProjectId } from '../hooks/useSelectedProjectId';
 import { useWorkflowContext, usePendingAgentPrefill } from '../hooks';
+import AgentPrerequisiteGate from '../components/AgentPrerequisiteGate';
 
 function ExecutiveAssistantPage() {
   // Workflow context - for saving results back to workflow
@@ -261,6 +262,7 @@ function ExecutiveAssistantPage() {
   };
 
   return (
+    <AgentPrerequisiteGate agentId="executive_assistant" hardBlockKeys={['gmail_connection']}>
     <div className="executive-assistant-page">
 
       <div className="agent-page-header">
@@ -789,6 +791,7 @@ function ExecutiveAssistantPage() {
 
       </div>
     </div>
+    </AgentPrerequisiteGate>
   );
 }
 

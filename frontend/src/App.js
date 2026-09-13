@@ -5,7 +5,6 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'r
 import Login from './core/Login';
 import SkipLink from './components/SkipLink';
 import { ErrorBoundary } from './components';
-import RegisterUser from './core/RegisterUser';
 import Settings from './settings/Settings';
 import Team from './team/Team';
 import Projects from './projects/Projects';
@@ -73,7 +72,7 @@ function App() {
 
   // isLoggedIn() reads localStorage, which doesn't trigger a React re-render
   // on its own - listen for the same custom event used for same-tab
-  // localStorage sync (Login/RegisterUser dispatch it on sign-in, Settings
+  // localStorage sync (Login dispatches it on sign-in, Settings
   // on sign-out) plus the native storage event for cross-tab sign-in/out,
   // so the panel appears/disappears without a full page reload.
   useEffect(() => {
@@ -126,7 +125,8 @@ function AppShell({ loggedIn, panelOpen, onPanelToggle }) {
           <Routes>
           <Route path="/" element={<RootRedirect />} />
           <Route path="/login" element={loggedIn ? <Navigate to="/home" replace /> : <Login />} />
-           <Route path="/register" element={loggedIn ? <Navigate to="/home" replace /> : <RegisterUser />} />
+           {/* Google sign-in auto-creates the account on first login - no separate register step */}
+           <Route path="/register" element={<Navigate to="/login" replace />} />
           <Route path="/home" element={<Home />} />
           <Route path="/route" element={<ChatRoutingPage />} />
           <Route path="/dashboard" element={<Dashboard />} />

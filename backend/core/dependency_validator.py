@@ -76,14 +76,20 @@ class DependencyValidator:
 
         missing = []
         context_store = ContextStore()
+        deps = self.config.get("dependencies", {})
 
         for dep_key in requirements:
-            # Check if data exists in context store
-            # Try to get from any agent that might provide this key
-            value = context_store.get(user_id, "*", dep_key)
+            # Check if data exists in context store - try each agent that's
+            # configured to provide this key (ContextStore rows are keyed by
+            # the actual agent_id that wrote them, there's no real wildcard).
+            dep_info = deps.get(dep_key, {})
+            providers = dep_info.get("provided_by") or []
+            value = None
+            for provider in providers:
+                value = context_store.get(user_id, provider, dep_key)
+                if value:
+                    break
             if not value:
-                deps = self.config.get("dependencies", {})
-                dep_info = deps.get(dep_key, {})
                 missing.append({
                     "key": dep_key,
                     "description": dep_info.get("description", ""),
