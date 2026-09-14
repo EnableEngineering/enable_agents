@@ -37,6 +37,7 @@
 .sidebar--collapsed .sidebar-user-name {
   display: none;
 }
+.sidebar--collapsed .sidebar-logo,
 .sidebar--collapsed .sidebar-nav-item,
 .sidebar--collapsed .sidebar-utility-button,
 .sidebar--collapsed .sidebar-user {
