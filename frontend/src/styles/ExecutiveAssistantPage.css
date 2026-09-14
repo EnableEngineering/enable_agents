@@ -755,7 +755,7 @@
 }
 
 .priority-pill.low { border-color: var(--color-success); color: var(--color-success-text); }
-.priority-pill.medium { border-color: var(--color-warning); color: var(--color-accent-dark); }
+.priority-pill.medium { border-color: var(--color-warning); color: var(--color-warning); }
 .priority-pill.high { border-color: var(--color-error); color: var(--color-error); }
 
 .priority-pill.active.low { background: var(--color-success); color: var(--color-text-inverse); }
@@ -1158,14 +1158,18 @@
   flex-shrink: 0;
 }
 
+/* Aligned to utils/statusColors.js's canonical status tiers (2026-09-13) -
+   pending/not-started was previously the same error-red as a
+   failed/cancelled state, which read as "something's wrong" for a task
+   that simply hasn't started yet. */
 .status-pill.pending {
-  background: var(--color-error-bg);
-  color: var(--color-error);
+  background: var(--color-background);
+  color: var(--color-text-muted);
 }
 
 .status-pill.in-progress {
-  background: rgba(var(--color-primary-rgb), 0.1);
-  color: var(--color-primary);
+  background: var(--color-accent-bg);
+  color: var(--color-accent);
 }
 
 .status-pill.completed {
@@ -1324,19 +1328,31 @@
   font-family: var(--font-body);
 }
 
+/* Aligned to utils/statusColors.js's canonical status/priority tiers
+   (2026-09-13) - status values and priority values are two different
+   dimensions that happened to share this one class block; they're kept
+   as separate selectors below (still sharing colors where the canonical
+   map says they should) rather than implying "pending == high priority"
+   by grouping them, which is what the previous version did. */
 .status-badge.active,
+.status-badge.completed {
+  background: var(--color-success-bg);
+  color: var(--color-success-text);
+}
 .status-badge.low {
   background: var(--color-success-bg);
   color: var(--color-success-text);
 }
 
-.status-badge.completed,
 .status-badge.in\ progress {
-  background: rgba(var(--color-primary-rgb), 0.1);
-  color: var(--color-primary);
+  background: var(--color-accent-bg);
+  color: var(--color-accent);
 }
 
-.status-badge.pending,
+.status-badge.pending {
+  background: var(--color-background);
+  color: var(--color-text-muted);
+}
 .status-badge.high {
   background: var(--color-error-bg);
   color: var(--color-error);
@@ -1345,7 +1361,7 @@
 .status-badge.on\ hold,
 .status-badge.medium {
   background: var(--color-warning-bg);
-  color: var(--color-accent-dark);
+  color: var(--color-warning);
 }
 
 .description {

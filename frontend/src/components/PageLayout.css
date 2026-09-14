@@ -113,10 +113,22 @@
   min-width: 0;
 }
 
+/* Canonical section-header convention (Reflection-aligned, 2026-09-13):
+   bold weight + a thin accent-colored underline as the "branded" touch.
+   Diverges from Reflection's literal spec (their header text is colored
+   in their one brand hue) on purpose: in our system the accent is still
+   reserved for interactive/actionable elements, so coloring plain
+   section-header text the same blue as a button would blur that
+   distinction. The underline carries the same "this is a branded
+   heading" signal without that ambiguity. PageSection is the one place
+   this should be defined - other section headers in the app should use
+   <PageSection title="..."> rather than hand-rolling their own. */
 .page-section-title {
   margin: 0;
+  padding-bottom: var(--space-2);
+  border-bottom: 2px solid var(--color-accent);
   font-size: 1.125rem;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--color-text);
   line-height: 1.4;
 }
@@ -124,7 +136,7 @@
 .page-section-description {
   margin: var(--space-1) 0 0;
   font-size: 0.875rem;
-  color: var(--color-text-subtle));
+  color: var(--color-text-subtle);
   line-height: 1.5;
 }
 

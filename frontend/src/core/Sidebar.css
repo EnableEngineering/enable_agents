@@ -28,7 +28,7 @@
    swaps in logo-icon.svg (just the dot/caret/ring mark, no lettering)
    when collapsed instead of cropping the wordmark down. */
 .sidebar--collapsed .sidebar-logo img {
-  height: 22px;
+  height: 26px;
   width: auto;
 }
 .sidebar--collapsed .sidebar-logo span,
@@ -70,20 +70,20 @@
 .sidebar-logo {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 8px 22px;
+  gap: 10px;
+  padding: 8px 8px 24px;
   text-decoration: none;
   color: var(--color-text-inverse);
 }
 
 .sidebar-logo img {
-  height: 26px;
+  height: 34px;
   filter: brightness(0) invert(1);
 }
 
 .sidebar-logo span {
   font-family: var(--font-display);
-  font-size: 1.0625rem;
+  font-size: 1.25rem;
   font-weight: 600;
 }
 

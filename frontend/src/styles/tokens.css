@@ -394,7 +394,7 @@
 .input:focus {
   outline: none;
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px rgba(194, 65, 12, 0.12);
+  box-shadow: 0 0 0 3px rgba(var(--color-accent-rgb), 0.12);
 }
 
 .input::placeholder {
@@ -664,3 +664,29 @@
   clip: auto;
   white-space: normal;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   STATUS/PRIORITY TIERS
+   Companion classes for utils/statusColors.js's getStatusColor()/
+   getPriorityColor() - use the className they return instead of inline
+   style when a plain chip/pill will do.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+.status-tier-neutral,
+.status-tier-info,
+.status-tier-warning,
+.status-tier-success,
+.status-tier-error {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  font-size: var(--text-caption);
+  font-weight: var(--font-semibold);
+}
+
+.status-tier-neutral { background: var(--color-background); color: var(--color-text-muted); }
+.status-tier-info { background: var(--color-accent-bg); color: var(--color-accent); }
+.status-tier-warning { background: var(--color-warning-bg); color: var(--color-warning); }
+.status-tier-success { background: var(--color-success-bg); color: var(--color-success-text); }
+.status-tier-error { background: var(--color-error-bg); color: var(--color-error); }

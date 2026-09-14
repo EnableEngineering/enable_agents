@@ -19,6 +19,13 @@ import './ConfirmDialog.css';
  *     onCancel={() => setShowDialog(false)}
  *   />
  *
+ * This is the HIGH-emphasis destructive tier (solid red, white text) -
+ * reserved for confirm-delete dialogs, where the cost of a misclick is
+ * highest. For a low-emphasis inline "Remove" action in a list/row, use
+ * Button's variant="danger" instead (.btn-danger - light red background,
+ * red text) - see Button.js's doc comment for the full two-tier
+ * convention this pairs with.
+ *
  * Usage via imperative API (see showConfirm export below):
  *   const confirmed = await showConfirm({
  *     title: 'Purchase Agent?',
