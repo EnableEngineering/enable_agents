@@ -496,7 +496,7 @@ function Projects() {
           />
         </div>
         <div className="field">
-          <label>Description</label>
+          <label>Description <span className="field-optional-label">(Optional)</span></label>
           <textarea
             value={newProject.description}
             onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
@@ -505,7 +505,7 @@ function Projects() {
           />
         </div>
         <div className="field">
-          <label>Team</label>
+          <label>Team <span className="field-optional-label">(Optional)</span></label>
           <div className="team-select-row">
             <select
               value={newProject.team_id}

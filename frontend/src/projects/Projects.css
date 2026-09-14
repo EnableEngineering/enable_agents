@@ -310,6 +310,15 @@
   margin-bottom: var(--space-2);
 }
 
+/* Required/optional labeling convention (see FormField.css's matching
+   .form-field-optional) - this form hand-rolls its own labels rather
+   than using the shared FormField component, so it needs its own copy
+   of the same treatment. */
+.projects-page .field-optional-label {
+  font-weight: var(--font-normal);
+  color: var(--color-text-muted);
+}
+
 .projects-page .field-hint {
   font-size: 0.8rem;
   color: var(--color-text-muted);

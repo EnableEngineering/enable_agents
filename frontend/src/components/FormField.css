@@ -24,6 +24,12 @@
   color: var(--color-error);
 }
 
+/* Optional indicator - the complement to .form-field-required above */
+.form-field-optional {
+  font-weight: var(--font-normal);
+  color: var(--color-text-muted);
+}
+
 /* Input wrapper */
 .form-field-input {
   position: relative;

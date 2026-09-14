@@ -15,6 +15,12 @@ import './FormField.css';
  *   >
  *     <input type="email" className="input" />
  *   </FormField>
+ *
+ * Required/optional labeling (Reflection-aligned convention, 2026-09-13):
+ * required fields get an asterisk (already existed); any field with a
+ * label that ISN'T required gets "(Optional)" appended automatically -
+ * pass hideOptionalLabel to opt a specific field out (e.g. a checkbox,
+ * or a field where "optional" is already obvious from context).
  */
 
 const icons = {
@@ -34,6 +40,7 @@ function FormField({
   label,
   htmlFor,
   required = false,
+  hideOptionalLabel = false,
   error,
   success,
   helpText,
@@ -68,6 +75,9 @@ function FormField({
           className={`form-field-label ${required ? 'form-field-required' : ''}`}
         >
           {label}
+          {!required && !hideOptionalLabel && (
+            <span className="form-field-optional"> (Optional)</span>
+          )}
         </label>
       )}
 
