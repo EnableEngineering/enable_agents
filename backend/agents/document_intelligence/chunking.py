@@ -65,8 +65,14 @@ def create_semantic_chunks(
 
         # Try to preserve sentence boundaries
         if preserve_sentences and end < len(content):
-            # Look for sentence ending in the last portion of the chunk
-            search_start = max(start, end - 200)
+            # Look for sentence ending in the last portion of the chunk.
+            # The lookback window must stay smaller than chunk_size, or it
+            # degenerates into searching the *entire* prospective chunk
+            # (chunk_size <= 200 used to hit exactly this, since 200 was
+            # hardcoded here too) - matching the first sentence ending
+            # anywhere in the chunk instead of near its end, producing tiny
+            # "runt" chunks that then feed the stride bug fixed below.
+            search_start = max(start, end - min(200, chunk_size // 2))
             search_text = content[search_start:end]
 
             # Find last sentence ending
@@ -88,10 +94,16 @@ def create_semantic_chunks(
             })
             chunk_index += 1
 
-        # Move start with overlap
+        # Move start with overlap. A short/runt chunk (sentence-boundary
+        # snap landed close to `start`) can make `end - overlap` fall at or
+        # before `start` - the old fallback then advanced from `start`
+        # rather than `end`, which could jump *past* `end` and silently
+        # drop every character in between from every chunk. Advancing from
+        # `end` instead guarantees full coverage: overlap can shrink to
+        # zero for this one step, but nothing between chunks is ever lost.
         new_start = end - overlap
         if new_start <= start:
-            new_start = start + max(1, chunk_size - overlap)
+            new_start = end
         start = new_start
 
         # Safety check

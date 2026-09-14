@@ -42,6 +42,17 @@ def get_accessible_instance(instance_id: str, user_id: str):
     return None
 
 
+# Templates whose instances run through agents/workflow_orchestration/graph.py
+# instead of the plain manual start/complete-stage flow below. Kept as a set
+# (not a single constant) so generalizing the graph engine to more templates
+# is a one-line addition here.
+GRAPH_ORCHESTRATED_TEMPLATE_IDS = {"supplier-qualification"}
+
+
+def _is_graph_orchestrated(instance: WorkflowInstance) -> bool:
+    return instance.template_id in GRAPH_ORCHESTRATED_TEMPLATE_IDS
+
+
 def user_can_assign_task(user_id: str, assignee: str, instance: WorkflowInstance) -> bool:
     """True if assignee can actually access this instance once assigned -
     either they own it, or they're on the team of the instance's project.
@@ -272,6 +283,9 @@ def start_instance(instance_id: str):
     if not instance:
         return jsonify({"error": "Instance not found"}), 404
 
+    if _is_graph_orchestrated(instance):
+        return jsonify({"error": "This workflow runs through the graph engine - use POST .../run instead of .../start"}), 400
+
     if instance.status not in ["pending", "paused"]:
         return jsonify({"error": f"Cannot start instance with status '{instance.status}'"}), 400
 
@@ -294,6 +308,9 @@ def complete_stage(instance_id: str):
     instance = get_accessible_instance(instance_id, user_id)
     if not instance:
         return jsonify({"error": "Instance not found"}), 404
+
+    if _is_graph_orchestrated(instance):
+        return jsonify({"error": "This workflow runs through the graph engine - use POST .../resume instead of .../complete-stage"}), 400
 
     if instance.status != "running":
         return jsonify({"error": "Instance is not running"}), 400
@@ -358,6 +375,9 @@ def save_stage_data(instance_id: str, stage_id: str):
     instance = get_accessible_instance(instance_id, user_id)
     if not instance:
         return jsonify({"error": "Instance not found"}), 404
+
+    if _is_graph_orchestrated(instance):
+        return jsonify({"error": "This workflow runs through the graph engine - stage data is written automatically as each stage completes"}), 400
 
     # Verify stage exists in template
     template = instance.template

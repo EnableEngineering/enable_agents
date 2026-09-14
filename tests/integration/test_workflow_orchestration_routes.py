@@ -181,6 +181,28 @@ def test_set_autonomy_mode(client, flask_app, instance):
     assert res.status_code == 400
 
 
+def test_legacy_manual_routes_reject_graph_orchestrated_instance(client, flask_app, instance):
+    """/start, /complete-stage, /stages/<id>/data must all reject a graph-
+    orchestrated instance rather than silently writing stage_states/context
+    directly - that's exactly the double-write path that used to let a
+    graph-orchestrated instance desync from its own LangGraph checkpoint
+    (see state.py's docstring)."""
+    headers = _bearer(flask_app, "user_routes")
+
+    res = client.post(f"/api/workflows/instances/{instance}/start", headers=headers)
+    assert res.status_code == 400
+    assert "graph engine" in res.get_json()["error"]
+
+    res = client.post(f"/api/workflows/instances/{instance}/complete-stage", json={"data": {}}, headers=headers)
+    assert res.status_code == 400
+    assert "graph engine" in res.get_json()["error"]
+
+    res = client.post(f"/api/workflows/instances/{instance}/stages/supplier_discovery/data",
+                       json={"data": {"query": "hi"}}, headers=headers)
+    assert res.status_code == 400
+    assert "graph engine" in res.get_json()["error"]
+
+
 def test_autopilot_runs_all_stages_with_zero_interrupts(client, flask_app, instance, monkeypatch):
     """Autopilot mode must run every stage's real function with no pause.
     document_analysis is mocked outright (its real path calls OpenAI even

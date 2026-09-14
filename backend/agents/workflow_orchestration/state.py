@@ -2,10 +2,17 @@
 
 `stage_outputs` is namespaced per stage_id - this is the collision-free
 hand-off *within* a graph run. `WorkflowInstance.context`/`stage_states`
-(the flat, shallow-merged columns) are still dual-written alongside this
-by the graph so nothing outside the graph (frontend, to_dict()) breaks;
-that dual-write is deliberate technical debt, tracked as a fast-follow,
-not an oversight - see the approved orchestration plan.
+(the flat, shallow-merged columns) are dual-written alongside this by the
+graph (see graph.py's `_sync_legacy_state`) so nothing outside the graph
+(frontend, `to_dict()`) needs to read a LangGraph checkpoint on every page
+load. This was originally left as tracked technical debt because the old
+manual routes (`/start`, `/complete-stage`, `/stages/<id>/data`) could
+ALSO write those same flat columns directly, independently of the graph -
+a graph-orchestrated instance touched by one of those would silently
+desync from its own checkpoint. Closed 2026-09-14: those three routes now
+reject calls on a graph-orchestrated instance (`routes/workflows.py`'s
+`_is_graph_orchestrated`), so `_sync_legacy_state` is the only writer left
+and the dual-write can no longer drift.
 """
 from typing import Any, Dict, List, Optional, TypedDict
 

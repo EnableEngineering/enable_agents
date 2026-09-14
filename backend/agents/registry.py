@@ -84,6 +84,52 @@ def _validate_dependencies() -> None:
                 )
 
 
+# Agent ids a WorkflowTemplate stage can reference that don't match a
+# registered Flask-blueprint agent's manifest "id" - not broken references,
+# just not resolvable by name-equality against _registry:
+#   - sales_helper: real code, but lives only in agents/sales_helper_core.py
+#     (extracted 2026-09-03 for the LangGraph orchestration engine, which
+#     calls it directly) - there was never an agents/sales_helper/ package.
+#   - data_insights: the frontend's consistent user-facing id/label for the
+#     document_intelligence agent (frontend/src/workflows/WorkflowRunner.js's
+#     AGENT_CONFIG keys icon/label/route off "data_insights" everywhere,
+#     "document_intelligence" never appears in the frontend at all) - a
+#     deliberate display-name split from the backend manifest id, confirmed
+#     2026-09-14 while wiring this check up (it was the first thing that
+#     would have false-positived here).
+_VIRTUAL_AGENT_IDS = {"sales_helper", "data_insights"}
+
+
+def validate_workflow_template_agents() -> None:
+    """Warn-only check, same philosophy as _validate_dependencies() above,
+    extended to cover WorkflowTemplate stages instead of just agent-to-agent
+    provides/consumes: every active template's stage must reference either
+    a registered enabled agent or a known virtual one, or a workflow that
+    references it (manual completion today, agents/workflow_orchestration/
+    graph.py's auto-invoke for graph-orchestrated templates) has no real
+    agent behind that stage id. Requires an app/DB context and the
+    WorkflowTemplate table to already be seeded - call this after
+    load_system_templates(), not from register_agents() (which runs before
+    the app context load_system_templates() needs is available).
+    """
+    from models.workflow import WorkflowTemplate
+
+    known_ids = _VIRTUAL_AGENT_IDS | {
+        agent_id for agent_id, manifest in _registry.items() if manifest.get("enabled")
+    }
+
+    for template in WorkflowTemplate.query.filter_by(is_active=True).all():
+        for stage in template.stages:
+            stage_id = stage.get("id") or stage.get("stage_id") or "?"
+            agent_id = stage.get("agent")
+            if agent_id and agent_id not in known_ids:
+                print(
+                    f"[registry] WARNING: workflow template '{template.template_id}' "
+                    f"stage '{stage_id}' references agent '{agent_id}', which is "
+                    f"neither a registered enabled agent nor a known virtual one."
+                )
+
+
 def register_agents(app: Flask) -> None:
     """Import and register Blueprints for all enabled agents."""
     _load_manifests()
