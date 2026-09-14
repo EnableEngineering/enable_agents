@@ -62,6 +62,7 @@ def _create_standalone_celery() -> Celery:
         imports=[
             "agents.document_intelligence.tasks",
             "agents.content_marketing.tasks",
+            "agents.workflow_orchestration.tasks",
         ],
     )
     return c
@@ -88,6 +89,7 @@ def make_celery(app) -> Celery:
         imports=[
             "agents.document_intelligence.tasks",
             "agents.content_marketing.tasks",
+            "agents.workflow_orchestration.tasks",
         ],
     )
 

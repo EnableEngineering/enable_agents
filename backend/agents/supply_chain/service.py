@@ -48,18 +48,28 @@ def create_supplier():
     return jsonify({"success": True, "supplier": supplier.to_dict()}), 201
 
 
-def submit_audit(supplier_id):
+def submit_audit_core(supplier_id, score, user_id):
+    """Plain-argument core of submit_audit - callable from a LangGraph node
+    (or anywhere else outside a Flask request) with no request/g dependency.
+    Returns (supplier_dict_or_None, error_message_or_None, http_status).
+    """
     supplier = SCSupplier.query.get(supplier_id)
-    if not supplier or not user_can_access_project(g.user_id, supplier.project_id):
-        return jsonify({"success": False, "error": "Supplier not found"}), 404
+    if not supplier or not user_can_access_project(user_id, supplier.project_id):
+        return None, "Supplier not found", 404
 
-    data = request.get_json(silent=True) or {}
-    score = data.get("score")
     if score is None:
-        return jsonify({"success": False, "error": "score is required"}), 400
+        return None, "score is required", 400
 
     supplier.score = score
     supplier.audit_status = "passed" if score >= 70 else "failed"
     supplier.audit_date = datetime.utcnow().strftime("%Y-%m-%d")
     db.session.commit()
-    return jsonify({"success": True, "supplier": supplier.to_dict()}), 200
+    return supplier.to_dict(), None, 200
+
+
+def submit_audit(supplier_id):
+    data = request.get_json(silent=True) or {}
+    result, error, status = submit_audit_core(supplier_id, data.get("score"), g.user_id)
+    if error:
+        return jsonify({"success": False, "error": error}), status
+    return jsonify({"success": True, "supplier": result}), status

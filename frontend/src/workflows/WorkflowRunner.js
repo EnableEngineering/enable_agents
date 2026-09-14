@@ -170,6 +170,11 @@ function WorkflowRunner() {
   const [completing, setCompleting] = useState(false);
   const [selectedStage, setSelectedStage] = useState(null);
   const [allTasks, setAllTasks] = useState([]);
+  const [pendingApproval, setPendingApproval] = useState(null);
+  const [runningGraph, setRunningGraph] = useState(false);
+  const [resumingAction, setResumingAction] = useState(null);
+  const [editDraft, setEditDraft] = useState('');
+  const [settingAutonomy, setSettingAutonomy] = useState(false);
 
   const fetchInstance = useCallback(async () => {
     try {
@@ -214,6 +219,127 @@ function WorkflowRunner() {
   useEffect(() => {
     fetchAllTasks();
   }, [fetchAllTasks]);
+
+  // Supplier Qualification instances run through the LangGraph orchestration
+  // engine (agents/workflow_orchestration/) instead of the plain manual
+  // start/complete-stage flow every other template still uses - see the
+  // approved orchestration plan. Everything below this comment (autonomy
+  // mode, /run, /pending-approval polling, /resume) is scoped to that one
+  // template and touches nothing else.
+  const isGraphOrchestrated = instance?.templateId === 'supplier-qualification';
+
+  const fetchPendingApproval = useCallback(async () => {
+    if (!isGraphOrchestrated) return;
+    try {
+      const res = await fetch(`${API_CONFIG.BASE_URL}/api/workflows/instances/${instanceId}/pending-approval`, {
+        headers: authJsonHeaders(),
+      });
+      const data = await res.json();
+      if (data.success) setPendingApproval(data);
+    } catch (err) {
+      // Non-critical - next poll tick will retry.
+    }
+  }, [instanceId, isGraphOrchestrated]);
+
+  useEffect(() => {
+    fetchPendingApproval();
+  }, [fetchPendingApproval]);
+
+  // The graph runs asynchronously via Celery - a run/resume call only
+  // kicks it off, it doesn't wait for the next pause. Poll while there's
+  // still something in flight so autopilot's own progress (and the
+  // instance status flipping to "completed") shows up without a reload.
+  useEffect(() => {
+    if (!isGraphOrchestrated) return;
+    if (instance?.status !== 'running') return;
+    const id = setInterval(() => {
+      fetchInstance();
+      fetchPendingApproval();
+    }, 3000);
+    return () => clearInterval(id);
+  }, [isGraphOrchestrated, instance?.status, fetchInstance, fetchPendingApproval]);
+
+  const handleSetAutonomy = async (mode) => {
+    setSettingAutonomy(true);
+    try {
+      const res = await fetch(`${API_CONFIG.BASE_URL}/api/workflows/instances/${instanceId}/autonomy`, {
+        method: 'PATCH',
+        headers: authJsonHeaders(),
+        body: JSON.stringify({ mode }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setInstance(data.instance);
+      } else {
+        showToast(data.error || 'Failed to set autonomy mode', 'error');
+      }
+    } catch (err) {
+      showToast('Error setting autonomy mode', 'error');
+    } finally {
+      setSettingAutonomy(false);
+    }
+  };
+
+  const handleRunGraph = async () => {
+    setRunningGraph(true);
+    try {
+      const res = await fetch(`${API_CONFIG.BASE_URL}/api/workflows/instances/${instanceId}/run`, {
+        method: 'POST',
+        headers: authJsonHeaders(),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        // The response body is the instance as it was *before* the graph
+        // task ran (status still "pending") - the task itself flips it to
+        // "running" (and possibly straight to a paused interrupt) shortly
+        // after, asynchronously via Celery. Re-fetch both, not just
+        // pending-approval, or the UI stays stuck on the "Ready to Run"
+        // panel since isPending never turns false.
+        setInstance(data.instance);
+        showToast('Workflow running', 'success');
+        setTimeout(() => { fetchInstance(); fetchPendingApproval(); }, 1000);
+      } else {
+        showToast(data.error || 'Failed to run workflow', 'error');
+      }
+    } catch (err) {
+      showToast('Error running workflow', 'error');
+    } finally {
+      setRunningGraph(false);
+    }
+  };
+
+  const handleResume = async (action) => {
+    setResumingAction(action);
+    try {
+      let data = {};
+      if (action === 'edit') {
+        try {
+          data = editDraft.trim() ? JSON.parse(editDraft) : {};
+        } catch (err) {
+          showToast('Edited input must be valid JSON', 'error');
+          setResumingAction(null);
+          return;
+        }
+      }
+      const res = await fetch(`${API_CONFIG.BASE_URL}/api/workflows/instances/${instanceId}/resume`, {
+        method: 'POST',
+        headers: authJsonHeaders(),
+        body: JSON.stringify({ action, data }),
+      });
+      const resData = await res.json();
+      if (res.ok) {
+        setEditDraft('');
+        showToast(`Stage ${action === 'skip' ? 'skipped' : action === 'edit' ? 'updated and approved' : 'approved'}`, 'success');
+        setTimeout(() => { fetchInstance(); fetchPendingApproval(); }, 1000);
+      } else {
+        showToast(resData.error || 'Failed to resume workflow', 'error');
+      }
+    } catch (err) {
+      showToast('Error resuming workflow', 'error');
+    } finally {
+      setResumingAction(null);
+    }
+  };
 
   const handleStart = async () => {
     try {
@@ -462,8 +588,44 @@ function WorkflowRunner() {
           <div className="wf-main-lane">
             {!selectedStage ? (
               <>
+                {isGraphOrchestrated && !isCompleted && (
+                  <div className="wf-autonomy-panel">
+                    <div className="wf-autonomy-label">Autonomy mode</div>
+                    <div className="wf-autonomy-options">
+                      {['suggest', 'co-pilot', 'autopilot'].map((mode) => (
+                        <button
+                          key={mode}
+                          className={`wf-autonomy-option ${instance.autonomyMode === mode ? 'active' : ''}`}
+                          disabled={settingAutonomy}
+                          onClick={() => handleSetAutonomy(mode)}
+                        >
+                          {mode === 'co-pilot' ? 'Co-pilot' : formatLabel(mode)}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="wf-autonomy-hint">
+                      {instance.autonomyMode === 'autopilot'
+                        ? "Every stage runs on its own. If the project's monthly AI budget is already over its cap, the next stage still pauses for your review."
+                        : instance.autonomyMode === 'suggest'
+                          ? 'Every stage pauses for your review before it runs.'
+                          : 'Routine stages pause for your review before they run.'}
+                    </p>
+                  </div>
+                )}
+
                 {/* Action Panels */}
-                {isPending && (
+                {isPending && isGraphOrchestrated && (
+                  <div className="wf-action-panel">
+                    <img src="/assets/icons/process.png" alt="" className="wf-action-icon" />
+                    <h3>Ready to Run</h3>
+                    <p>This workflow has {instance.totalStages} stages, run in {instance.autonomyMode || 'co-pilot'} mode.</p>
+                    <button className="wf-btn wf-btn-primary" onClick={handleRunGraph} disabled={runningGraph}>
+                      <img src="/assets/icons/process.png" alt="" /> {runningGraph ? 'Starting...' : 'Run Workflow'}
+                    </button>
+                  </div>
+                )}
+
+                {isPending && !isGraphOrchestrated && (
                   <div className="wf-action-panel">
                     <img src="/assets/icons/process.png" alt="" className="wf-action-icon" />
                     <h3>Ready to Start</h3>
@@ -474,7 +636,76 @@ function WorkflowRunner() {
                   </div>
                 )}
 
-                {instance.status === 'running' && currentStage && (
+                {isGraphOrchestrated && (instance.status === 'running' || instance.status === 'paused') && pendingApproval?.pending && (
+                  <div className="wf-action-panel wf-current-panel">
+                    <div className="wf-current-badge">Pending Approval</div>
+                    <div className="wf-current-header">
+                      <img src={getStageIcon(formatLabel(pendingApproval.interrupt.stage_id))} alt="" />
+                      <div>
+                        <h3>{formatLabel(pendingApproval.interrupt.stage_id)}</h3>
+                        <p>Proposed input for this stage - approve it as-is, edit it, or skip the stage entirely.</p>
+                      </div>
+                    </div>
+
+                    <pre className="wf-proposed-input">
+                      {JSON.stringify(pendingApproval.interrupt.proposed_input, null, 2)}
+                    </pre>
+
+                    <div className="wf-form">
+                      <div className="wf-form-field">
+                        <label>Edited input (JSON, used only by "Save Edit &amp; Approve")</label>
+                        <textarea
+                          rows={4}
+                          value={editDraft}
+                          onChange={(e) => setEditDraft(e.target.value)}
+                          placeholder={JSON.stringify(pendingApproval.interrupt.proposed_input, null, 2)}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="wf-action-buttons">
+                      <button className="wf-btn wf-btn-secondary" onClick={handlePause} disabled={instance.status === 'paused'}>
+                        <img src="/assets/icons/alerts.png" alt="" /> Pause
+                      </button>
+                      <button className="wf-btn wf-btn-secondary" onClick={() => handleResume('skip')} disabled={!!resumingAction}>
+                        {resumingAction === 'skip' ? 'Skipping...' : 'Skip'}
+                      </button>
+                      {editDraft.trim() && (
+                        <button className="wf-btn wf-btn-secondary" onClick={() => handleResume('edit')} disabled={!!resumingAction}>
+                          {resumingAction === 'edit' ? 'Saving...' : 'Save Edit & Approve'}
+                        </button>
+                      )}
+                      <button className="wf-btn wf-btn-primary" onClick={() => handleResume('approve')} disabled={!!resumingAction}>
+                        {resumingAction === 'approve' ? 'Approving...' : 'Approve'}
+                        {resumingAction !== 'approve' && <img src="/assets/icons/checklist.png" alt="" />}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {isGraphOrchestrated && instance.status === 'running' && !pendingApproval?.pending && (
+                  <div className="wf-action-panel">
+                    <Spinner size="md" />
+                    <h3>Running</h3>
+                    <p>Autopilot is working through the remaining stages.</p>
+                    <button className="wf-btn wf-btn-secondary" onClick={handlePause}>
+                      <img src="/assets/icons/alerts.png" alt="" /> Pause
+                    </button>
+                  </div>
+                )}
+
+                {isGraphOrchestrated && instance.status === 'paused' && !pendingApproval?.pending && (
+                  <div className="wf-action-panel">
+                    <img src="/assets/icons/alerts.png" alt="" className="wf-action-icon" />
+                    <h3>Workflow Paused</h3>
+                    <p>Any stage still to come will be skipped rather than run automatically. Run again to restart the pipeline from the top using what's already been gathered.</p>
+                    <button className="wf-btn wf-btn-primary" onClick={handleRunGraph} disabled={runningGraph}>
+                      <img src="/assets/icons/process.png" alt="" /> {runningGraph ? 'Starting...' : 'Run Again'}
+                    </button>
+                  </div>
+                )}
+
+                {instance.status === 'running' && !isGraphOrchestrated && currentStage && (
                   <div className="wf-action-panel wf-current-panel">
                     <div className="wf-current-badge">Current Stage</div>
                     <div className="wf-current-header">
@@ -523,7 +754,7 @@ function WorkflowRunner() {
                   </div>
                 )}
 
-                {instance.status === 'paused' && (
+                {instance.status === 'paused' && !isGraphOrchestrated && (
                   <div className="wf-action-panel">
                     <img src="/assets/icons/alerts.png" alt="" className="wf-action-icon" />
                     <h3>Workflow Paused</h3>

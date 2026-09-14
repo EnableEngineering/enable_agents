@@ -9,7 +9,7 @@
     {
       "id": "supplier_discovery",
       "name": "Supplier Discovery",
-      "agent": "requirements_gathering",
+      "agent": "market_research",
       "description": "Search and identify potential suppliers based on product/service criteria",
       "required_inputs": []
     },

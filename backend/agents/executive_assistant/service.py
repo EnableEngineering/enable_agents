@@ -37,6 +37,42 @@ def list_tasks():
     return jsonify({"success": True, "tasks": [t.to_dict() for t in tasks]})
 
 
+def create_task_core(user_id, title, description="", project_id=None, assigned_to=None,
+                      due_date=None, priority="Medium", status="Pending"):
+    """Plain-argument core of create_task - callable from a LangGraph node
+    (or anywhere else outside a Flask request) with no request/g dependency.
+    `due_date`, if given, is a "%Y-%m-%d" string, matching the route's input
+    shape (kept as-is rather than requiring a datetime, to keep this a pure
+    extraction with zero behavior change).
+    Returns (task_dict_or_None, error_message_or_None).
+    """
+    title = (title or "").strip()
+    if not title:
+        return None, "Title is required"
+
+    parsed_due_date = None
+    if due_date:
+        try:
+            parsed_due_date = datetime.strptime(due_date, "%Y-%m-%d")
+        except ValueError:
+            pass
+
+    task = ExecTask(
+        task_id=str(uuid.uuid4()),
+        user_id=user_id,
+        project_id=project_id,
+        title=title,
+        description=description or "",
+        assigned_to=assigned_to,
+        due_date=parsed_due_date,
+        priority=priority or "Medium",
+        status=status or "Pending",
+    )
+    db.session.add(task)
+    db.session.commit()
+    return task.to_dict(), None
+
+
 def create_task():
     """Create a new task."""
     user_id = get_user_id()
@@ -44,31 +80,19 @@ def create_task():
         return jsonify({"error": "Not authenticated"}), 401
 
     data = request.get_json()
-    title = data.get("title", "").strip()
-    if not title:
-        return jsonify({"error": "Title is required"}), 400
-
-    due_date = None
-    if data.get("dueDate"):
-        try:
-            due_date = datetime.strptime(data["dueDate"], "%Y-%m-%d")
-        except ValueError:
-            pass
-
-    task = ExecTask(
-        task_id=str(uuid.uuid4()),
-        user_id=user_id,
-        project_id=data.get("projectId"),
-        title=title,
+    result, error = create_task_core(
+        user_id,
+        data.get("title", ""),
         description=data.get("description", ""),
+        project_id=data.get("projectId"),
         assigned_to=data.get("assignedTo"),
-        due_date=due_date,
+        due_date=data.get("dueDate"),
         priority=data.get("priority", "Medium"),
         status=data.get("status", "Pending"),
     )
-    db.session.add(task)
-    db.session.commit()
-    return jsonify({"success": True, "task": task.to_dict()})
+    if error:
+        return jsonify({"error": error}), 400
+    return jsonify({"success": True, "task": result})
 
 
 def get_task(task_id: str):

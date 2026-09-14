@@ -14,7 +14,15 @@ import sys
 import pytest
 
 # ── Env stubs (must be set before any module is imported) ────────────────────
-os.environ.setdefault("DATABASE_URI", "sqlite:///:memory:")
+# core/database.py enforces PostgreSQL (SQLite was removed as a supported
+# backend — see commit 9684a130), so this suite needs a real Postgres to
+# connect to. CI provides one via DATABASE_URL (postgres service container);
+# locally, default to a dedicated `enable_agents_test` DB so runs never touch
+# the real dev database. Create it once with: createdb enable_agents_test
+os.environ.setdefault(
+    "DATABASE_URI",
+    os.environ.get("DATABASE_URL") or "postgresql://localhost:5432/enable_agents_test",
+)
 os.environ.setdefault("PUBLIC_URL", "http://localhost:5000")
 os.environ.setdefault("GOOGLE_CLIENT_ID", "test-client-id")
 os.environ.setdefault("GOOGLE_CLIENT_SECRET", "test-client-secret")
@@ -39,20 +47,28 @@ def _build_test_app():
 
     app = Flask("test_app")
     app.config["TESTING"] = True
-    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///:memory:"
+    app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "test-secret-key")
     CORS(app)
     configure_logging(app)
     init_db(app)
 
-    # Core blueprints
-    from blueprints.auth_bp import auth_bp
-    from blueprints.health_bp import health_bp
-    from blueprints.prompts_bp import prompts_bp
-    from blueprints.favorites_bp import favorites_bp
-    app.register_blueprint(auth_bp)
-    app.register_blueprint(health_bp)
-    app.register_blueprint(prompts_bp)
-    app.register_blueprint(favorites_bp)
+    # Core blueprints — auth/health/prompts/favorites were folded into the
+    # app.py monolith at some point and no longer exist as blueprint modules
+    # here; skip rather than fail so the rest of this fixture (and every
+    # other file sharing it) still builds. test_auth.py/test_health.py will
+    # correctly fail with 404s until those routes are re-exposed as blueprints.
+    for module_path, bp_name in [
+        ("blueprints.auth_bp", "auth_bp"),
+        ("blueprints.health_bp", "health_bp"),
+        ("blueprints.prompts_bp", "prompts_bp"),
+        ("blueprints.favorites_bp", "favorites_bp"),
+    ]:
+        try:
+            import importlib as _importlib
+            mod = _importlib.import_module(module_path)
+            app.register_blueprint(getattr(mod, bp_name))
+        except ModuleNotFoundError as exc:
+            print(f"[test] Skipping core blueprint {bp_name}: {exc}")
 
     # Agent blueprints
     from agents.registry import registry_bp, _load_manifests, _registry, agent_dir_for
@@ -76,9 +92,13 @@ def _build_test_app():
 
     app.register_blueprint(registry_bp)
 
+    from routes.workflows import workflows_bp
+    app.register_blueprint(workflows_bp)
+
     with app.app_context():
         # Ensure all models are imported so db.create_all() sees their tables
         import core.models  # noqa: F401 — registers User, GoogleOAuthToken
+        import models.workflow  # noqa: F401 — registers WorkflowTemplate, WorkflowInstance
         db.create_all()
 
     return app

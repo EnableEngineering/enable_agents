@@ -432,6 +432,103 @@ def pause_instance(instance_id: str):
     return jsonify({"success": True, "instance": instance.to_dict()})
 
 
+# =============================================================================
+# LangGraph orchestration (Supplier Qualification Pipeline only - see
+# agents/workflow_orchestration/). Other templates keep running through the
+# plain start/complete-stage bookkeeping above.
+# =============================================================================
+
+@workflows_bp.route('/api/workflows/instances/<instance_id>/run', methods=['POST'])
+@require_auth
+def run_instance(instance_id: str):
+    """Kick off (or continue) the instance's LangGraph run asynchronously."""
+    user_id = get_user_id()
+    if not user_id:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    instance = get_accessible_instance(instance_id, user_id)
+    if not instance:
+        return jsonify({"error": "Instance not found"}), 404
+
+    if instance.status not in ("pending", "paused"):
+        return jsonify({"error": f"Cannot run instance with status '{instance.status}'"}), 400
+
+    from agents.workflow_orchestration.tasks import run_workflow_graph
+    task = run_workflow_graph.delay(instance_id)
+    return jsonify({"success": True, "taskId": task.id, "instance": instance.to_dict()}), 202
+
+
+@workflows_bp.route('/api/workflows/instances/<instance_id>/pending-approval', methods=['GET'])
+@require_auth
+def get_pending_approval(instance_id: str):
+    """Read the current interrupt (if any) the graph is paused on."""
+    user_id = get_user_id()
+    if not user_id:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    instance = get_accessible_instance(instance_id, user_id)
+    if not instance:
+        return jsonify({"error": "Instance not found"}), 404
+
+    from agents.workflow_orchestration.graph import get_compiled_graph
+    snapshot = get_compiled_graph().get_state({"configurable": {"thread_id": instance_id}})
+
+    if not snapshot.next:
+        return jsonify({"success": True, "pending": False})
+
+    interrupts = [i for task in snapshot.tasks for i in task.interrupts]
+    if not interrupts:
+        return jsonify({"success": True, "pending": False})
+
+    return jsonify({"success": True, "pending": True, "interrupt": interrupts[0].value})
+
+
+@workflows_bp.route('/api/workflows/instances/<instance_id>/resume', methods=['POST'])
+@require_auth
+def resume_instance(instance_id: str):
+    """Resume a graph paused on interrupt() with a human decision.
+    Expects JSON: { action: "approve"|"edit"|"skip", data: {...} }"""
+    user_id = get_user_id()
+    if not user_id:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    instance = get_accessible_instance(instance_id, user_id)
+    if not instance:
+        return jsonify({"error": "Instance not found"}), 404
+
+    data = request.get_json() or {}
+    action = data.get("action")
+    if action not in ("approve", "edit", "skip"):
+        return jsonify({"error": "action must be one of: approve, edit, skip"}), 400
+
+    resume_value = {"action": action, "data": data.get("data", {})}
+
+    from agents.workflow_orchestration.tasks import resume_workflow_graph
+    task = resume_workflow_graph.delay(instance_id, resume_value)
+    return jsonify({"success": True, "taskId": task.id}), 202
+
+
+@workflows_bp.route('/api/workflows/instances/<instance_id>/autonomy', methods=['PATCH'])
+@require_auth
+def set_autonomy_mode(instance_id: str):
+    """Set the instance's autonomy mode. Expects JSON: { mode: "suggest"|"co-pilot"|"autopilot" }"""
+    user_id = get_user_id()
+    if not user_id:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    instance = get_accessible_instance(instance_id, user_id)
+    if not instance:
+        return jsonify({"error": "Instance not found"}), 404
+
+    mode = (request.get_json() or {}).get("mode")
+    if mode not in ("suggest", "co-pilot", "autopilot"):
+        return jsonify({"error": "mode must be one of: suggest, co-pilot, autopilot"}), 400
+
+    instance.autonomy_mode = mode
+    db.session.commit()
+    return jsonify({"success": True, "instance": instance.to_dict()})
+
+
 @workflows_bp.route('/api/workflows/instances/<instance_id>', methods=['DELETE'])
 @require_auth
 def delete_instance(instance_id: str):

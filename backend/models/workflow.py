@@ -78,6 +78,9 @@ class WorkflowInstance(db.Model):
     current_stage_index = db.Column(db.Integer, default=0)
     _stage_states = db.Column("stage_states", db.Text, default="{}")  # JSON: {stage_id: {status, data, completedAt}}
     _context = db.Column("context", db.Text, default="{}")  # Accumulated data passed between stages
+    # Suggest | co-pilot | autopilot - read by agents/workflow_orchestration/graph.py
+    # to decide whether a stage's node pauses on interrupt() for human review.
+    autonomy_mode = db.Column(db.String(20), nullable=True, default="co-pilot")
     started_at = db.Column(db.DateTime, nullable=True)
     completed_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -157,6 +160,7 @@ class WorkflowInstance(db.Model):
             "stages": stages,  # Include all stage definitions for frontend
             "stageStates": self.stage_states,
             "context": self.context,
+            "autonomyMode": self.autonomy_mode or "co-pilot",
             "startedAt": self.started_at.isoformat() if self.started_at else None,
             "completedAt": self.completed_at.isoformat() if self.completed_at else None,
             "createdAt": self.created_at.isoformat() if self.created_at else None,

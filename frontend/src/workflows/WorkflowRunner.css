@@ -493,6 +493,92 @@
   border-color: var(--color-primary);
 }
 
+.wf-form-field textarea {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--text-caption);
+  font-family: var(--font-mono, monospace);
+  resize: vertical;
+}
+
+.wf-form-field textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+/* Autonomy mode selector - Supplier Qualification (LangGraph-orchestrated)
+   instances only, shown above the action panel. */
+.wf-autonomy-panel {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-4) var(--space-5);
+  margin-bottom: var(--space-4);
+}
+
+.wf-autonomy-label {
+  font-size: var(--text-caption);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: var(--space-2);
+}
+
+.wf-autonomy-options {
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.wf-autonomy-option {
+  flex: 1;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--text-body);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.wf-autonomy-option:hover:not(:disabled) {
+  border-color: var(--color-primary);
+}
+
+.wf-autonomy-option.active {
+  background: var(--gradient-accent);
+  border-color: transparent;
+  color: white;
+}
+
+.wf-autonomy-option:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.wf-autonomy-hint {
+  font-size: var(--text-caption);
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+.wf-proposed-input {
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  font-size: var(--text-caption);
+  font-family: var(--font-mono, monospace);
+  overflow-x: auto;
+  margin: 0 0 var(--space-4) 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .wf-action-buttons {
   display: flex;
   gap: var(--space-2);

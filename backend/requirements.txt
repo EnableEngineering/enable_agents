@@ -39,3 +39,21 @@ celery[redis]
 redis
 gunicorn
 PyYAML
+
+# Workflow orchestration (Supplier Qualification Pipeline - agents/workflow_orchestration/)
+# Pinned explicitly rather than left transitive: previously only pulled in
+# incidentally via langchain's own dependency tree, which is not safe once
+# this is load-bearing orchestration infra. Re-verified 2026-09-14 against
+# this file's current langchain 1.4.0 (which floors langgraph at >=1.2.11) -
+# `pip check` reports no broken requirements at these versions.
+# Note: langgraph-checkpoint-postgres depends on psycopg (v3), a different
+# driver than psycopg2-binary used elsewhere in this file - both coexist
+# fine (separate import namespaces), just don't assume they're the same.
+# psycopg (bare) has no working pq implementation on its own - it needs
+# either libpq installed on the system or the [binary] extra; this image
+# doesn't have libpq, so the extra is required or `import psycopg` raises
+# "no pq wrapper available" at runtime (caught 2026-09-14 restoring this).
+langgraph==1.2.11
+langgraph-checkpoint==4.1.1
+langgraph-checkpoint-postgres==3.1.2
+psycopg[binary]==3.3.5
