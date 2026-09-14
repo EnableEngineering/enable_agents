@@ -8,11 +8,37 @@
 - **Domain:** enableyou.co
 - **Live URL:** https://agents.enableyou.co/
 
+## ⚠️ How the frontend is actually served (read this before deploying)
+
+**Corrected 2026-09-14 - this was wrong/silently incomplete before.**
+`docker-compose.yml`'s `frontend-remote`/`nginx` services are NOT what
+serves `https://agents.enableyou.co/`. The site is served by a **host-level
+nginx** (installed via apt, running outside Docker entirely - the
+`docker-compose.yml` `nginx` service has been `Exited (128)` for 8+ weeks
+and is unused) that serves the React build as **static files straight off
+disk** at `/var/www/enable_agents`, per `root /var/www/enable_agents;` in
+`/etc/nginx/sites-enabled/agents.conf`. Only the backend API is proxied to
+a Docker container (`proxy_pass http://127.0.0.1:8000` → `backend-remote`).
+
+**This means rebuilding/restarting `frontend-remote` has zero effect on
+what users see.** Found 2026-09-14 because `/var/www/enable_agents` was
+still dated Aug 7 - over a month of frontend work had been "deployed"
+(container rebuilt, marked healthy) without ever reaching a real user,
+silently, because nothing in the documented deploy flow copied the new
+build there. **Every deploy must copy the fresh build into
+`/var/www/enable_agents`** - see the step-by-step in Method 1 below. There
+is no known reason `frontend-remote` needs to exist at all given this -
+worth a real look at removing it (or wiring host nginx to proxy to it
+instead of serving static files) rather than carrying two frontend serving
+paths where only one is real.
+
 ## SSL/HTTPS
 
 - HTTP automatically redirects to HTTPS (301)
 - SSL certificates managed by Let's Encrypt (certbot)
-- Nginx handles SSL termination inside Docker
+- SSL termination happens in the **host-level nginx** described above, not
+  inside Docker - `/etc/nginx/sites-enabled/agents.conf` holds the
+  Certbot-managed `listen 443 ssl` block directly.
 
 ### GCP Firewall Rules Required
 
@@ -65,15 +91,34 @@ sudo docker compose build backend-remote celery-worker-remote celery-beat-remote
 # traffic over to it (a one-off container, doesn't touch the running one):
 sudo docker compose run --rm backend-remote flask db upgrade
 
-# Restart everything with the new images (note the real service names -
-# celery-worker-remote/celery-beat-remote, not celery-remote/beat-remote):
-sudo docker compose up -d backend-remote frontend-remote celery-worker-remote celery-beat-remote
+# Restart the backend/celery services with the new images (note the real
+# service names - celery-worker-remote/celery-beat-remote, not
+# celery-remote/beat-remote):
+sudo docker compose up -d backend-remote celery-worker-remote celery-beat-remote
 
-# Or rebuild without cache (slower, use when Dockerfile itself changes,
-# not just requirements.txt - normal `build` already busts the pip-install
-# layer when requirements.txt's content changes):
-sudo docker compose build --no-cache backend-remote celery-worker-remote celery-beat-remote frontend-remote
-sudo docker compose up -d
+# ⚠️⚠️ REQUIRED, not optional - see "How the frontend is actually served"
+# above. frontend-remote itself is NOT what users see. Copy the fresh
+# React build out of the image and into the directory the host nginx
+# actually serves from, replacing (not merging with) whatever's there:
+sudo docker compose build frontend-remote
+sudo docker create --name frontend_extract_tmp enable_agents-frontend-remote:latest
+sudo rm -rf /var/www/enable_agents.bak && sudo mv /var/www/enable_agents /var/www/enable_agents.bak
+sudo mkdir -p /var/www/enable_agents
+sudo docker cp frontend_extract_tmp:/usr/share/nginx/html/. /var/www/enable_agents/
+sudo docker rm frontend_extract_tmp
+sudo chown -R www-data:www-data /var/www/enable_agents
+sudo nginx -t && sudo systemctl reload nginx
+
+# Verify the new build actually landed (Last-Modified should be ~now, not
+# stale - this is the check that would have caught the 2026-08-07 staleness
+# immediately instead of it silently persisting for weeks):
+curl -sS -I https://agents.enableyou.co/ | grep -i last-modified
+
+# Or rebuild backend/celery without cache (slower, use when Dockerfile
+# itself changes, not just requirements.txt - normal `build` already busts
+# the pip-install layer when requirements.txt's content changes):
+sudo docker compose build --no-cache backend-remote celery-worker-remote celery-beat-remote
+sudo docker compose up -d backend-remote celery-worker-remote celery-beat-remote
 ```
 
 **After any deploy that touched backend code, verify the Celery workers
@@ -129,17 +174,36 @@ gcloud compute ssh instance-20260419-210128 --zone=us-east1-b --command="
 ### From local machine:
 
 ```bash
-# Pull latest, build with cache, restart - all 4 backend/Dockerfile-based
+# Pull latest, build with cache, restart - all 3 backend/Dockerfile-based
 # services (backend-remote, celery-worker-remote, celery-beat-remote each
 # build their own image despite sharing a Dockerfile - see Method 1's
-# warning above), then any pending migration, then cut over.
+# warning above), then any pending migration, then cut over. Frontend is
+# handled separately below - the container by itself does not update what
+# users see, see "How the frontend is actually served" above.
 gcloud compute ssh instance-20260419-210128 --zone=us-east1-b --command="
   cd /home/rhishi/enable_agents && \
   sudo git fetch origin && sudo git reset --hard origin/local-preview && \
-  sudo docker compose build backend-remote celery-worker-remote celery-beat-remote frontend-remote && \
+  sudo docker compose build backend-remote celery-worker-remote celery-beat-remote && \
   sudo docker compose run --rm backend-remote flask db upgrade && \
-  sudo docker compose up -d
+  sudo docker compose up -d backend-remote celery-worker-remote celery-beat-remote
 "
+
+# Frontend: build, extract, replace the static files the host nginx serves
+gcloud compute ssh instance-20260419-210128 --zone=us-east1-b --command="
+  cd /home/rhishi/enable_agents && \
+  sudo docker compose build frontend-remote && \
+  sudo docker create --name frontend_extract_tmp enable_agents-frontend-remote:latest && \
+  sudo rm -rf /var/www/enable_agents.bak && \
+  sudo mv /var/www/enable_agents /var/www/enable_agents.bak && \
+  sudo mkdir -p /var/www/enable_agents && \
+  sudo docker cp frontend_extract_tmp:/usr/share/nginx/html/. /var/www/enable_agents/ && \
+  sudo docker rm frontend_extract_tmp && \
+  sudo chown -R www-data:www-data /var/www/enable_agents && \
+  sudo nginx -t && sudo systemctl reload nginx
+"
+
+# Verify the frontend build actually landed (should be ~now, not stale)
+curl -sS -I https://agents.enableyou.co/ | grep -i last-modified
 ```
 
 ### Check status:
