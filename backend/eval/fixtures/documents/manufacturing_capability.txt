@@ -1,0 +1,33 @@
+Apex Precision Machining — Capability Statement
+
+Apex Precision Machining is a CNC machining supplier based in Ohio, USA,
+specializing in precision aluminum and stainless steel parts for the
+automotive and aerospace industries. Founded in 2009, we operate a
+15,000 square foot facility with 12 CNC milling centers and 6 CNC lathes.
+
+Certifications: ISO 9001:2015 and AS9100D certified. All aluminum parts
+are produced to tolerances of +/- 0.001 inches.
+
+Capacity: We can produce up to 10,000 units per month for a single part
+number, with typical lead times of 3-4 weeks for new tooling and 1-2
+weeks for repeat orders.
+
+Materials: 6061 and 7075 aluminum, 304 and 316 stainless steel, titanium
+Grade 5, and various engineering plastics (Delrin, PEEK).
+
+Quality control: Every batch is inspected using coordinate measuring
+machines (CMM) and first-article inspection reports are provided for all
+new part numbers. We maintain full material traceability from raw stock
+to finished part.
+
+Minimum order quantity: 50 units for prototype runs, 500 units for
+production runs. Custom tooling costs are quoted separately and are
+typically amortized over the first production run.
+
+Our largest customers include Tier 1 automotive suppliers producing
+transmission housings and aerospace subcontractors producing structural
+brackets. We are actively seeking new customers in the electric vehicle
+and medical device sectors who need precision-machined aluminum
+components with fast turnaround.
+
+Contact: sales@apexprecision.example, +1 (614) 555-0142.

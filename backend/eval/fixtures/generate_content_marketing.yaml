@@ -1,0 +1,116 @@
+# Fixtures for generate_content_marketing() (backend/app.py:6035),
+# POST /api/content-marketing/generate-content.
+#
+# Each case needs a CMProject with the named fixture_document already
+# uploaded (the runner handles creating one project per fixture_document
+# and uploading it once, then reuses it across every case referencing that
+# document - see runner.py). expect.keywords are checked against the
+# generated `content` field.
+
+- name: manufacturing-linkedin-post
+  input:
+    channel: "linkedin"
+    content_type: "post"
+    context: "Announce our CNC capacity expansion to attract new automotive customers."
+  fixture_document: "manufacturing_capability.txt"
+  expect:
+    keywords: ["CNC"]
+
+- name: manufacturing-email-outreach
+  input:
+    channel: "email"
+    content_type: "outreach"
+    context: "Cold email to a Tier 1 automotive supplier about our aluminum machining capability."
+  fixture_document: "manufacturing_capability.txt"
+  expect:
+    keywords: ["aluminum"]
+
+- name: manufacturing-google-ads
+  input:
+    channel: "google_ads"
+    content_type: "ad copy"
+    context: "Short ad targeting procurement managers searching for ISO 9001 certified CNC suppliers."
+  fixture_document: "manufacturing_capability.txt"
+  expect:
+    keywords: ["CNC"]
+
+- name: saas-linkedin-post
+  input:
+    channel: "linkedin"
+    content_type: "post"
+    context: "Announce a new integration with NetSuite for our accounts payable product."
+  fixture_document: "saas_product_onepager.txt"
+  expect:
+    keywords: ["NetSuite"]
+
+- name: saas-social-post
+  input:
+    channel: "social"
+    content_type: "post"
+    context: "Short, punchy post about how much time our customers save on invoice processing."
+  fixture_document: "saas_product_onepager.txt"
+  expect:
+    keywords: ["invoice"]
+
+- name: saas-email-nurture
+  input:
+    channel: "email"
+    content_type: "nurture"
+    context: "Nurture email to a VP of Finance who downloaded our pricing page but hasn't booked a demo."
+  fixture_document: "saas_product_onepager.txt"
+  expect:
+    keywords: ["Finance"]
+
+- name: healthcare-linkedin-post
+  input:
+    channel: "linkedin"
+    content_type: "post"
+    context: "Post about how our patient portal reduces administrative burden on clinical staff."
+  fixture_document: "healthcare_clinic_profile.txt"
+  expect:
+    keywords: ["patient"]
+
+- name: healthcare-email-patient-update
+  input:
+    channel: "email"
+    content_type: "newsletter"
+    context: "Patient newsletter update about expanded same-day appointment availability."
+  fixture_document: "healthcare_clinic_profile.txt"
+  expect:
+    keywords: ["appointment"]
+
+- name: finance-linkedin-post
+  input:
+    channel: "linkedin"
+    content_type: "post"
+    context: "Thought-leadership post about tax-efficient rebalancing for high net worth clients."
+  fixture_document: "finance_investment_firm.txt"
+  expect:
+    keywords: ["portfolio"]
+
+- name: retail-social-post
+  input:
+    channel: "social"
+    content_type: "post"
+    context: "Instagram-style post highlighting our free shipping threshold and sustainable packaging."
+  fixture_document: "retail_ecommerce_brand.txt"
+  expect:
+    keywords: ["shipping"]
+
+- name: education-google-ads
+  input:
+    channel: "google_ads"
+    content_type: "ad copy"
+    context: "Ad targeting working adults searching for a data analytics certification program."
+  fixture_document: "education_online_courses.txt"
+  expect:
+    keywords: ["certification"]
+
+- name: real-estate-linkedin-post
+  input:
+    channel: "linkedin"
+    content_type: "post"
+    context: "Post aimed at property owners about our fast tenant turnaround time."
+  fixture_document: "real_estate_property_mgmt.txt"
+  expect:
+    keywords: ["tenant"]

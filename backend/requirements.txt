@@ -38,3 +38,4 @@ psutil
 celery[redis]
 redis
 gunicorn
+PyYAML

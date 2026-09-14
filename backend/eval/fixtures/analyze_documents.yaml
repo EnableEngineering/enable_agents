@@ -1,0 +1,61 @@
+# Fixtures for DomainSpecializationAnalyzer.analyze_documents() (backend/app.py:875),
+# fired automatically by POST /api/content-marketing/documents/upload.
+#
+# Only 7 cases, not 10-15: this function's entire input is "which document,"
+# and there are exactly 7 industries in the analyzer's own industry_keywords
+# dict (backend/app.py:865-873) - one real, distinct document per industry is
+# a more meaningful eval than padding to 10-15 with near-duplicate content.
+# Documented deviation from the general 10-15-per-function target, not an
+# oversight.
+#
+# expect.keywords are checked against the combined text of every string
+# value in the response JSON (industry/sector/function/role/etc.), not a
+# single field - the analyzer's own wording varies run to run at temperature=0
+# but the underlying classification shouldn't.
+
+- name: manufacturing-capability-statement
+  fixture_document: "manufacturing_capability.txt"
+  expect:
+    json_keys: ["industry", "sector", "function", "role", "target_audience", "value_proposition", "tone", "key_themes"]
+    keywords: ["manufactur"]
+
+- name: saas-product-onepager
+  fixture_document: "saas_product_onepager.txt"
+  expect:
+    json_keys: ["industry", "sector", "function", "role", "target_audience", "value_proposition", "tone", "key_themes"]
+    keywords: ["software"]
+
+- name: healthcare-clinic-profile
+  fixture_document: "healthcare_clinic_profile.txt"
+  expect:
+    json_keys: ["industry", "sector", "function", "role", "target_audience", "value_proposition", "tone", "key_themes"]
+    keywords: ["health"]
+
+- name: finance-investment-firm
+  fixture_document: "finance_investment_firm.txt"
+  expect:
+    json_keys: ["industry", "sector", "function", "role", "target_audience", "value_proposition", "tone", "key_themes"]
+    keywords: ["financ"]
+
+- name: retail-ecommerce-brand
+  fixture_document: "retail_ecommerce_brand.txt"
+  expect:
+    json_keys: ["industry", "sector", "function", "role", "target_audience", "value_proposition", "tone", "key_themes"]
+    # Not "retail" - the analyzer legitimately classifies this as
+    # "E-commerce" (also correct; this doc's actual sales channel is
+    # direct-to-consumer online), caught by the first real run of this
+    # suite. "Home Goods" is the product category either classification
+    # would still have to mention.
+    keywords: ["Home Goods"]
+
+- name: education-online-courses
+  fixture_document: "education_online_courses.txt"
+  expect:
+    json_keys: ["industry", "sector", "function", "role", "target_audience", "value_proposition", "tone", "key_themes"]
+    keywords: ["education"]
+
+- name: real-estate-property-management
+  fixture_document: "real_estate_property_mgmt.txt"
+  expect:
+    json_keys: ["industry", "sector", "function", "role", "target_audience", "value_proposition", "tone", "key_themes"]
+    keywords: ["real estate"]

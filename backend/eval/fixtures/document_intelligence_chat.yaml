@@ -1,0 +1,106 @@
+# Fixtures for DocumentService.chat() (backend/agents/document_intelligence/service.py:556),
+# POST /api/document-intelligence/chat.
+#
+# Needs the fixture document fully processed (status == "completed") in a
+# document_intelligence project before these run - the runner uploads each
+# fixture document once per project and waits for processing (Celery eager)
+# before any case referencing it executes. expect.keywords are checked
+# against the `answer` field.
+
+- name: manufacturing-tolerance
+  input:
+    query: "What tolerance can they hold for aluminum parts?"
+  fixture_document: "manufacturing_capability.txt"
+  expect:
+    keywords: ["0.001"]
+
+- name: manufacturing-lead-time
+  input:
+    query: "What is the typical lead time for a repeat order?"
+  fixture_document: "manufacturing_capability.txt"
+  expect:
+    keywords: ["1-2 weeks"]
+
+- name: manufacturing-moq
+  input:
+    query: "What is the minimum order quantity for a production run?"
+  fixture_document: "manufacturing_capability.txt"
+  expect:
+    keywords: ["500"]
+
+- name: saas-pricing
+  input:
+    query: "What does the product cost per month?"
+  fixture_document: "saas_product_onepager.txt"
+  expect:
+    keywords: ["499"]
+
+- name: saas-integrations
+  input:
+    query: "Which accounting systems does this integrate with?"
+  fixture_document: "saas_product_onepager.txt"
+  expect:
+    keywords: ["QuickBooks"]
+
+- name: saas-time-savings
+  input:
+    query: "How much manual processing time do customers save?"
+  fixture_document: "saas_product_onepager.txt"
+  expect:
+    keywords: ["80%"]
+
+- name: healthcare-patient-volume
+  input:
+    query: "How many patients does the clinic see per year?"
+  fixture_document: "healthcare_clinic_profile.txt"
+  expect:
+    keywords: ["18,000"]
+
+- name: healthcare-locations
+  input:
+    query: "How many clinic locations are there?"
+  fixture_document: "healthcare_clinic_profile.txt"
+  expect:
+    keywords: ["three"]
+
+- name: finance-aum
+  input:
+    query: "How much in assets does the firm manage?"
+  fixture_document: "finance_investment_firm.txt"
+  expect:
+    keywords: ["340 million"]
+
+- name: finance-fee-structure
+  input:
+    query: "What management fee do they charge?"
+  fixture_document: "finance_investment_firm.txt"
+  expect:
+    keywords: ["0.75%"]
+
+- name: retail-repeat-purchase
+  input:
+    query: "What is the repeat purchase rate?"
+  fixture_document: "retail_ecommerce_brand.txt"
+  expect:
+    keywords: ["22%"]
+
+- name: education-completion-rate
+  input:
+    query: "What percentage of students complete the program?"
+  fixture_document: "education_online_courses.txt"
+  expect:
+    keywords: ["68%"]
+
+- name: real-estate-occupancy
+  input:
+    query: "What is the current occupancy rate across the portfolio?"
+  fixture_document: "real_estate_property_mgmt.txt"
+  expect:
+    keywords: ["94%"]
+
+- name: real-estate-emergency-response
+  input:
+    query: "How quickly do they respond to emergency maintenance requests?"
+  fixture_document: "real_estate_property_mgmt.txt"
+  expect:
+    keywords: ["2 hours"]

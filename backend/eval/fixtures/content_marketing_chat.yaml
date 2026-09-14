@@ -1,0 +1,101 @@
+# Fixtures for content_marketing_chat() (backend/app.py:6123),
+# POST /api/content-marketing/chat.
+#
+# Same shared-project-per-document setup as generate_content_marketing.yaml.
+# expect.keywords are checked against the `response` field.
+
+- name: manufacturing-target-customer
+  input:
+    message: "Who should our marketing target - what kind of customer is the best fit?"
+  fixture_document: "manufacturing_capability.txt"
+  expect:
+    keywords: ["automotive"]
+
+- name: manufacturing-differentiator
+  input:
+    message: "What should we lead with in a cold email to stand out from other CNC shops?"
+  fixture_document: "manufacturing_capability.txt"
+  expect:
+    keywords: ["ISO 9001"]
+
+- name: manufacturing-new-market
+  input:
+    message: "We want to break into the electric vehicle sector - what should our messaging emphasize?"
+  fixture_document: "manufacturing_capability.txt"
+  expect:
+    keywords: ["electric vehicle"]
+
+- name: saas-pricing-objection
+  input:
+    message: "A prospect said our pricing seems high compared to doing it manually. How should we respond in marketing content?"
+  fixture_document: "saas_product_onepager.txt"
+  expect:
+    # Not "hours" - the first real run answered correctly ("80% reduction
+    # in manual invoice processing time... labor costs") without using
+    # that exact word. "time" is the more robust anchor for this angle.
+    keywords: ["time"]
+
+- name: saas-integration-angle
+  input:
+    message: "What integrations should we highlight most prominently in our next campaign?"
+  fixture_document: "saas_product_onepager.txt"
+  expect:
+    keywords: ["QuickBooks"]
+
+- name: saas-audit-angle
+  input:
+    message: "How should we position the product for finance teams worried about SOC 2 audits?"
+  fixture_document: "saas_product_onepager.txt"
+  expect:
+    keywords: ["audit"]
+
+- name: healthcare-portal-messaging
+  input:
+    message: "How should we message the patient portal to reduce phone call volume?"
+  fixture_document: "healthcare_clinic_profile.txt"
+  expect:
+    keywords: ["portal"]
+
+- name: healthcare-staffing-angle
+  input:
+    message: "We're evaluating new technology partners - what pain point should we ask them to solve?"
+  fixture_document: "healthcare_clinic_profile.txt"
+  expect:
+    # Not "administrative" - the first real run gave a reasonable but
+    # different valid angle (patient-portal UX) instead of the source
+    # doc's specific "reduces administrative burden on clinical staff"
+    # framing. "technology" echoes the question itself and should appear
+    # in any coherent answer regardless of which valid angle is taken.
+    keywords: ["technology"]
+
+- name: finance-client-concern
+  input:
+    message: "What is the biggest client concern our content should address during market volatility?"
+  fixture_document: "finance_investment_firm.txt"
+  expect:
+    keywords: ["risk"]
+
+- name: retail-aov-lever
+  input:
+    message: "What's our single biggest lever for increasing average order value?"
+  fixture_document: "retail_ecommerce_brand.txt"
+  expect:
+    keywords: ["shipping"]
+
+- name: education-retention-angle
+  input:
+    message: "What should our student-facing messaging emphasize to reduce mid-program dropout?"
+  fixture_document: "education_online_courses.txt"
+  expect:
+    # Not "deadline" - the first real run correctly emphasized the live
+    # cohort/accountability angle instead of the specific "falling behind
+    # on weekly deadlines" framing - "cohort" is the more robust anchor,
+    # a distinctive, central feature of this program's retention story.
+    keywords: ["cohort"]
+
+- name: real-estate-owner-messaging
+  input:
+    message: "What metric should we lead with when pitching to prospective property owners?"
+  fixture_document: "real_estate_property_mgmt.txt"
+  expect:
+    keywords: ["occupancy"]

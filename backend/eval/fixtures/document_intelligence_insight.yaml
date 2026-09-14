@@ -1,0 +1,50 @@
+# Fixtures for DocumentService.get_document_insight() (backend/agents/document_intelligence/service.py:694),
+# GET /api/document-intelligence/documents/<id>/insight.
+#
+# Same "one real case per document" rationale as analyze_documents.yaml:
+# this endpoint takes no query, just a document_id - there's no way to get
+# 10-15 non-redundant cases out of one document, so this uses all 7 fixture
+# documents once each. expect.keywords are checked against summary +
+# keyFacts joined together.
+
+- name: manufacturing-insight
+  fixture_document: "manufacturing_capability.txt"
+  expect:
+    json_keys: ["status", "summary", "keyFacts", "recommendations", "sources"]
+    keywords: ["CNC"]
+
+- name: saas-insight
+  fixture_document: "saas_product_onepager.txt"
+  expect:
+    json_keys: ["status", "summary", "keyFacts", "recommendations", "sources"]
+    keywords: ["invoice"]
+
+- name: healthcare-insight
+  fixture_document: "healthcare_clinic_profile.txt"
+  expect:
+    json_keys: ["status", "summary", "keyFacts", "recommendations", "sources"]
+    keywords: ["clinic"]
+
+- name: finance-insight
+  fixture_document: "finance_investment_firm.txt"
+  expect:
+    json_keys: ["status", "summary", "keyFacts", "recommendations", "sources"]
+    keywords: ["portfolio"]
+
+- name: retail-insight
+  fixture_document: "retail_ecommerce_brand.txt"
+  expect:
+    json_keys: ["status", "summary", "keyFacts", "recommendations", "sources"]
+    keywords: ["e-commerce"]
+
+- name: education-insight
+  fixture_document: "education_online_courses.txt"
+  expect:
+    json_keys: ["status", "summary", "keyFacts", "recommendations", "sources"]
+    keywords: ["certification"]
+
+- name: real-estate-insight
+  fixture_document: "real_estate_property_mgmt.txt"
+  expect:
+    json_keys: ["status", "summary", "keyFacts", "recommendations", "sources"]
+    keywords: ["property"]

@@ -1,0 +1,35 @@
+Summit Property Group — Residential Property Management
+
+Summit Property Group manages 1,400 residential rental units across 45
+buildings in the Austin metro area, on behalf of both individual
+landlords and institutional owners.
+
+Services: tenant screening and leasing, rent collection, maintenance
+coordination, and financial reporting to property owners. We use a
+property management platform for online rent payment, maintenance
+requests, and lease document storage.
+
+Occupancy: portfolio-wide occupancy currently sits at 94%, with average
+tenant turnover time (vacancy to re-leased) of 18 days, which we consider
+a key operational metric owners care about most.
+
+Maintenance: we coordinate a network of licensed contractors for
+plumbing, electrical, and HVAC work, and respond to emergency maintenance
+requests within 2 hours. Slow contractor response time during peak
+seasons is a recurring source of tenant complaints.
+
+Tenant relations: online maintenance-request submission has significantly
+reduced phone call volume to our office, and tenants increasingly expect
+to handle rent payment, lease renewal, and maintenance requests entirely
+through a mobile app rather than calling or emailing.
+
+Owner reporting: property owners receive monthly financial statements
+showing income, expenses, and net operating income per property, and
+increasingly ask for real-time dashboard access rather than waiting for
+monthly PDF reports.
+
+Regulatory: we stay current on local landlord-tenant law, including
+security deposit handling and eviction procedures, which vary
+significantly by jurisdiction within our service area.
+
+Contact: leasing@summitpropertygroup.example

@@ -57,7 +57,11 @@ htmlcov/
 frontend/test-results/
 frontend/playwright-report/
 frontend/playwright/.cache/
-backend/eval/
+
+# Eval harness output (regenerated each run, not source) - the fixtures,
+# runner, and scoring code under backend/eval/ ARE real tracked source.
+backend/eval/report.json
+backend/eval/report.md
 
 # ── OS & editor ───────────────────────────────────────────────────────────────
 .DS_Store

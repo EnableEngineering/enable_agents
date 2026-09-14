@@ -1,0 +1,29 @@
+Riverside Family Clinic — Practice Overview
+
+Riverside Family Clinic is a multi-specialty outpatient clinic serving
+the greater Denver area, with three locations and 22 physicians covering
+primary care, pediatrics, and cardiology.
+
+Patient volume: approximately 18,000 unique patients per year across all
+locations, with same-day appointment availability for urgent visits.
+
+Electronic health records: we use a cloud-based EHR system and offer a
+patient portal for scheduling, secure messaging with providers, and
+viewing lab results. Patients frequently ask about wait times for
+specialist referrals and how to access their own medical records.
+
+Clinical focus areas: chronic disease management (diabetes, hypertension),
+preventive care and annual wellness visits, and pediatric immunizations.
+We are HIPAA compliant and maintain strict patient data privacy controls
+across all systems that touch protected health information.
+
+Staffing challenges: like most outpatient practices, we face ongoing
+difficulty recruiting registered nurses and medical assistants, and are
+evaluating technology that reduces administrative burden on clinical
+staff so they can spend more time with patients.
+
+Insurance: we are in-network with most major commercial payers and accept
+Medicare and Medicaid. Billing and prior-authorization delays are a
+recurring source of patient complaints.
+
+Contact: administration@riversidefamilyclinic.example

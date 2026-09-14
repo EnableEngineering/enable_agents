@@ -1,0 +1,34 @@
+Ledgerly — Automated Accounts Payable for Growing SaaS Companies
+
+Ledgerly is a B2B SaaS platform that automates the accounts payable
+workflow for finance teams at companies with 50-500 employees. We
+integrate directly with QuickBooks Online, Xero, and NetSuite to
+eliminate manual invoice entry and approval-chasing.
+
+The problem: finance teams at growing companies spend an average of 14
+hours per week manually entering vendor invoices, chasing down approvers
+over Slack and email, and reconciling payments at month-end close.
+Late payments damage vendor relationships and duplicate payments are a
+constant risk when invoice data lives in email inboxes instead of one
+system of record.
+
+How Ledgerly works: vendors email invoices to a dedicated Ledgerly
+address, or upload them directly. Our OCR and line-item extraction reads
+the invoice, matches it against purchase orders when available, and
+routes it through a configurable approval chain based on amount and
+department. Approved invoices sync directly to the customer's accounting
+system for payment, with no manual re-entry.
+
+Results customers report: 80% reduction in manual invoice processing
+time, close cycles shortened by 3-5 business days, and a documented audit
+trail for every approval, which matters a lot during SOC 2 audits.
+
+Pricing: starts at $499/month for up to 200 invoices, with volume-based
+tiers above that. No setup fee, and most customers are live within one
+week of signing.
+
+Target customer: VP of Finance or Controller at a Series B-D SaaS or
+tech-enabled services company, currently using QuickBooks Online, Xero,
+or NetSuite, processing more than 100 vendor invoices a month by hand.
+
+Contact: hello@ledgerly.example

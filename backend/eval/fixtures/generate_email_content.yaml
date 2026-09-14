@@ -1,0 +1,161 @@
+# Fixtures for generate_email_content() (backend/app.py:6828),
+# POST /api/generate-email. Group A: plain JSON payload, no project or
+# fixture document needed - the "business" dict below is the entire input.
+#
+# Response is the raw {subject, body} JSON directly (not wrapped in
+# success/data). expect.keywords are checked against subject + body joined.
+
+- name: cnc-supplier-lead
+  input:
+    business:
+      name: "Ironclad Fabrication"
+      summary: "Custom metal fabrication shop specializing in sheet metal enclosures for industrial equipment."
+      website: "https://ironcladfab.example"
+      contact_name: "Maria Chen"
+      industry: "Manufacturing"
+    sender_name: "Alex Rivera"
+  expect:
+    json_keys: ["subject", "body"]
+    keywords: ["Ironclad", "Maria"]
+
+- name: saas-fintech-lead
+  input:
+    business:
+      name: "Northbeam Payments"
+      summary: "Payment processing platform for online marketplaces."
+      website: "https://northbeampayments.example"
+      contact_name: "Daniel Osei"
+      industry: "FinTech"
+    sender_name: "Jamie Park"
+  expect:
+    json_keys: ["subject", "body"]
+    keywords: ["Northbeam", "Daniel"]
+
+- name: dental-practice-lead
+  input:
+    business:
+      name: "Bright Smile Dental Group"
+      summary: "Multi-location dental practice offering general and cosmetic dentistry."
+      website: "https://brightsmiledental.example"
+      contact_name: "Dr. Patel"
+      industry: "Healthcare"
+    sender_name: "Alex Rivera"
+  expect:
+    json_keys: ["subject", "body"]
+    keywords: ["Bright Smile"]
+
+- name: logistics-company-lead
+  input:
+    business:
+      name: "Harbor Freight Logistics"
+      summary: "Regional freight brokerage connecting shippers with carrier networks."
+      website: "https://harborfreightlogistics.example"
+      contact_name: "Tom Bradley"
+      industry: "Logistics"
+    sender_name: "Jamie Park"
+  expect:
+    json_keys: ["subject", "body"]
+    keywords: ["Harbor Freight", "Tom"]
+
+- name: law-firm-lead
+  input:
+    business:
+      name: "Whitfield & Cross LLP"
+      summary: "Mid-size law firm specializing in commercial real estate transactions."
+      website: "https://whitfieldcross.example"
+      contact_name: "Sandra Whitfield"
+      industry: "Legal Services"
+    sender_name: "Alex Rivera"
+  expect:
+    json_keys: ["subject", "body"]
+    keywords: ["Whitfield"]
+
+- name: restaurant-chain-lead
+  input:
+    business:
+      name: "Sunrise Bistro Group"
+      summary: "Fast-casual breakfast chain with 14 locations across three states."
+      website: "https://sunrisebistro.example"
+      contact_name: "Carlos Mendez"
+      industry: "Food Service"
+    sender_name: "Jamie Park"
+  expect:
+    json_keys: ["subject", "body"]
+    keywords: ["Sunrise Bistro", "Carlos"]
+
+- name: hvac-contractor-lead
+  input:
+    business:
+      name: "ClimateWorks HVAC"
+      summary: "Commercial HVAC installation and maintenance contractor."
+      website: "https://climateworkshvac.example"
+      contact_name: "Rebecca Nolan"
+      industry: "Construction"
+    sender_name: "Alex Rivera"
+  expect:
+    json_keys: ["subject", "body"]
+    keywords: ["ClimateWorks"]
+
+- name: staffing-agency-lead
+  input:
+    business:
+      name: "Pinnacle Staffing Solutions"
+      summary: "Staffing agency placing skilled trades and light industrial workers."
+      website: "https://pinnaclestaffing.example"
+      contact_name: "Greg Alvarez"
+      industry: "Staffing"
+    sender_name: "Jamie Park"
+  expect:
+    json_keys: ["subject", "body"]
+    keywords: ["Pinnacle", "Greg"]
+
+- name: ecommerce-brand-lead
+  input:
+    business:
+      name: "Lumen Home Goods"
+      summary: "Direct-to-consumer lighting and home decor brand."
+      website: "https://lumenhomegoods.example"
+      contact_name: "Priya Sharma"
+      industry: "Retail"
+    sender_name: "Alex Rivera"
+  expect:
+    json_keys: ["subject", "body"]
+    keywords: ["Lumen"]
+
+- name: veterinary-clinic-lead
+  input:
+    business:
+      name: "Maple Ridge Veterinary Hospital"
+      summary: "Full-service veterinary hospital offering surgery, dental, and wellness care."
+      website: "https://mapleridgevet.example"
+      contact_name: "Dr. Foster"
+      industry: "Veterinary"
+    sender_name: "Jamie Park"
+  expect:
+    json_keys: ["subject", "body"]
+    keywords: ["Maple Ridge"]
+
+- name: accounting-firm-lead
+  input:
+    business:
+      name: "Bellweather Tax & Advisory"
+      summary: "Regional accounting firm serving small and mid-size business clients."
+      website: "https://bellweathertax.example"
+      contact_name: "Nina Kowalski"
+      industry: "Professional Services"
+    sender_name: "Alex Rivera"
+  expect:
+    json_keys: ["subject", "body"]
+    keywords: ["Bellweather", "Nina"]
+
+- name: missing-contact-name-fallback
+  input:
+    business:
+      name: "Quarry Ridge Landscaping"
+      summary: "Commercial landscaping and grounds maintenance company."
+      website: "https://quarryridgelandscaping.example"
+      industry: "Landscaping"
+    sender_name: "Jamie Park"
+  expect:
+    json_keys: ["subject", "body"]
+    keywords: ["Quarry Ridge"]
