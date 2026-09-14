@@ -1,7 +1,8 @@
 """Workflow Orchestration — Celery tasks.
 
-Runs the Supplier Qualification Pipeline's LangGraph graph asynchronously,
-the same get_flask_app()/app.app_context() pattern already proven by
+Runs a workflow instance's LangGraph graph asynchronously (one graph per
+template - see graph.py's _TEMPLATE_GRAPHS registry), the same
+get_flask_app()/app.app_context() pattern already proven by
 agents/document_intelligence/tasks.py. Registered in both task import
 lists in core/celery_app.py.
 """
@@ -46,7 +47,7 @@ def _run(instance_id: str, resume_value=None):
             logger.error(f"Workflow instance not found: {instance_id}")
             return {"error": "Instance not found"}
 
-        graph = get_compiled_graph()
+        graph = get_compiled_graph(instance.template_id)
         config = {"configurable": {"thread_id": instance_id}}
 
         if resume_value is not None:

@@ -46,7 +46,7 @@ def get_accessible_instance(instance_id: str, user_id: str):
 # instead of the plain manual start/complete-stage flow below. Kept as a set
 # (not a single constant) so generalizing the graph engine to more templates
 # is a one-line addition here.
-GRAPH_ORCHESTRATED_TEMPLATE_IDS = {"supplier-qualification"}
+GRAPH_ORCHESTRATED_TEMPLATE_IDS = {"supplier-qualification", "vendor-evaluation", "lead-nurture"}
 
 
 def _is_graph_orchestrated(instance: WorkflowInstance) -> bool:
@@ -470,6 +470,9 @@ def run_instance(instance_id: str):
     if not instance:
         return jsonify({"error": "Instance not found"}), 404
 
+    if not _is_graph_orchestrated(instance):
+        return jsonify({"error": "This workflow template has no orchestration graph - use POST .../start instead"}), 400
+
     if instance.status not in ("pending", "paused"):
         return jsonify({"error": f"Cannot run instance with status '{instance.status}'"}), 400
 
@@ -490,8 +493,11 @@ def get_pending_approval(instance_id: str):
     if not instance:
         return jsonify({"error": "Instance not found"}), 404
 
+    if not _is_graph_orchestrated(instance):
+        return jsonify({"success": True, "pending": False})
+
     from agents.workflow_orchestration.graph import get_compiled_graph
-    snapshot = get_compiled_graph().get_state({"configurable": {"thread_id": instance_id}})
+    snapshot = get_compiled_graph(instance.template_id).get_state({"configurable": {"thread_id": instance_id}})
 
     if not snapshot.next:
         return jsonify({"success": True, "pending": False})
@@ -515,6 +521,9 @@ def resume_instance(instance_id: str):
     instance = get_accessible_instance(instance_id, user_id)
     if not instance:
         return jsonify({"error": "Instance not found"}), 404
+
+    if not _is_graph_orchestrated(instance):
+        return jsonify({"error": "This workflow template has no orchestration graph - use POST .../complete-stage instead"}), 400
 
     data = request.get_json() or {}
     action = data.get("action")

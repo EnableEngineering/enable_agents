@@ -392,3 +392,90 @@ def get_knowledge_graph(project_id: str):
         "relationships": kg.relationships,
         "created_at": kg.created_at.isoformat() if kg.created_at else None
     })
+
+
+# =============================================================================
+# Plain-argument core (LangGraph orchestration)
+# =============================================================================
+
+_CHANNEL_CONFIG = {
+    'linkedin': {'tone': 'professional', 'max_length': 3000},
+    'email': {'tone': 'persuasive', 'max_length': 500},
+    'social': {'tone': 'casual', 'max_length': 280},
+    'google_ads': {'tone': 'direct', 'max_length': 150},
+}
+
+
+def generate_content_core(channel, content_type, user_context, user_id,
+                           industry="General", doc_texts=None, cm_project_id=None,
+                           source_doc_ids=None):
+    """Plain-argument core of app.py's generate_content_marketing - callable
+    from a LangGraph node (or anywhere else outside a Flask request) with no
+    request/g dependency.
+
+    Unlike the interactive route (which hard-requires an existing CMProject
+    with uploaded CMDocuments), `doc_texts` is optional here - a workflow
+    node has no human-uploaded documents to draw on, so this degrades to
+    generating from `user_context`/`industry` alone. `cm_project_id` is also
+    optional: CMGeneratedContent.project_id is a NOT NULL foreign key to
+    cm_projects, so a generated-content row is only persisted when a real
+    CMProject id is given; otherwise the content is returned but not saved
+    anywhere, the same way graph.py's document_analysis_node returns its RAG
+    answer without creating a permanent record.
+
+    Returns (result_dict_or_None, error_message_or_None).
+    """
+    doc_texts = doc_texts or []
+    config = _CHANNEL_CONFIG.get(channel, _CHANNEL_CONFIG['linkedin'])
+
+    from core.settings import get_response_language_instruction
+    prompt = f"""Generate marketing content for {channel} channel.
+Industry: {industry or 'General'}
+Tone: {config['tone']}
+Max Length: {config['max_length']} characters
+Content Type: {content_type}
+User Context: {user_context}
+Documents Summary: {' '.join([doc[:200] for doc in doc_texts[:3]])}
+
+Language level: {get_response_language_instruction(user_id)}
+
+Generate compelling marketing {content_type} content."""
+
+    try:
+        from core.ai_client import get_langchain_llm, log_langchain_usage
+
+        ai_project_id = None
+        if cm_project_id:
+            project = CMProject.query.filter_by(project_id=cm_project_id).first()
+            ai_project_id = project.platform_project_id if project else None
+
+        llm, key_source, resolved_model = get_langchain_llm(user_id, ai_project_id, model="gpt-4", temperature=0.7)
+        result = llm.invoke(prompt)
+        log_langchain_usage(result, user_id, ai_project_id, "content_marketing.generate_content", resolved_model, key_source)
+        response = result.content
+
+        content_id = f"content_{uuid4().hex[:12]}"
+        if cm_project_id and CMProject.query.filter_by(project_id=cm_project_id).first():
+            content = CMGeneratedContent(
+                content_id=content_id,
+                project_id=cm_project_id,
+                channel=channel,
+                content_type=content_type,
+                content=response,
+            )
+            content.source_docs = source_doc_ids or []
+            content.domain_context = {"industry": industry, "prompt": user_context}
+            db.session.add(content)
+            db.session.commit()
+
+        return {
+            "content_id": content_id,
+            "channel": channel,
+            "content_type": content_type,
+            "content": response,
+            "variations": [response],
+            "metadata": config,
+        }, None
+    except Exception as e:
+        db.session.rollback()
+        return None, str(e)

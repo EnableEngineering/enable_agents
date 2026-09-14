@@ -79,14 +79,28 @@ def instance(flask_app, project, template):
 
 
 def test_build_graph_structure():
-    """Pure LangGraph wiring check - no DB, no backend deps beyond state.py."""
-    from agents.workflow_orchestration.graph import STAGE_ORDER, build_graph
+    """Pure LangGraph wiring check - no DB, no backend deps beyond state.py.
+    Covers all 3 registered templates, not just Supplier Qualification."""
+    from agents.workflow_orchestration.graph import build_graph, stage_order_for
 
-    compiled = build_graph().compile(checkpointer=InMemorySaver())
-    graph_repr = compiled.get_graph()
-    node_names = set(graph_repr.nodes.keys())
-    for stage_id in STAGE_ORDER:
-        assert stage_id in node_names
+    for template_id in ["supplier-qualification", "vendor-evaluation", "lead-nurture"]:
+        compiled = build_graph(template_id).compile(checkpointer=InMemorySaver())
+        node_names = set(compiled.get_graph().nodes.keys())
+        for stage_id in stage_order_for(template_id):
+            assert stage_id in node_names, f"{template_id}: missing node for stage {stage_id}"
+
+
+def test_get_compiled_graph_rejects_unregistered_template(flask_app):
+    """market-launch has no orchestration graph (its `research` stage has
+    no real backing logic - see docs/todo.md) - get_compiled_graph must
+    fail loudly rather than silently running the wrong template's graph
+    against it (which the pre-2026-09-14 single-graph design would have
+    done for ANY template_id, a real latent bug closed by this check)."""
+    from agents.workflow_orchestration.graph import get_compiled_graph
+
+    with flask_app.app_context():
+        with pytest.raises(ValueError):
+            get_compiled_graph("market-launch")
 
 
 def test_qualification_audit_and_selection_tasks_autopilot(flask_app, instance, project):

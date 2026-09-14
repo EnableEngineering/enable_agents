@@ -6,6 +6,12 @@ import { authJsonHeaders } from '../core/authHeaders';
 import { showToast } from '../core/toast';
 import './WorkflowRunner.css';
 
+// Templates whose instances run through the LangGraph orchestration engine
+// (agents/workflow_orchestration/) instead of the plain manual
+// start/complete-stage flow. Keep in sync with backend/routes/workflows.py's
+// GRAPH_ORCHESTRATED_TEMPLATE_IDS.
+const GRAPH_ORCHESTRATED_TEMPLATE_IDS = new Set(['supplier-qualification', 'vendor-evaluation', 'lead-nurture']);
+
 // Task icons
 const TASK_ICONS = {
   pending: '/assets/icons/process.png',
@@ -226,7 +232,7 @@ function WorkflowRunner() {
   // approved orchestration plan. Everything below this comment (autonomy
   // mode, /run, /pending-approval polling, /resume) is scoped to that one
   // template and touches nothing else.
-  const isGraphOrchestrated = instance?.templateId === 'supplier-qualification';
+  const isGraphOrchestrated = GRAPH_ORCHESTRATED_TEMPLATE_IDS.has(instance?.templateId);
 
   const fetchPendingApproval = useCallback(async () => {
     if (!isGraphOrchestrated) return;

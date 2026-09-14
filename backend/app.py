@@ -4647,65 +4647,22 @@ DEFAULT_RESEARCH_STRUCTURE = (
 @app.route('/generate-requirements', methods=['POST'])
 @require_auth
 def generate_requirements():
-    openai.api_key = get_credentials()
+    from agents.market_research_core import generate_requirements_core
 
     data = request.get_json()
-    overview = data.get('overview', '')
-    context = data.get('context', '')  # Get the context from the payload
-    country = data.get('countries', '')
-    industries = data.get('industries', '')
-    function = data.get('businessFunction', '')
-    frameworks = data.get('frameworks', [])
-
-    research_type = data.get('responseFormat', '')
-    structure_instruction = RESEARCH_TYPE_STRUCTURES.get(research_type, DEFAULT_RESEARCH_STRUCTURE)
-
-    prompt = f"""
-    You are a research assistant tasked with producing high-quality, insightful, and well-structured research on business opportunitiesand growth prospects. Your output should include a curated but accessible for free list of relevant academic papers, industry articles, expert quotations, market data, and other authoritative sources.
-
-    Base your research on the following core requirement: {overview}.
-
-    In addition, factor in the following contextual details where applicable:
-
-    Geographic Market: Consider the business and technology landscape in {country}. Ignore if not specified.
-
-    Industry Focus: Include insights, trends, and data from the following industries: {industries}. Ignore if not specified.
-
-    Business Function: Tailor the analysis to the perspective or needs of a person working in {function}. Ignore if not specified.
-
-    Strategic Frameworks: Incorporate or structure your research using the following analytical frameworks: {frameworks}.
-
-    {structure_instruction}
-
-    Your response should:
-
-    Include direct citations or links where available.
-
-    Be clear, logically organized, and easy to turn into a pitch or slide deck.
-
-    Blend both technical insight (e.g., emerging technologies, R&D frontiers) and business relevance (e.g., market sizing, customer pain points, competitive dynamics).
-    """
-
-    print(prompt)
-
-    try:
-        from core.ai_client import ai_chat_completion
-        response = ai_chat_completion(
-            user_id=g.user_id, project_id=None, agent="requirements_gathering.generate",
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": "You are a research assistant."},
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=2000,
-            temperature=0.6
-        )
-
-        answer = response.choices[0].message.content
-        return jsonify({"requirements": answer})
-    except Exception as e:
-        print(f"Error: {e}")
-        return jsonify({"error": str(e)}), 500
+    answer, error = generate_requirements_core(
+        data.get('overview', ''),
+        g.user_id,
+        context=data.get('context', ''),
+        countries=data.get('countries', ''),
+        industries=data.get('industries', ''),
+        business_function=data.get('businessFunction', ''),
+        frameworks=data.get('frameworks', []),
+        response_format=data.get('responseFormat', ''),
+    )
+    if error:
+        return jsonify({"error": error}), 500
+    return jsonify({"requirements": answer})
 
 @app.route('/simple_search', methods=['POST'])
 @cross_origin()
@@ -6310,83 +6267,35 @@ def list_content_marketing_documents(project_id):
 @require_auth
 def generate_content_marketing():
     """Generate marketing content for specified channel"""
-    try:
-        data = request.json
-        project_id = data.get('project_id')
-        channel = data.get('channel', 'linkedin')
-        content_type = data.get('content_type', 'post')
-        user_context = data.get('context', '')
+    from agents.content_marketing.service import generate_content_core
 
-        if not project_id:
-            return jsonify({'success': False, 'error': 'project_id required'}), 400
+    data = request.json
+    project_id = data.get('project_id')
+    channel = data.get('channel', 'linkedin')
+    content_type = data.get('content_type', 'post')
+    user_context = data.get('context', '')
 
-        project = CMProject.query.filter_by(project_id=project_id).first()
-        if not project or project.user_id != g.user_id:
-            return jsonify({'success': False, 'error': 'Project not found'}), 404
+    if not project_id:
+        return jsonify({'success': False, 'error': 'project_id required'}), 400
 
-        docs = CMDocument.query.filter_by(project_id=project_id).all()
-        doc_texts = [d.extracted_content for d in docs if d.extracted_content]
+    project = CMProject.query.filter_by(project_id=project_id).first()
+    if not project or project.user_id != g.user_id:
+        return jsonify({'success': False, 'error': 'Project not found'}), 404
 
-        if not doc_texts:
-            return jsonify({'success': False, 'error': 'No documents found in project'}), 400
+    docs = CMDocument.query.filter_by(project_id=project_id).all()
+    doc_texts = [d.extracted_content for d in docs if d.extracted_content]
 
-        kg = CMKnowledgeGraph.query.filter_by(project_id=project_id).order_by(CMKnowledgeGraph.created_at.desc()).first()
+    if not doc_texts:
+        return jsonify({'success': False, 'error': 'No documents found in project'}), 400
 
-        channel_config = {
-            'linkedin': {'tone': 'professional', 'max_length': 3000},
-            'email': {'tone': 'persuasive', 'max_length': 500},
-            'social': {'tone': 'casual', 'max_length': 280},
-            'google_ads': {'tone': 'direct', 'max_length': 150}
-        }
-        config = channel_config.get(channel, channel_config['linkedin'])
-
-        from core.settings import get_response_language_instruction
-        prompt = f"""Generate marketing content for {channel} channel.
-Industry: {project.industry or 'General'}
-Tone: {config['tone']}
-Max Length: {config['max_length']} characters
-Content Type: {content_type}
-User Context: {user_context}
-Documents Summary: {' '.join([doc[:200] for doc in doc_texts[:3]])}
-
-Language level: {get_response_language_instruction(g.user_id)}
-
-Generate compelling marketing {content_type} content."""
-
-        from core.ai_client import get_langchain_llm, log_langchain_usage
-        ai_project_id = project.platform_project_id
-        llm, key_source, resolved_model = get_langchain_llm(g.user_id, ai_project_id, model="gpt-4", temperature=0.7)
-        result = llm.invoke(prompt)
-        log_langchain_usage(result, g.user_id, ai_project_id, "content_marketing.generate_content", resolved_model, key_source)
-        response = result.content
-
-        # Store in PostgreSQL
-        content_id = f"content_{uuid4().hex[:12]}"
-        content = CMGeneratedContent(
-            content_id=content_id,
-            project_id=project_id,
-            channel=channel,
-            content_type=content_type,
-            content=response
-        )
-        content.source_docs = [d.doc_id for d in docs]
-        content.domain_context = {"industry": project.industry, "prompt": user_context}
-        db.session.add(content)
-        db.session.commit()
-
-        return jsonify({
-            'success': True,
-            'content_id': content_id,
-            'channel': channel,
-            'content_type': content_type,
-            'content': response,
-            'variations': [response],
-            'metadata': config
-        }), 201
-
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
+    result, error = generate_content_core(
+        channel, content_type, user_context, g.user_id,
+        industry=project.industry, doc_texts=doc_texts, cm_project_id=project_id,
+        source_doc_ids=[d.doc_id for d in docs],
+    )
+    if error:
+        return jsonify({'success': False, 'error': error}), 500
+    return jsonify({'success': True, **result}), 201
 
 
 @app.route('/api/content-marketing/chat', methods=['POST'])
