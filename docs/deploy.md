@@ -3,7 +3,7 @@
 ## Infrastructure
 
 - **GCP Project:** `enable-agents`
-- **VM Instance:** `instance-20260419-210128` (us-central1-f)
+- **VM Instance:** `instance-20260419-210128` (us-east1-b)
 - **VM Type:** e2-medium (2 vCPU, 4GB RAM, 4GB swap)
 - **Domain:** enableyou.co
 - **Live URL:** https://agents.enableyou.co/
@@ -42,13 +42,13 @@ SSH into VM and rebuild containers:
 
 ```bash
 # SSH into VM
-gcloud compute ssh instance-20260419-210128 --zone=us-central1-f
+gcloud compute ssh instance-20260419-210128 --zone=us-east1-b
 
 # Navigate to project
 cd /home/rhishi/enable_agents
 
 # Pull latest code
-sudo git fetch origin && sudo git reset --hard origin/harsh-code
+sudo git fetch origin && sudo git reset --hard origin/local-preview
 
 # Rebuild and restart (with cache - fast)
 sudo docker compose build backend-remote frontend-remote
@@ -78,7 +78,7 @@ docker push gcr.io/enable-agents/backend:latest
 docker push gcr.io/enable-agents/frontend:latest
 
 # On VM: Pull and restart
-gcloud compute ssh instance-20260419-210128 --zone=us-central1-f --command="
+gcloud compute ssh instance-20260419-210128 --zone=us-east1-b --command="
   sudo docker pull gcr.io/enable-agents/backend:latest && \
   sudo docker pull gcr.io/enable-agents/frontend:latest && \
   cd /home/rhishi/enable_agents && \
@@ -92,9 +92,9 @@ gcloud compute ssh instance-20260419-210128 --zone=us-central1-f --command="
 
 ```bash
 # Pull latest, build with cache, restart
-gcloud compute ssh instance-20260419-210128 --zone=us-central1-f --command="
+gcloud compute ssh instance-20260419-210128 --zone=us-east1-b --command="
   cd /home/rhishi/enable_agents && \
-  sudo git fetch origin && sudo git reset --hard origin/harsh-code && \
+  sudo git fetch origin && sudo git reset --hard origin/local-preview && \
   sudo docker compose build backend-remote frontend-remote && \
   sudo docker compose up -d
 "
@@ -103,13 +103,13 @@ gcloud compute ssh instance-20260419-210128 --zone=us-central1-f --command="
 ### Check status:
 
 ```bash
-gcloud compute ssh instance-20260419-210128 --zone=us-central1-f --command="sudo docker ps"
+gcloud compute ssh instance-20260419-210128 --zone=us-east1-b --command="sudo docker ps"
 ```
 
 ### View logs:
 
 ```bash
-gcloud compute ssh instance-20260419-210128 --zone=us-central1-f --command="sudo docker compose logs -f backend-remote"
+gcloud compute ssh instance-20260419-210128 --zone=us-east1-b --command="sudo docker compose logs -f backend-remote"
 ```
 
 ## Services
@@ -122,7 +122,7 @@ gcloud compute ssh instance-20260419-210128 --zone=us-central1-f --command="sudo
 | Celery Worker | enable_agents_celery_remote | - |
 | Celery Beat | enable_agents_beat_remote | - |
 | Redis | enable_agents_redis | 6379 |
-| MySQL | enable_agents_mysql | 3306 |
+| Postgres | enable_agents_postgres | 5432 |
 
 ## Troubleshooting
 
@@ -130,15 +130,16 @@ gcloud compute ssh instance-20260419-210128 --zone=us-central1-f --command="sudo
 - Added 4GB swap to prevent OOM
 - Use `--no-cache` only when requirements.txt or Dockerfile changes
 - Check memory: `free -h`
+- Observed 2026-09-14: at idle this VM already runs ~2.4GB/3.8GB RAM and ~3.3GB/4GB swap used - very little headroom. A `requirements.txt` change forces the whole Python dependency layer (faiss, chromadb, numpy, etc.) to reinstall from scratch, which is memory-heavy. If that's what's changed, stop `celery-worker-remote`/`celery-beat-remote` first (not user-facing) to free RAM before building, then restart them after - keeps `backend-remote`/`frontend-remote` serving live traffic through the build.
 
 ### Check swap status
 ```bash
-gcloud compute ssh instance-20260419-210128 --zone=us-central1-f --command="free -h && sudo swapon --show"
+gcloud compute ssh instance-20260419-210128 --zone=us-east1-b --command="free -h && sudo swapon --show"
 ```
 
 ### Restart all services
 ```bash
-gcloud compute ssh instance-20260419-210128 --zone=us-central1-f --command="
+gcloud compute ssh instance-20260419-210128 --zone=us-east1-b --command="
   cd /home/rhishi/enable_agents && sudo docker compose down && sudo docker compose up -d
 "
 ```
@@ -150,15 +151,15 @@ gcloud compute firewall-rules list --filter="allowed:tcp:443"
 ```
 2. Check nginx container is running:
 ```bash
-gcloud compute ssh instance-20260419-210128 --zone=us-central1-f --command="sudo docker ps | grep nginx"
+gcloud compute ssh instance-20260419-210128 --zone=us-east1-b --command="sudo docker ps | grep nginx"
 ```
 3. Check SSL certificate exists:
 ```bash
-gcloud compute ssh instance-20260419-210128 --zone=us-central1-f --command="sudo docker exec enable_agents_nginx ls -la /etc/letsencrypt/live/"
+gcloud compute ssh instance-20260419-210128 --zone=us-east1-b --command="sudo docker exec enable_agents_nginx ls -la /etc/letsencrypt/live/"
 ```
 
 ## Branches
 
 - `main` - Production stable
 - `staging` - Pre-production testing
-- `harsh-code` - Active development
+- `local-preview` - Active development (deployed here as of 2026-09-14; `harsh-code` was the deploy branch before that but stopped being updated - confirmed a clean fast-forward ancestor of `local-preview`, not a divergent history)
