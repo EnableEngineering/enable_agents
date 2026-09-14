@@ -50,16 +50,54 @@ cd /home/rhishi/enable_agents
 # Pull latest code
 sudo git fetch origin && sudo git reset --hard origin/local-preview
 
-# Rebuild and restart (with cache - fast)
-sudo docker compose build backend-remote frontend-remote
-sudo docker compose up -d backend-remote frontend-remote celery-remote beat-remote
+# ⚠️ backend-remote, celery-worker-remote, and celery-beat-remote each
+# build their OWN image from backend/Dockerfile - building one does NOT
+# rebuild the others, even though they share a Dockerfile/context. Skipping
+# any of the three leaves it on stale code. Caught 2026-09-14: rebuilding
+# only backend-remote left celery-worker-remote on a 7-week-old image with
+# none of that day's new Celery tasks, which then logged "Received
+# unregistered task" and silently discarded every workflow-orchestration
+# run/resume request until the two celery services were rebuilt too. If
+# requirements.txt or the Dockerfile changed, run this every time:
+sudo docker compose build backend-remote celery-worker-remote celery-beat-remote frontend-remote
 
-# Or rebuild without cache (slower, use when Dockerfile/requirements change)
-sudo docker compose build --no-cache backend-remote frontend-remote
+# If a migration is pending, run it against the new image BEFORE cutting
+# traffic over to it (a one-off container, doesn't touch the running one):
+sudo docker compose run --rm backend-remote flask db upgrade
+
+# Restart everything with the new images (note the real service names -
+# celery-worker-remote/celery-beat-remote, not celery-remote/beat-remote):
+sudo docker compose up -d backend-remote frontend-remote celery-worker-remote celery-beat-remote
+
+# Or rebuild without cache (slower, use when Dockerfile itself changes,
+# not just requirements.txt - normal `build` already busts the pip-install
+# layer when requirements.txt's content changes):
+sudo docker compose build --no-cache backend-remote celery-worker-remote celery-beat-remote frontend-remote
 sudo docker compose up -d
 ```
 
+**After any deploy that touched backend code, verify the Celery workers
+actually picked it up** - `docker compose up -d` recreating a container is
+not proof its *image* changed:
+```bash
+sudo docker compose logs celery-worker-remote --tail=20
+# Look for the [tasks] list including agents.workflow_orchestration.tasks.*
+# (or whatever module you just added/changed) - if it's missing, that
+# service's image wasn't rebuilt.
+```
+
 ### Method 2: Build Locally, Push to GCR (Faster deploys)
+
+**⚠️ Currently out of sync with docker-compose.yml, confirmed 2026-09-14 -
+do not follow this as-is.** `backend-remote`/`frontend-remote` are defined
+with `build: context: ./backend` (or `./frontend`), i.e. a local Dockerfile
+build - not `image: gcr.io/...`. Pushing images to GCR the way this method
+describes does NOT make `docker compose up -d` (or `up --build`) actually
+use them - compose only reads GCR images for a service whose `image:` key
+names that registry path, which none of these services have. Using this
+method today would require first rewriting the relevant services'
+`image:`/`build:` keys in docker-compose.yml to point at GCR, which hasn't
+been done. Until that's fixed, use Method 1.
 
 Build images on local machine, push to Google Container Registry:
 
@@ -91,11 +129,15 @@ gcloud compute ssh instance-20260419-210128 --zone=us-east1-b --command="
 ### From local machine:
 
 ```bash
-# Pull latest, build with cache, restart
+# Pull latest, build with cache, restart - all 4 backend/Dockerfile-based
+# services (backend-remote, celery-worker-remote, celery-beat-remote each
+# build their own image despite sharing a Dockerfile - see Method 1's
+# warning above), then any pending migration, then cut over.
 gcloud compute ssh instance-20260419-210128 --zone=us-east1-b --command="
   cd /home/rhishi/enable_agents && \
   sudo git fetch origin && sudo git reset --hard origin/local-preview && \
-  sudo docker compose build backend-remote frontend-remote && \
+  sudo docker compose build backend-remote celery-worker-remote celery-beat-remote frontend-remote && \
+  sudo docker compose run --rm backend-remote flask db upgrade && \
   sudo docker compose up -d
 "
 ```
@@ -131,6 +173,7 @@ gcloud compute ssh instance-20260419-210128 --zone=us-east1-b --command="sudo do
 - Use `--no-cache` only when requirements.txt or Dockerfile changes
 - Check memory: `free -h`
 - Observed 2026-09-14: at idle this VM already runs ~2.4GB/3.8GB RAM and ~3.3GB/4GB swap used - very little headroom. A `requirements.txt` change forces the whole Python dependency layer (faiss, chromadb, numpy, etc.) to reinstall from scratch, which is memory-heavy. If that's what's changed, stop `celery-worker-remote`/`celery-beat-remote` first (not user-facing) to free RAM before building, then restart them after - keeps `backend-remote`/`frontend-remote` serving live traffic through the build.
+- That mitigation was actually used 2026-09-14 (a `requirements.txt` change added langgraph/psycopg): stopping the two celery services freed only a modest amount of headroom (swap free went ~718MB → ~1GB; RAM used stayed ~2.4GB - most of the memory pressure here is Postgres/Redis/gunicorn, not the celery workers), but `docker compose build backend-remote` still completed cleanly in ~4.5 minutes with no OOM or thrashing. Worth doing before a heavy rebuild regardless, but this VM has more give than the raw `free -h` numbers alone suggest.
 
 ### Check swap status
 ```bash
