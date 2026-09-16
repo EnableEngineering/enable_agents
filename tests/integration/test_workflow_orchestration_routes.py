@@ -171,6 +171,99 @@ def test_approve_calls_through_to_real_function(client, flask_app, instance, mon
     assert res.get_json()["interrupt"]["stage_id"] == "document_analysis"
 
 
+def test_failed_stage_repauses_on_itself_with_error_and_edit_is_actually_used(client, flask_app, template, monkeypatch):
+    """A stage whose execute() rejects the proposed input (here: rfq_outreach
+    with real recipients but no subject/body and AI personalization off)
+    must re-pause on *itself* with an `error` field on the interrupt -
+    not silently record the failure and advance to the next stage, which
+    is what run_stage() used to do (see docs/todo.md's 2026-09-16 entry).
+    Editing in a valid subject/body must then be genuinely re-submitted
+    (not a replay of the stale original proposal) on the retry.
+
+    send_bulk_emails_core checks its (user_email, user_id) pair's `user_id`
+    for an "@" before anything else - this app's real session identity IS
+    the sender's email at every call site (see email_outreach/service.py's
+    docstring), unlike the shared `instance` fixture's plain "user_routes"
+    id, so this test builds its own instance with an email-shaped user_id
+    to reach the subject/body check this test actually targets."""
+    import agents.market_research.google_business_helper as gbh
+
+    def _fake_search_businesses(self, query, location, **kwargs):
+        return {"success": True, "searchQuery": query, "location": location,
+                "businesses": [{"name": "Mock Supplier", "email": "mock@example.com"}]}
+
+    monkeypatch.setattr(gbh.GoogleBusinessSearcher, "search_businesses", _fake_search_businesses)
+
+    user_id = "user_routes_err@test.com"
+    with flask_app.app_context():
+        inst = WorkflowInstance(
+            instance_id="wf-instance-routes-err", template_id=template, user_id=user_id,
+            name="Error-repause test run", status="pending", current_stage_index=0,
+            autonomy_mode="co-pilot",
+        )
+        db.session.add(inst)
+        db.session.commit()
+
+    try:
+        headers = _bearer(flask_app, user_id)
+        instance = "wf-instance-routes-err"
+        client.post(f"/api/workflows/instances/{instance}/run", headers=headers)
+        client.post(f"/api/workflows/instances/{instance}/resume", json={"action": "approve"}, headers=headers)  # supplier_discovery
+        client.post(f"/api/workflows/instances/{instance}/resume", json={"action": "skip"}, headers=headers)  # document_analysis
+
+        res = client.get(f"/api/workflows/instances/{instance}/pending-approval", headers=headers)
+        data = res.get_json()
+        assert data["interrupt"]["stage_id"] == "rfq_outreach"
+        assert data["interrupt"]["proposed_input"]["businesses"] == [{"name": "Mock Supplier", "email": "mock@example.com"}]
+        assert "error" not in data["interrupt"]
+
+        # Approve as-is: real recipients but no subject/body -> execute() raises.
+        res = client.post(f"/api/workflows/instances/{instance}/resume", json={"action": "approve"}, headers=headers)
+        assert res.status_code == 202
+
+        res = client.get(f"/api/workflows/instances/{instance}/pending-approval", headers=headers)
+        data = res.get_json()
+        assert data["pending"] is True
+        assert data["interrupt"]["stage_id"] == "rfq_outreach"  # re-paused on itself, not advanced
+        assert "required" in data["interrupt"]["error"].lower()
+
+        with flask_app.app_context():
+            refreshed = WorkflowInstance.query.filter_by(instance_id=instance).first()
+            assert "rfq_outreach" not in refreshed.stage_states  # not falsely marked completed
+
+        # Edit in a valid subject/body - the retry loop must actually use
+        # the edited data (not silently replay the stale original), which
+        # this test environment has no real Gmail/SMTP configured to prove
+        # via a full send, so it proves it the same way as the edited
+        # data itself: the stage re-pauses a *second* time with a
+        # different, deeper error (the email-provider check no test double
+        # here can satisfy) rather than the original "subject and body are
+        # required" - showing the edited subject/body actually cleared
+        # that validation instead of the retry re-submitting the original
+        # empty proposal.
+        res = client.post(
+            f"/api/workflows/instances/{instance}/resume",
+            json={"action": "edit", "data": {"subject": "Hello", "body": "RFQ details"}},
+            headers=headers,
+        )
+        assert res.status_code == 202
+
+        res = client.get(f"/api/workflows/instances/{instance}/pending-approval", headers=headers)
+        data = res.get_json()
+        assert data["pending"] is True
+        assert data["interrupt"]["stage_id"] == "rfq_outreach"
+        assert data["interrupt"]["proposed_input"]["subject"] == "Hello"
+        assert data["interrupt"]["error"] != "Subject and body are required unless using AI personalization"
+
+        with flask_app.app_context():
+            refreshed = WorkflowInstance.query.filter_by(instance_id=instance).first()
+            assert "rfq_outreach" not in refreshed.stage_states  # still not falsely marked completed
+    finally:
+        with flask_app.app_context():
+            WorkflowInstance.query.filter_by(instance_id="wf-instance-routes-err").delete()
+            db.session.commit()
+
+
 def test_set_autonomy_mode(client, flask_app, instance):
     headers = _bearer(flask_app, "user_routes")
     res = client.patch(f"/api/workflows/instances/{instance}/autonomy", json={"mode": "autopilot"}, headers=headers)

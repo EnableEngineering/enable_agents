@@ -1956,3 +1956,87 @@ frontend's own 3s poll timer, before asserting on stage-specific DOM.)
 | `frontend/src/styles/RequirementsGathering.css` | Banner styling |
 | `frontend/src/workflows/WorkflowRunner.js` | Send-email guard, per-field panel redesign, autonomy info popover |
 | `frontend/src/workflows/WorkflowRunner.css` | Rows-field + autonomy-info-popover styling |
+
+---
+
+## Fix: silent stage failures in orchestrated workflows ✅ FIXED (2026-09-16)
+
+Found while auditing today's production logs right after the panel/email
+deploy above: `agents.workflow_orchestration.tasks.resume_workflow_graph`
+had logged the same validation error twice on two different real
+instances that morning ("Missing requirement text", "Subject and body are
+required unless using AI personalization"). Tracing it back turned up a
+real bug, not a fluke:
+
+- `graph.py`'s `run_stage()` caught an `execute()` exception, appended it
+  to an internal `errors` list, and then **advanced to the next stage
+  anyway** instead of re-pausing for correction.
+- `_sync_legacy_state()` unconditionally wrote `"status": "completed"`
+  into `stage_states` even for that failed output - a stage that had
+  actually errored showed a green checkmark in the sidebar.
+- The frontend never read the `errors` field at all and always showed a
+  blanket "Stage approved" success toast regardless of outcome.
+
+Net effect: a user could click through a workflow with required fields
+left blank, be told every step succeeded, and end up with a "completed"
+workflow where (e.g.) an email never actually sent - with no visible
+indication anywhere that anything had gone wrong.
+
+### Fix
+- `run_stage()` now loops: a failed `execute()` re-pauses on the **same**
+  stage via a second `interrupt()` call carrying the error message, using
+  the user's own submitted input as the next proposal (so their edits
+  survive the retry) rather than the stale original proposal. An error
+  forces a human checkpoint even in autopilot mode - autopilot must not
+  auto-retry a stage that just failed with the same input.
+- Found and fixed a second, independent bug this uncovered:
+  `routes/workflows.py`'s `GET .../pending-approval` gated on
+  `snapshot.next`, which LangGraph leaves empty when a node interrupts a
+  *second* time within one invocation (exactly this retry case) even
+  though `snapshot.tasks` still correctly holds the pending interrupt -
+  the route was reporting `pending: false` right after a failed
+  approve/edit. Fixed to read `snapshot.tasks` directly instead.
+- `WorkflowRunner.js`'s pending-approval panel now shows a red banner
+  with the error when `interrupt.error` is present. `handleResume` no
+  longer claims success the instant `/resume` returns 202 (that only
+  means the task was enqueued) - it now polls briefly for the actual
+  outcome (advanced / completed / same-stage-with-error / still
+  processing) before toasting.
+- Extended the same "nothing to fix, don't force a checkpoint" reasoning
+  to the *cause* the existing test suite happened to catch this through:
+  an empty recipient/candidate list (e.g. a search stage found zero
+  businesses) is not something a human can correct by editing this
+  stage, so `rfq_outreach`/`outreach`/`sequence` (new shared
+  `_send_bulk_emails_or_skip` helper) and `qualify`/`response_analysis`
+  now skip trivially rather than raising, while a genuinely actionable
+  gap (missing subject/body, no sender email, missing requirement text
+  *with* real candidates) still raises and correctly interrupts.
+
+### Verification
+Extended `tests/integration/test_workflow_orchestration_routes.py` with
+`test_failed_stage_repauses_on_itself_with_error_and_edit_is_actually_used`
+- proves a failed stage re-pauses on itself (not falsely marked
+completed in `stage_states`), and that an edited retry is genuinely
+resubmitted rather than replaying the stale original. Full orchestration
+suite (33 tests across all 5 `test_workflow_orchestration_*.py` files)
+passes. Also verified live through the real UI (Playwright, dev stack):
+added a business row via the panel's new rows field, left "Requirement"
+empty, submitted - saw the same stage re-pause with a visible red error
+banner and the business row preserved; filled in the requirement and
+resubmitted - advanced normally to the next stage.
+
+**Near-miss caught mid-fix**: `celery-worker-dev`/`celery-beat-dev` don't
+hot-reload on file changes the way Flask's `--debug --reload` does for
+`backend-dev` - editing `graph.py` had zero effect on running workflow
+tasks until the celery containers were restarted, which briefly looked
+like the fix wasn't working at all in live UI testing. Restart both after
+any `agents/workflow_orchestration/` change during dev-stack testing.
+
+### Files Created/Modified
+| File | Purpose |
+|------|---------|
+| `backend/agents/workflow_orchestration/graph.py` | run_stage retry loop, shared `_send_bulk_emails_or_skip`, empty-candidate skips on qualify/response_analysis |
+| `backend/routes/workflows.py` | `/pending-approval` reads `snapshot.tasks` directly instead of gating on `snapshot.next` |
+| `frontend/src/workflows/WorkflowRunner.js` | red error banner, `handleResume` polls for real outcome instead of assuming success |
+| `frontend/src/workflows/WorkflowRunner.css` | `.wf-stage-error` styling |
+| `tests/integration/test_workflow_orchestration_routes.py` | new regression test for the retry/error-surfacing behavior |

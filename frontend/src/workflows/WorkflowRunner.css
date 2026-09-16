@@ -625,6 +625,24 @@
   margin-bottom: var(--space-4);
 }
 
+/* Shown when a stage's execute() failed and re-paused on itself for
+   correction (graph.py's run_stage retry loop) - see the interrupt
+   payload's `error` field. */
+.wf-stage-error {
+  background: var(--color-error-bg);
+  border: 1px solid var(--color-error);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  margin-bottom: var(--space-4);
+  color: var(--color-error);
+  font-size: var(--text-caption);
+  line-height: 1.45;
+}
+
+.wf-stage-error strong {
+  color: var(--color-error);
+}
+
 .wf-proposed-field-json {
   background: var(--color-background);
   min-height: 140px;

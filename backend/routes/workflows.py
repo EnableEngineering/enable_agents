@@ -499,9 +499,15 @@ def get_pending_approval(instance_id: str):
     from agents.workflow_orchestration.graph import get_compiled_graph
     snapshot = get_compiled_graph(instance.template_id).get_state({"configurable": {"thread_id": instance_id}})
 
-    if not snapshot.next:
-        return jsonify({"success": True, "pending": False})
-
+    # Read pending state off snapshot.tasks directly rather than gating on
+    # snapshot.next first - a node that calls interrupt() a second time
+    # within the same invocation (graph.py's run_stage retry loop, when a
+    # stage re-pauses on itself after a failed attempt) comes back with
+    # snapshot.next == () even though snapshot.tasks still correctly holds
+    # the pending interrupt, which made this route falsely report
+    # pending=False right after a failed approve/edit. snapshot.tasks is
+    # empty once the graph has genuinely finished, so this still resolves
+    # to pending=False for a completed run.
     interrupts = [i for task in snapshot.tasks for i in task.interrupts]
     if not interrupts:
         return jsonify({"success": True, "pending": False})

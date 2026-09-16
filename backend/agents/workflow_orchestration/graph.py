@@ -174,27 +174,44 @@ def run_stage(
         }
 
     proposed_input = propose(state)
-
     autonomy_mode = state.get("autonomy_mode")
-    if autonomy_mode == "autopilot" and not _autopilot_over_budget(state):
-        decision = {"action": "approve"}
-    else:
-        decision = interrupt({"stage_id": stage_id, "proposed_input": proposed_input})
-
     errors = list(state.get("errors") or [])
-    action = (decision or {}).get("action", "approve")
+    error_message = None
 
-    if action == "skip":
-        output = {"skipped": True}
-    else:
+    # Retry loop: a failed execute() re-pauses on this *same* stage with the
+    # error attached to the interrupt payload, instead of the old behavior
+    # of silently recording the failure and letting the graph move on to
+    # the next stage - see docs/todo.md's 2026-09-16 entry. proposed_input
+    # is replaced with the user's own final_input on each retry so their
+    # edits survive (the resumed interrupt shows what they last submitted,
+    # not the original stale proposal). An error forces a human checkpoint
+    # even in autopilot mode - autopilot should not auto-retry a stage that
+    # just failed with the same input.
+    while True:
+        if error_message is None and autonomy_mode == "autopilot" and not _autopilot_over_budget(state):
+            decision = {"action": "approve"}
+        else:
+            payload = {"stage_id": stage_id, "proposed_input": proposed_input}
+            if error_message:
+                payload["error"] = error_message
+            decision = interrupt(payload)
+
+        action = (decision or {}).get("action", "approve")
+
+        if action == "skip":
+            output = {"skipped": True}
+            break
+
         final_input = dict(proposed_input)
         if action == "edit":
             final_input.update(decision.get("data") or {})
         try:
             output = execute(state, final_input)
+            break
         except Exception as exc:
-            output = {"error": str(exc)}
-            errors.append({"stage_id": stage_id, "error": str(exc)})
+            error_message = str(exc)
+            errors.append({"stage_id": stage_id, "error": error_message})
+            proposed_input = final_input
 
     stage_outputs = dict(state.get("stage_outputs") or {})
     stage_outputs[stage_id] = output
@@ -210,6 +227,37 @@ def run_stage(
 
 def _stage_input(state: WorkflowGraphState, stage_id: str) -> Dict[str, Any]:
     return dict((state.get("initial_inputs") or {}).get(stage_id) or {})
+
+
+def _send_bulk_emails_or_skip(state: WorkflowGraphState, args: Dict[str, Any]) -> Dict[str, Any]:
+    """Shared execute() body for every email-sending node (rfq_outreach,
+    outreach, sequence). A genuinely empty/invalid recipient list (e.g. an
+    earlier search stage found zero businesses) is not something a human
+    can "fix" by editing this stage's proposed input, so it's a benign
+    no-op rather than an error - run_stage's retry loop would otherwise
+    force a pointless human checkpoint on every zero-result run. Anything
+    else send_bulk_emails_core rejects (missing sender email, missing
+    subject/body without AI personalization) is genuinely actionable, so
+    that still raises and re-pauses this stage for correction."""
+    businesses = args.get("businesses") or []
+    valid_emails = [
+        b.get("email") for b in businesses
+        if b.get("email") and b.get("email") != "N/A" and "@" in str(b.get("email"))
+    ]
+    if not valid_emails:
+        return {"skipped": True, "reason": "no valid recipient emails", "sent": 0}
+
+    from agents.email_outreach.service import send_bulk_emails_core
+
+    result, error, status = send_bulk_emails_core(
+        args["subject"], args["body"], businesses,
+        state["user_id"], state["user_id"],
+        campaign_name=args["campaign_name"],
+        use_ai_personalization=args["use_ai_personalization"],
+    )
+    if error:
+        raise RuntimeError(error)
+    return result
 
 
 def _businesses_from_stage(state: WorkflowGraphState, source_stage_id: str) -> list:
@@ -270,17 +318,7 @@ def rfq_outreach_node(state: WorkflowGraphState) -> Dict[str, Any]:
         }
 
     def execute(s, args):
-        from agents.email_outreach.service import send_bulk_emails_core
-
-        result, error, status = send_bulk_emails_core(
-            args["subject"], args["body"], args["businesses"],
-            s["user_id"], s["user_id"],
-            campaign_name=args["campaign_name"],
-            use_ai_personalization=args["use_ai_personalization"],
-        )
-        if error:
-            raise RuntimeError(error)
-        return result
+        return _send_bulk_emails_or_skip(s, args)
 
     return run_stage(state, "rfq_outreach", propose, execute)
 
@@ -295,6 +333,15 @@ def response_analysis_node(state: WorkflowGraphState) -> Dict[str, Any]:
         }
 
     def execute(s, args):
+        # Nothing to score when there are no candidate businesses (e.g. an
+        # earlier search stage found zero results) regardless of whether
+        # requirement text is present - not something a human can fix by
+        # editing this stage, so skip rather than force a pointless
+        # checkpoint. Missing requirement text with real businesses present
+        # is still a genuine, correctable gap and raises as before.
+        if not args["businesses"]:
+            return {"results": [], "skipped": True, "reason": "no businesses to score"}
+
         from agents.sales_helper_core import score_leads_core
 
         results, error, status = score_leads_core(args["requirement"], args["businesses"], s["user_id"])
@@ -440,17 +487,7 @@ def vendor_outreach_node(state: WorkflowGraphState) -> Dict[str, Any]:
         }
 
     def execute(s, args):
-        from agents.email_outreach.service import send_bulk_emails_core
-
-        result, error, status = send_bulk_emails_core(
-            args["subject"], args["body"], args["businesses"],
-            s["user_id"], s["user_id"],
-            campaign_name=args["campaign_name"],
-            use_ai_personalization=args["use_ai_personalization"],
-        )
-        if error:
-            raise RuntimeError(error)
-        return result
+        return _send_bulk_emails_or_skip(s, args)
 
     return run_stage(state, "outreach", propose, execute)
 
@@ -525,6 +562,12 @@ def qualify_node(state: WorkflowGraphState) -> Dict[str, Any]:
         }
 
     def execute(s, args):
+        # Same reasoning as response_analysis_node: nothing to score with
+        # no candidate businesses, regardless of requirement text - skip
+        # rather than force a checkpoint nothing in this stage can fix.
+        if not args["businesses"]:
+            return {"results": [], "businesses": [], "skipped": True, "reason": "no businesses to score"}
+
         from agents.sales_helper_core import score_leads_core
 
         results, error, status = score_leads_core(args["requirement"], args["businesses"], s["user_id"])
@@ -573,17 +616,7 @@ def sequence_node(state: WorkflowGraphState) -> Dict[str, Any]:
         }
 
     def execute(s, args):
-        from agents.email_outreach.service import send_bulk_emails_core
-
-        result, error, status = send_bulk_emails_core(
-            args["subject"], args["body"], args["businesses"],
-            s["user_id"], s["user_id"],
-            campaign_name=args["campaign_name"],
-            use_ai_personalization=args["use_ai_personalization"],
-        )
-        if error:
-            raise RuntimeError(error)
-        return result
+        return _send_bulk_emails_or_skip(s, args)
 
     return run_stage(state, "sequence", propose, execute)
 

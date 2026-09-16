@@ -303,15 +303,17 @@ function WorkflowRunner() {
   const isGraphOrchestrated = GRAPH_ORCHESTRATED_TEMPLATE_IDS.has(instance?.templateId);
 
   const fetchPendingApproval = useCallback(async () => {
-    if (!isGraphOrchestrated) return;
+    if (!isGraphOrchestrated) return null;
     try {
       const res = await fetch(`${API_CONFIG.BASE_URL}/api/workflows/instances/${instanceId}/pending-approval`, {
         headers: authJsonHeaders(),
       });
       const data = await res.json();
       if (data.success) setPendingApproval(data);
+      return data;
     } catch (err) {
       // Non-critical - next poll tick will retry.
+      return null;
     }
   }, [instanceId, isGraphOrchestrated]);
 
@@ -411,6 +413,7 @@ function WorkflowRunner() {
       }
     }
 
+    const stageBefore = pendingApproval?.interrupt?.stage_id;
     setResumingAction(action);
     try {
       let data = {};
@@ -438,12 +441,40 @@ function WorkflowRunner() {
         body: JSON.stringify({ action, data }),
       });
       const resData = await res.json();
-      if (res.ok) {
-        setEditedStageId(null);
-        showToast(`Stage ${action === 'skip' ? 'skipped' : action === 'edit' ? 'updated and approved' : 'approved'}`, 'success');
-        setTimeout(() => { fetchInstance(); fetchPendingApproval(); }, 1000);
-      } else {
+      if (!res.ok) {
         showToast(resData.error || 'Failed to resume workflow', 'error');
+        return;
+      }
+
+      // /resume only enqueues the graph step (202) - it doesn't wait for it
+      // to actually run, so the real outcome (advanced, completed, or the
+      // same stage re-pausing with a validation error) is only known once
+      // polling catches up. Poll briefly for one of those instead of
+      // claiming success the moment the request is accepted - a stage that
+      // fails validation on execute() now re-pauses on itself with an
+      // `error` field (rendered as a banner above the fields) rather than
+      // silently advancing, so this has a real distinction to report.
+      const outcome = await (async () => {
+        const start = Date.now();
+        while (Date.now() - start < 20000) {
+          const polled = await fetchPendingApproval();
+          if (!polled?.pending) return 'completed';
+          if (polled.interrupt?.stage_id !== stageBefore) return 'advanced';
+          if (polled.interrupt?.error) return 'error';
+          await new Promise((r) => setTimeout(r, 1200));
+        }
+        return 'timeout';
+      })();
+      await fetchInstance();
+
+      if (outcome === 'error') {
+        showToast('That attempt failed - see the error above', 'error');
+      } else if (outcome === 'completed') {
+        showToast('Workflow completed!', 'success');
+      } else if (outcome === 'advanced') {
+        showToast(`Stage ${action === 'skip' ? 'skipped' : action === 'edit' ? 'updated and approved' : 'approved'}`, 'success');
+      } else {
+        showToast('Still processing - check back in a moment', 'info');
       }
     } catch (err) {
       showToast('Error resuming workflow', 'error');
@@ -786,6 +817,12 @@ function WorkflowRunner() {
                         <p>Proposed input for this stage - approve it as-is, edit it below, or skip the stage entirely.</p>
                       </div>
                     </div>
+
+                    {pendingApproval.interrupt.error && (
+                      <div className="wf-stage-error" role="alert">
+                        <strong>That attempt failed:</strong> {pendingApproval.interrupt.error}. Fix the fields below and try again, or skip this stage.
+                      </div>
+                    )}
 
                     {fieldEntries.length > 0 ? (
                       <div className="wf-form wf-proposed-fields">
