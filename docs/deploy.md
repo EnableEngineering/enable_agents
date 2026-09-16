@@ -32,6 +32,39 @@ worth a real look at removing it (or wiring host nginx to proxy to it
 instead of serving static files) rather than carrying two frontend serving
 paths where only one is real.
 
+### The nginx config itself is also not version-controlled by default
+
+`/etc/nginx/sites-enabled/agents.conf` on the VM is the real, live config
+for both the static-file serving above and proxying `/api/`, `/auth/`, and
+a **hand-maintained allow-list** of legacy (non-`/api/`-prefixed) backend
+routes to `backend-remote`. It had never been committed anywhere - found
+2026-09-16 because a real route (`/assistant_chat`, the global AI
+Assistant panel's endpoint) was added to `app.py` at some point but never
+added to this allow-list, so every chat request silently 405'd in
+production for as long as that feature existed there, until a user
+noticed the "LLM calls aren't working."
+
+**Now tracked at `deploy/nginx/host-agents.enableyou.co.conf`** (distinct
+name from the *other*, unused Docker-nginx configs already in
+`deploy/nginx/` - don't confuse the two). Edit that file for any nginx
+change, then sync it to the VM:
+
+```bash
+gcloud compute scp deploy/nginx/host-agents.enableyou.co.conf \
+  instance-20260419-210128:/tmp/agents.conf --zone=us-east1-b
+gcloud compute ssh instance-20260419-210128 --zone=us-east1-b --command="
+  sudo cp /tmp/agents.conf /etc/nginx/sites-enabled/agents.conf && \
+  sudo nginx -t && sudo systemctl reload nginx
+"
+```
+
+**If you add a new non-`/api/`-prefixed, non-`/auth/`-prefixed Flask route
+in `backend/app.py`, add it to this file's whitelist regex or it will
+silently 405 in production.** This allow-list pattern is fragile by
+construction (a new route is invisible to it by default, not visible) -
+worth considering replacing with something that fails safe instead of
+fixing it route-by-route forever.
+
 ## SSL/HTTPS
 
 - HTTP automatically redirects to HTTPS (301)
