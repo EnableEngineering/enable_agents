@@ -1890,3 +1890,69 @@ _Verified against `backend/agents/document_intelligence/routes.py`, `backend/cor
 - **Status:** Completed
 - **Data:** Realistic automotive PCB supplier qualification with 5 suppliers
 
+
+---
+
+## Email safety warnings + WorkflowRunner panel redesign ✅ IMPLEMENTED (2026-09-16)
+
+Live production walkthrough of the orchestrated workflows surfaced two UX
+gaps: nothing in the app warned before sending real email or reading a
+connected Gmail inbox, and the pending-approval panel dumped each stage's
+proposed input as raw unlabeled JSON with a cramped fixed-size textarea.
+
+### Centralized email warning
+- [x] `frontend/src/core/emailActionWarnings.js` — thin wrapper around the
+      existing `showConfirm()`/`ConfirmDialog` (not a new dialog system):
+      `confirmSendEmail({ recipientCount, context })` (red/danger,
+      irreversible-send copy) and `confirmReadInbox({ context })`
+      (amber/warning, consent-already-granted copy).
+- [x] Wired into all 6 send/read surfaces found in a full codebase sweep:
+      `EmailOutreachAgent`, `RequirementsGathering` (Draft Email Campaign),
+      `EventNetworkingAgent` (follow-up), `WorkflowRunner.handleResume`
+      (gated on the pending stage's `agent === 'email_outreach'`, so any
+      future orchestrated template's email stage is covered automatically —
+      never fires on `skip`), `SalesHelperAgent` (rank vendor replies reads
+      inbox first), and `CampaignDashboard` (passive 30s poll — no discrete
+      action to gate, so a one-time dismissible banner instead of a modal).
+
+### WorkflowRunner pending-approval panel
+- [x] Replaced the single raw-JSON `<pre>` + one big textarea with
+      per-field controls, classified by shape: short string → text input,
+      long/`\n`-containing string → textarea, array of flat objects
+      (`businesses`/`audits`/`tasks`) → new `RepeatableRowsField` component
+      (add/remove rows, one input per column), genuinely nested data → a
+      sized JSON textarea (fallback only, not the default anymore).
+- [x] Panel heading now shows the real stage name (e.g. "Content
+      Personalization") instead of the raw `stage_id`.
+- [x] Added an info icon next to "Autonomy mode" that toggles a popover
+      explaining Suggest vs. Co-pilot vs. Autopilot side by side (the
+      existing hint line under the buttons only describes whichever mode
+      is currently selected, not the other two).
+
+### Verification
+Playwright walkthrough against the dev stack (Lead Nurturing template,
+`qualify` → `personalize` → `sequence` stages): confirmed no
+`.wf-proposed-input` raw-JSON block anywhere, labeled fields render for
+every kind including an empty `businesses` rows field ("None yet." + "+
+Add"), the email-send confirm dialog appears only on Approve/Edit for the
+`sequence` (email_outreach) stage — never on Skip, never on the earlier
+non-email stages — Cancel aborts with no resume call sent, and the
+autonomy info popover opens/closes and names all 3 modes. All checks
+passed. (Hit the same stale-badge race documented earlier in this file
+while writing the test — `.wf-current-badge` text is identical across
+every stage, so a script must poll the `pending-approval` API for the
+exact `stage_id`, then force a page reload rather than trust the
+frontend's own 3s poll timer, before asserting on stage-specific DOM.)
+
+### Files Created/Modified
+| File | Purpose |
+|------|---------|
+| `frontend/src/core/emailActionWarnings.js` | New — centralized confirm-copy module |
+| `frontend/src/agents/EmailOutreachAgent.js` | Send-email guard |
+| `frontend/src/agents/RequirementsGathering.js` | Send-email guard |
+| `frontend/src/agents/EventNetworkingAgent.js` | Send-email guard |
+| `frontend/src/agents/SalesHelperAgent.js` | Read-inbox guard |
+| `frontend/src/agents/CampaignDashboard.js` | Dismissible passive-read banner |
+| `frontend/src/styles/RequirementsGathering.css` | Banner styling |
+| `frontend/src/workflows/WorkflowRunner.js` | Send-email guard, per-field panel redesign, autonomy info popover |
+| `frontend/src/workflows/WorkflowRunner.css` | Rows-field + autonomy-info-popover styling |

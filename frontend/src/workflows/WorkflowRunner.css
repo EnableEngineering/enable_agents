@@ -523,7 +523,55 @@
   color: var(--color-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.03em;
+}
+
+.wf-autonomy-label-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   margin-bottom: var(--space-2);
+}
+
+.wf-autonomy-info-toggle {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-size: 10px;
+  font-style: italic;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.wf-autonomy-info-toggle:hover,
+.wf-autonomy-info-toggle[aria-expanded="true"] {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.wf-autonomy-info-popover {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  margin-bottom: var(--space-3);
+  font-size: var(--text-caption);
+  color: var(--color-text);
+  line-height: 1.45;
+}
+
+.wf-autonomy-info-popover strong {
+  color: var(--color-text);
 }
 
 .wf-autonomy-options {
@@ -566,17 +614,83 @@
   margin: 0;
 }
 
-.wf-proposed-input {
+/* Pending-approval card's proposed_input, rendered as one labeled field
+   per top-level key instead of a single raw JSON dump - see
+   buildEditFields() in WorkflowRunner.js. Plain string/number fields
+   reuse .wf-form-field's existing input styling; array/object fields
+   (e.g. a businesses list) get a JSON textarea sized generously (not the
+   old fixed 4 rows) since those are exactly the fields realistic enough
+   to need scrolling room. */
+.wf-proposed-fields {
+  margin-bottom: var(--space-4);
+}
+
+.wf-proposed-field-json {
   background: var(--color-background);
+  min-height: 140px;
+}
+
+/* Repeatable-row editor (RepeatableRowsField) - businesses/audits/tasks
+   lists rendered as real rows instead of JSON. */
+.wf-rows-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.wf-rows-field-row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.wf-rows-field-row input {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  padding: var(--space-3);
+  font-size: var(--text-body);
+}
+
+.wf-rows-field-row input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.wf-rows-field-remove {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.wf-rows-field-remove:hover {
+  background: var(--color-error-bg);
+  color: var(--color-error);
+  border-color: var(--color-error);
+}
+
+.wf-rows-field-add {
+  align-self: flex-start;
+  padding: var(--space-1) var(--space-3);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--color-primary);
   font-size: var(--text-caption);
-  font-family: var(--font-mono, monospace);
-  overflow-x: auto;
-  margin: 0 0 var(--space-4) 0;
-  white-space: pre-wrap;
-  word-break: break-word;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.wf-rows-field-add:hover {
+  background: rgba(var(--color-primary-rgb), 0.06);
 }
 
 .wf-action-buttons {

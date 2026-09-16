@@ -5,6 +5,7 @@ import { useSelectedProjectId } from '../hooks/useSelectedProjectId';
 import { API_CONFIG } from '../config/apiConfig';
 import { authJsonHeaders, authOptionalHeaders } from '../core/authHeaders';
 import { showToast } from '../core/toast';
+import { confirmReadInbox } from '../core/emailActionWarnings';
 import { useAgentChat } from '../hooks/useAgentChat';
 import MessageContent from '../components/MessageContent';
 import { formatTime, getRelativeDateLabel, isSameDay } from '../utils/dateFormat';
@@ -434,6 +435,9 @@ function SalesHelperAgent() {
       addMessage('Please select a campaign with vendor replies first.', 'agent', null, 'markdown');
       return;
     }
+
+    const confirmed = await confirmReadInbox({ context: 'to rank vendor responses' });
+    if (!confirmed) return;
 
     try {
       setIsRankingVendors(true);

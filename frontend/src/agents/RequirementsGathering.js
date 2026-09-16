@@ -10,6 +10,7 @@ import { authJsonHeaders, authOptionalHeaders } from '../core/authHeaders';
 import { getAgentData, setAgentData, AGENT_KEYS } from '../utils';
 import { formatDate } from '../utils/dateFormat';
 import { showToast } from '../core/toast';
+import { confirmSendEmail } from '../core/emailActionWarnings';
 import { useWorkflowContext, usePendingAgentPrefill, notifyAgentCompleted } from '../hooks';
 import { STRINGS } from '../constants';
 
@@ -1436,6 +1437,9 @@ function RequirementsGathering() {
       showToast('No valid emails found to send to', 'warning');
       return;
     }
+
+    const confirmed = await confirmSendEmail({ recipientCount: validEmails.length, context: 'this campaign' });
+    if (!confirmed) return;
 
     setIsSendingEmails(true);
     try {

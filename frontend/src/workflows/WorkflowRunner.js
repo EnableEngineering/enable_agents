@@ -4,6 +4,7 @@ import { BackButton, EmptyState, Spinner } from '../components';
 import { API_CONFIG } from '../config/apiConfig';
 import { authJsonHeaders } from '../core/authHeaders';
 import { showToast } from '../core/toast';
+import { confirmSendEmail } from '../core/emailActionWarnings';
 import './WorkflowRunner.css';
 
 // Templates whose instances run through the LangGraph orchestration engine
@@ -30,6 +31,66 @@ const formatLabel = (key) => {
     .split(' ')
     .map(word => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ');
+};
+
+// True for e.g. businesses: [{name, email}, ...] or audits: [{supplier_id,
+// score}, ...] - a real list of records a person would recognize, as
+// opposed to nested/mixed data nobody should be hand-editing as prose.
+// Every stage's actual array fields across every template are exactly
+// this shape (see graph.py's node propose() functions) except
+// document_analysis's documents/nodes/edges, which are genuinely internal
+// document-processing structures - those fall back to the JSON kind below.
+const isFlatObjectArray = (value) => (
+  Array.isArray(value) && value.length > 0 && value.every(
+    (item) => item !== null && typeof item === 'object' && !Array.isArray(item)
+      && Object.values(item).every((v) => v === null || typeof v !== 'object')
+  )
+);
+
+// Default column set for a "rows" field that starts out empty (so there's
+// nothing to infer columns from) - covers every array-of-records field
+// that actually appears across all 3 orchestrated templates' stages (see
+// graph.py). Anything not listed here falls back to a single generic
+// column rather than guessing.
+const DEFAULT_ROW_COLUMNS = {
+  businesses: ['name', 'email'],
+  audits: ['supplier_id', 'score'],
+  tasks: ['title', 'description'],
+};
+
+// Builds the per-field edit state for a pending-approval card's
+// proposed_input - never raw JSON for the common cases:
+//   - plain string/number -> 'text', a single-line text box.
+//   - array of flat records (businesses, audits, tasks, ...), including
+//     an empty one -> 'rows', a repeatable name/value row editor - see
+//     RepeatableRowsField below.
+//   - anything else (nested structures, arrays of plain strings) ->
+//     'json', a textarea fallback - rare in practice (only
+//     document_analysis's internal document/graph fields and
+//     requirements' `frameworks` list hit this today).
+// Values are pre-filled with the proposed value, not left blank, so
+// "Save Edit & Approve" with zero changes still sends exactly what was
+// proposed.
+const buildEditFields = (proposedInput) => {
+  const fields = {};
+  Object.entries(proposedInput || {}).forEach(([key, value]) => {
+    if (value === null || typeof value !== 'object') {
+      const text = String(value ?? '');
+      // A single-line <input> either hides or garbles a real newline -
+      // generated email/content bodies routinely have them. Long values
+      // get cramped in one line regardless. Both get a real textarea.
+      const isLong = text.includes('\n') || text.length > 80;
+      fields[key] = { kind: isLong ? 'multiline' : 'text', value: text };
+    } else if (Array.isArray(value) && (value.length === 0 || isFlatObjectArray(value))) {
+      const columns = value.length > 0
+        ? Array.from(new Set(value.flatMap((item) => Object.keys(item))))
+        : (DEFAULT_ROW_COLUMNS[key] || ['value']);
+      fields[key] = { kind: 'rows', columns, value: value.map((item) => ({ ...item })) };
+    } else {
+      fields[key] = { kind: 'json', value: JSON.stringify(value, null, 2) };
+    }
+  });
+  return fields;
 };
 
 // Renders any stage/context value as readable text - agent outputs aren't
@@ -179,8 +240,15 @@ function WorkflowRunner() {
   const [pendingApproval, setPendingApproval] = useState(null);
   const [runningGraph, setRunningGraph] = useState(false);
   const [resumingAction, setResumingAction] = useState(null);
-  const [editDraft, setEditDraft] = useState('');
+  // Per-field edit state for the pending-approval card, keyed by
+  // proposed_input's top-level field names. Each entry holds the current
+  // text-box value plus whether that field's original value was an
+  // array/object (rendered as a JSON textarea) vs a plain string
+  // (rendered as a labeled text input) - see buildEditFields() below.
+  const [editFields, setEditFields] = useState({});
+  const [editedStageId, setEditedStageId] = useState(null);
   const [settingAutonomy, setSettingAutonomy] = useState(false);
+  const [showAutonomyInfo, setShowAutonomyInfo] = useState(false);
 
   const fetchInstance = useCallback(async () => {
     try {
@@ -251,6 +319,16 @@ function WorkflowRunner() {
     fetchPendingApproval();
   }, [fetchPendingApproval]);
 
+  // Reset the per-field edit boxes whenever a *different* stage becomes
+  // pending (not on every poll tick, which would wipe out in-progress
+  // edits on the same stage while waiting for a slow network response).
+  useEffect(() => {
+    const stageId = pendingApproval?.interrupt?.stage_id;
+    if (!stageId || stageId === editedStageId) return;
+    setEditedStageId(stageId);
+    setEditFields(buildEditFields(pendingApproval.interrupt.proposed_input));
+  }, [pendingApproval, editedStageId]);
+
   // The graph runs asynchronously via Celery - a run/resume call only
   // kicks it off, it doesn't wait for the next pause. Poll while there's
   // still something in flight so autopilot's own progress (and the
@@ -315,16 +393,43 @@ function WorkflowRunner() {
   };
 
   const handleResume = async (action) => {
+    // Any stage backed by the email_outreach agent sends real email on
+    // approve/edit (skip never calls the real function - run_stage()
+    // short-circuits before it). Checking the agent id (not a hardcoded
+    // stage_id list) means any future orchestrated template's email stage
+    // gets this warning automatically, no per-template wiring needed.
+    if (action !== 'skip' && pendingApproval?.interrupt) {
+      const stageId = pendingApproval.interrupt.stage_id;
+      const stage = (instance?.stages || []).find((s) => (s.id || s.stage_id) === stageId);
+      if (stage?.agent === 'email_outreach') {
+        const businesses = pendingApproval.interrupt.proposed_input?.businesses;
+        const confirmed = await confirmSendEmail({
+          recipientCount: Array.isArray(businesses) ? businesses.length : undefined,
+          context: `the "${stage.name || formatLabel(stageId)}" stage`,
+        });
+        if (!confirmed) return;
+      }
+    }
+
     setResumingAction(action);
     try {
       let data = {};
       if (action === 'edit') {
-        try {
-          data = editDraft.trim() ? JSON.parse(editDraft) : {};
-        } catch (err) {
-          showToast('Edited input must be valid JSON', 'error');
-          setResumingAction(null);
-          return;
+        data = {};
+        for (const [key, field] of Object.entries(editFields)) {
+          if (field.kind === 'text' || field.kind === 'multiline') {
+            data[key] = field.value;
+          } else if (field.kind === 'rows') {
+            data[key] = field.value;
+          } else {
+            try {
+              data[key] = field.value.trim() ? JSON.parse(field.value) : null;
+            } catch (err) {
+              showToast(`"${formatLabel(key)}" must be valid JSON`, 'error');
+              setResumingAction(null);
+              return;
+            }
+          }
         }
       }
       const res = await fetch(`${API_CONFIG.BASE_URL}/api/workflows/instances/${instanceId}/resume`, {
@@ -334,7 +439,7 @@ function WorkflowRunner() {
       });
       const resData = await res.json();
       if (res.ok) {
-        setEditDraft('');
+        setEditedStageId(null);
         showToast(`Stage ${action === 'skip' ? 'skipped' : action === 'edit' ? 'updated and approved' : 'approved'}`, 'success');
         setTimeout(() => { fetchInstance(); fetchPendingApproval(); }, 1000);
       } else {
@@ -596,7 +701,31 @@ function WorkflowRunner() {
               <>
                 {isGraphOrchestrated && !isCompleted && (
                   <div className="wf-autonomy-panel">
-                    <div className="wf-autonomy-label">Autonomy mode</div>
+                    <div className="wf-autonomy-label-row">
+                      <div className="wf-autonomy-label">Autonomy mode</div>
+                      <button
+                        type="button"
+                        className="wf-autonomy-info-toggle"
+                        aria-label="What do these modes mean?"
+                        aria-expanded={showAutonomyInfo}
+                        onClick={() => setShowAutonomyInfo((v) => !v)}
+                      >
+                        i
+                      </button>
+                    </div>
+                    {showAutonomyInfo && (
+                      <div className="wf-autonomy-info-popover" role="note">
+                        <div>
+                          <strong>Suggest</strong> - every stage pauses and shows you what it's about to do. Nothing runs until you approve, edit, or skip it.
+                        </div>
+                        <div>
+                          <strong>Co-pilot</strong> - the same review step, but for routine stages the workflow moves faster; anything that emails someone still stops for your review first.
+                        </div>
+                        <div>
+                          <strong>Autopilot</strong> - every stage runs on its own with no pause. If the project's monthly AI budget is already over its cap, the next stage still stops for your review.
+                        </div>
+                      </div>
+                    )}
                     <div className="wf-autonomy-options">
                       {['suggest', 'co-pilot', 'autopilot'].map((mode) => (
                         <button
@@ -642,32 +771,65 @@ function WorkflowRunner() {
                   </div>
                 )}
 
-                {isGraphOrchestrated && (instance.status === 'running' || instance.status === 'paused') && pendingApproval?.pending && (
+                {isGraphOrchestrated && (instance.status === 'running' || instance.status === 'paused') && pendingApproval?.pending && (() => {
+                  const pendingStageId = pendingApproval.interrupt.stage_id;
+                  const pendingStage = (instance.stages || []).find((s) => (s.id || s.stage_id) === pendingStageId);
+                  const pendingStageName = pendingStage?.name || formatLabel(pendingStageId);
+                  const fieldEntries = Object.entries(editFields);
+                  return (
                   <div className="wf-action-panel wf-current-panel">
                     <div className="wf-current-badge">Pending Approval</div>
                     <div className="wf-current-header">
-                      <img src={getStageIcon(formatLabel(pendingApproval.interrupt.stage_id))} alt="" />
+                      <img src={getStageIcon(pendingStageName)} alt="" />
                       <div>
-                        <h3>{formatLabel(pendingApproval.interrupt.stage_id)}</h3>
-                        <p>Proposed input for this stage - approve it as-is, edit it, or skip the stage entirely.</p>
+                        <h3>{pendingStageName}</h3>
+                        <p>Proposed input for this stage - approve it as-is, edit it below, or skip the stage entirely.</p>
                       </div>
                     </div>
 
-                    <pre className="wf-proposed-input">
-                      {JSON.stringify(pendingApproval.interrupt.proposed_input, null, 2)}
-                    </pre>
-
-                    <div className="wf-form">
-                      <div className="wf-form-field">
-                        <label>Edited input (JSON, used only by "Save Edit &amp; Approve")</label>
-                        <textarea
-                          rows={4}
-                          value={editDraft}
-                          onChange={(e) => setEditDraft(e.target.value)}
-                          placeholder={JSON.stringify(pendingApproval.interrupt.proposed_input, null, 2)}
-                        />
+                    {fieldEntries.length > 0 ? (
+                      <div className="wf-form wf-proposed-fields">
+                        {fieldEntries.map(([key, field]) => (
+                          <div key={key} className="wf-form-field">
+                            <label htmlFor={field.kind === 'rows' ? undefined : `wf-edit-${key}`}>{formatLabel(key)}</label>
+                            {field.kind === 'rows' && (
+                              <RepeatableRowsField
+                                columns={field.columns}
+                                rows={field.value}
+                                onChange={(rows) => setEditFields((prev) => ({ ...prev, [key]: { ...prev[key], value: rows } }))}
+                              />
+                            )}
+                            {field.kind === 'json' && (
+                              <textarea
+                                id={`wf-edit-${key}`}
+                                className="wf-proposed-field-json"
+                                rows={8}
+                                value={field.value}
+                                onChange={(e) => setEditFields((prev) => ({ ...prev, [key]: { ...prev[key], value: e.target.value } }))}
+                              />
+                            )}
+                            {field.kind === 'multiline' && (
+                              <textarea
+                                id={`wf-edit-${key}`}
+                                rows={5}
+                                value={field.value}
+                                onChange={(e) => setEditFields((prev) => ({ ...prev, [key]: { ...prev[key], value: e.target.value } }))}
+                              />
+                            )}
+                            {field.kind === 'text' && (
+                              <input
+                                id={`wf-edit-${key}`}
+                                type="text"
+                                value={field.value}
+                                onChange={(e) => setEditFields((prev) => ({ ...prev, [key]: { ...prev[key], value: e.target.value } }))}
+                              />
+                            )}
+                          </div>
+                        ))}
                       </div>
-                    </div>
+                    ) : (
+                      <p className="wf-empty-text">This stage needs no input - approve to run it, or skip it.</p>
+                    )}
 
                     <div className="wf-action-buttons">
                       <button className="wf-btn wf-btn-secondary" onClick={handlePause} disabled={instance.status === 'paused'}>
@@ -676,7 +838,7 @@ function WorkflowRunner() {
                       <button className="wf-btn wf-btn-secondary" onClick={() => handleResume('skip')} disabled={!!resumingAction}>
                         {resumingAction === 'skip' ? 'Skipping...' : 'Skip'}
                       </button>
-                      {editDraft.trim() && (
+                      {fieldEntries.length > 0 && (
                         <button className="wf-btn wf-btn-secondary" onClick={() => handleResume('edit')} disabled={!!resumingAction}>
                           {resumingAction === 'edit' ? 'Saving...' : 'Save Edit & Approve'}
                         </button>
@@ -687,7 +849,8 @@ function WorkflowRunner() {
                       </button>
                     </div>
                   </div>
-                )}
+                  );
+                })()}
 
                 {isGraphOrchestrated && instance.status === 'running' && !pendingApproval?.pending && (
                   <div className="wf-action-panel">
@@ -830,6 +993,47 @@ function WorkflowRunner() {
         </div>
       </div>
     </>
+  );
+}
+
+/* Repeatable-row editor for an array-of-records field in the
+   pending-approval panel (e.g. businesses: [{name, email}, ...]) - the
+   human-readable alternative to a raw JSON textarea for the one shape
+   that actually accounts for nearly every array field across every
+   orchestrated stage. `columns` is fixed for the field's lifetime (set
+   once in buildEditFields), so removing every row doesn't lose track of
+   what an "Add" row should contain. */
+function RepeatableRowsField({ columns, rows, onChange }) {
+  const updateCell = (idx, col, val) => {
+    onChange(rows.map((row, i) => (i === idx ? { ...row, [col]: val } : row)));
+  };
+  const removeRow = (idx) => onChange(rows.filter((_, i) => i !== idx));
+  const addRow = () => onChange([...rows, Object.fromEntries(columns.map((c) => [c, '']))]);
+
+  return (
+    <div className="wf-rows-field">
+      {rows.length === 0 && <p className="wf-empty-text">None yet.</p>}
+      {rows.map((row, idx) => (
+        <div key={idx} className="wf-rows-field-row">
+          {columns.map((col) => (
+            <input
+              key={col}
+              type="text"
+              aria-label={formatLabel(col)}
+              placeholder={formatLabel(col)}
+              value={row[col] ?? ''}
+              onChange={(e) => updateCell(idx, col, e.target.value)}
+            />
+          ))}
+          <button type="button" className="wf-rows-field-remove" onClick={() => removeRow(idx)} aria-label={`Remove row ${idx + 1}`}>
+            ×
+          </button>
+        </div>
+      ))}
+      <button type="button" className="wf-rows-field-add" onClick={addRow}>
+        + Add
+      </button>
+    </div>
   );
 }
 

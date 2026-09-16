@@ -10,6 +10,13 @@ import { authOptionalHeaders } from '../core/authHeaders';
 
 // Storage key for state persistence
 const STATE_KEY = 'campaignDashboardState';
+// This page periodically reads the connected Gmail inbox in the
+// background (fetchCampaigns/refreshRepliesInBackground below) with no
+// discrete button to attach a per-action confirmation to - a one-time,
+// dismissible notice is the equivalent of confirmReadInbox()
+// (core/emailActionWarnings.js) for a passive read instead of a
+// button-triggered one. Per-device, like the sidebar-collapse setting.
+const INBOX_NOTICE_DISMISSED_KEY = 'campaignDashboardInboxNoticeDismissed';
 
 function CampaignDashboard() {
   const navigate = useNavigate();
@@ -35,6 +42,21 @@ function CampaignDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [isRefreshingReplies, setIsRefreshingReplies] = useState(false);
+  const [showInboxNotice, setShowInboxNotice] = useState(() => {
+    try {
+      return localStorage.getItem(INBOX_NOTICE_DISMISSED_KEY) !== 'true';
+    } catch {
+      return true;
+    }
+  });
+  const dismissInboxNotice = () => {
+    setShowInboxNotice(false);
+    try {
+      localStorage.setItem(INBOX_NOTICE_DISMISSED_KEY, 'true');
+    } catch {
+      // Private browsing / storage blocked - fine to just hide it for this view.
+    }
+  };
 
   // Persist state
   useEffect(() => {
@@ -160,6 +182,17 @@ function CampaignDashboard() {
             { iconSrc: '/assets/icons/reports.png', title: 'Recipient detail', description: 'Drill into per-campaign recipient status.' },
           ]}
         />
+
+        {showInboxNotice && (
+          <div className="campaign-inbox-notice" role="note">
+            <span className="campaign-inbox-notice-text">
+              This page automatically checks your connected Gmail inbox for replies every 30 seconds, using the access you already granted when you connected your account.
+            </span>
+            <button type="button" className="campaign-inbox-notice-dismiss" onClick={dismissInboxNotice}>
+              Got it
+            </button>
+          </div>
+        )}
 
         <LiveModeHint
           requireProject

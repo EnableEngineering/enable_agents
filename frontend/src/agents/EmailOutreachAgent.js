@@ -4,6 +4,7 @@ import { AgentOutcomesStrip, AgentPrefillBanner, BackButton, ProjectGate, Projec
 import { API_CONFIG } from '../config/apiConfig';
 import { authJsonHeaders, authOptionalHeaders } from '../core/authHeaders';
 import { showToast } from '../core/toast';
+import { confirmSendEmail } from '../core/emailActionWarnings';
 import { useWorkflowContext, usePendingAgentPrefill, notifyAgentCompleted } from '../hooks';
 import AgentPrerequisiteGate from '../components/AgentPrerequisiteGate';
 import './EmailOutreachAgent.css';
@@ -152,6 +153,9 @@ function EmailOutreachAgent() {
       showToast('Please sign in with an email address before sending campaigns.', 'error');
       return;
     }
+
+    const confirmed = await confirmSendEmail({ recipientCount: pendingRecipients.length, context: 'this campaign' });
+    if (!confirmed) return;
 
     setSending(true);
     try {

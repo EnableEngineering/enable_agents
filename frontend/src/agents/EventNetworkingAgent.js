@@ -5,6 +5,7 @@ import '../styles/EventNetworkingAgent.css';
 import { STRINGS } from '../constants/strings';
 import { API_CONFIG } from '../config/apiConfig';
 import { showToast } from '../core/toast';
+import { confirmSendEmail } from '../core/emailActionWarnings';
 import { useSelectedProjectId } from '../hooks/useSelectedProjectId';
 import { usePendingAgentPrefill, notifyAgentCompleted } from '../hooks';
 import { authJsonHeaders } from '../core/authHeaders';
@@ -314,6 +315,9 @@ function EventNetworkingAgent() {
       showToast('Please enter a message', 'warning');
       return;
     }
+
+    const confirmed = await confirmSendEmail({ recipientCount: selectedAttendees.length, context: 'this follow-up' });
+    if (!confirmed) return;
 
     try {
       setIsLoading(true);
