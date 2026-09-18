@@ -1,7 +1,7 @@
 import { API_CONFIG } from '../config/apiConfig';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { BackButton, Textarea, ProjectSelector, LiveModeHint, AgentPrefillBanner, AgentOutcomesStrip, ProjectGate, Modal, Button, TypingIndicator } from '../components';
+import { BackButton, Textarea, ProjectSelector, LiveModeHint, AgentPrefillBanner, AgentOutcomesStrip, ProjectGate, Modal, Button, TypingIndicator, Spinner } from '../components';
 import '../styles/ContentMarketingAgent.css';
 import { showToast } from '../core/toast';
 import { formatTime, getRelativeDateLabel, isSameDay } from '../utils/dateFormat';
@@ -36,7 +36,13 @@ function ContentMarketingAgent() {
   // the platform-wide project - this is its resolved/created id, used for
   // every content-marketing API call instead of the raw platform project id.
   const [cmProjectId, setCmProjectId] = useState(null);
+  // Each entry: { doc_id, file_name }. Populated by fetchDocuments() (real
+  // filenames from the backend), not just the id list the upload response
+  // returns - the doc list used to render "Document 1/2/3" placeholders
+  // with no way to tell files apart or remove one.
   const [uploadedFiles, setUploadedFiles] = useState([]);
+  const [isUploadingDocs, setIsUploadingDocs] = useState(false);
+  const [deletingDocId, setDeletingDocId] = useState(null);
   const [knowledgeGraph, setKnowledgeGraph] = useState(null);
   // eslint-disable-next-line no-unused-vars
   const [domainContext, setDomainContext] = useState(null);
@@ -209,6 +215,48 @@ function ContentMarketingAgent() {
     })();
   }, [selectedProjectId]);
 
+  // Real Knowledge Base document list (id + filename) for this cm project -
+  // used both after upload and to show documents from a prior session.
+  const fetchDocuments = useCallback(async (projId) => {
+    if (!projId) return;
+    try {
+      const response = await fetch(`${API_CONFIG.API_URL}/api/content-marketing/documents/${projId}`, {
+        headers: authOptionalHeaders(),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setUploadedFiles((data.documents || []).map((d) => ({ doc_id: d.doc_id, file_name: d.file_name })));
+      }
+    } catch (error) {
+      console.error('Error fetching documents:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (cmProjectId) fetchDocuments(cmProjectId);
+  }, [cmProjectId, fetchDocuments]);
+
+  const handleDeleteDocument = async (docId) => {
+    setDeletingDocId(docId);
+    try {
+      const response = await fetch(`${API_CONFIG.API_URL}/api/content-marketing/documents/item/${docId}`, {
+        method: 'DELETE',
+        headers: authOptionalHeaders(),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setUploadedFiles((prev) => prev.filter((d) => d.doc_id !== docId));
+        showToast('Document removed', 'success');
+      } else {
+        showToast(data.error || 'Failed to remove document', 'error');
+      }
+    } catch (error) {
+      showToast('Error removing document', 'error');
+    } finally {
+      setDeletingDocId(null);
+    }
+  };
+
   // Load workflow data when viewing a completed stage's history
   useEffect(() => {
     if (!isHistoryView) return;
@@ -247,10 +295,10 @@ function ContentMarketingAgent() {
       return;
     }
 
-    setIsLoading(true);
+    setIsUploadingDocs(true);
     const formData = new FormData();
     formData.append('project_id', cmProjectId);
-    
+
     files.forEach(file => {
       formData.append('files', file);
     });
@@ -264,7 +312,9 @@ function ContentMarketingAgent() {
 
       const data = await response.json();
       if (data.success) {
-        setUploadedFiles(prev => [...prev, ...data.document_ids]);
+        // Refetch rather than append the raw id list the upload response
+        // returns - this picks up the real filenames for the doc list.
+        fetchDocuments(cmProjectId);
         setDomainContext(data.domain_specialization);
         setKnowledgeGraph({
           id: data.knowledge_graph_id,
@@ -289,7 +339,7 @@ function ContentMarketingAgent() {
     } catch (error) {
       addMessage(`Upload error: ${error.message}`, 'agent');
     } finally {
-      setIsLoading(false);
+      setIsUploadingDocs(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
@@ -464,11 +514,20 @@ function ContentMarketingAgent() {
 
           <div
             className="docs-upload-inline"
-            onClick={() => !isHistoryView && fileInputRef.current?.click()}
-            style={isHistoryView ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+            onClick={() => !isHistoryView && !isUploadingDocs && fileInputRef.current?.click()}
+            style={isHistoryView || isUploadingDocs ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
           >
-            <img src="/assets/icons/document.png" alt="" className="docs-upload-icon" />
-            <span>Add documents</span>
+            {isUploadingDocs ? (
+              <>
+                <Spinner size="sm" />
+                <span>Uploading…</span>
+              </>
+            ) : (
+              <>
+                <img src="/assets/icons/document.png" alt="" className="docs-upload-icon" />
+                <span>Add documents</span>
+              </>
+            )}
           </div>
 
           <input
@@ -477,15 +536,26 @@ function ContentMarketingAgent() {
             multiple
             accept=".pdf,.docx,.txt,.xlsx,.html,.md"
             onChange={handleFileSelect}
-            disabled={isHistoryView}
+            disabled={isHistoryView || isUploadingDocs}
             style={{ display: 'none' }}
           />
 
           {uploadedFiles.length > 0 && (
             <div className="docs-list">
-              {uploadedFiles.map((fileId, idx) => (
-                <div key={fileId} className="doc-chip">
-                  Document {idx + 1}
+              {uploadedFiles.map((doc) => (
+                <div key={doc.doc_id} className="doc-chip" title={doc.file_name}>
+                  <span className="doc-chip-name">{doc.file_name}</span>
+                  {!isHistoryView && (
+                    <button
+                      type="button"
+                      className="doc-chip-remove"
+                      aria-label={`Remove ${doc.file_name}`}
+                      disabled={deletingDocId === doc.doc_id}
+                      onClick={() => handleDeleteDocument(doc.doc_id)}
+                    >
+                      {deletingDocId === doc.doc_id ? <Spinner size="sm" /> : '×'}
+                    </button>
+                  )}
                 </div>
               ))}
             </div>

@@ -36,6 +36,19 @@ function SupplyChainAgent() {
   const [isLoadingSuppliers, setIsLoadingSuppliers] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  // Supplier-finding intake - mirrors Market Research's "Supplier Research"
+  // mode (RequirementsGathering.js), which already searches real businesses
+  // via the same /api/search-google-businesses endpoint from an overview +
+  // region pair. Industry isn't sent to the search itself (Market
+  // Research's version doesn't either - it's Places text search under
+  // the hood, not a structured filter), just tracked for the results list.
+  const [intakeOverview, setIntakeOverview] = useState('');
+  const [intakeIndustry, setIntakeIndustry] = useState('');
+  const [intakeRegion, setIntakeRegion] = useState('');
+  const [isSearchingSuppliers, setIsSearchingSuppliers] = useState(false);
+  const [supplierSearchResults, setSupplierSearchResults] = useState(null);
+  const [addingResultId, setAddingResultId] = useState(null);
+
   const getCurrentUserId = () => localStorage.getItem('userEmail') || localStorage.getItem('username') || 'anonymous';
 
   const fetchSuppliers = async () => {
@@ -69,6 +82,19 @@ function SupplyChainAgent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProjectId]);
 
+  const createSupplier = async (payload) => {
+    const response = await fetch(`${API_CONFIG.API_URL}/api/supply-chain/suppliers`, {
+      method: 'POST',
+      headers: authJsonHeaders(),
+      body: JSON.stringify({
+        project_id: selectedProjectId,
+        user_id: getCurrentUserId(),
+        ...payload,
+      }),
+    });
+    return response.json();
+  };
+
   const handleAddSupplier = async () => {
     if (!newSupplier.name.trim()) {
       showToast('Please enter a supplier name', 'warning');
@@ -76,20 +102,13 @@ function SupplyChainAgent() {
     }
 
     try {
-      const response = await fetch(`${API_CONFIG.API_URL}/api/supply-chain/suppliers`, {
-        method: 'POST',
-        headers: authJsonHeaders(),
-        body: JSON.stringify({
-          project_id: selectedProjectId,
-          user_id: getCurrentUserId(),
-          name: newSupplier.name,
-          location: newSupplier.location,
-          capacity: newSupplier.capacity,
-          certifications: newSupplier.certifications.split(',').map(c => c.trim()).filter(Boolean),
-          capabilities: newSupplier.capabilities.split(',').map(c => c.trim()).filter(Boolean),
-        }),
+      const data = await createSupplier({
+        name: newSupplier.name,
+        location: newSupplier.location,
+        capacity: newSupplier.capacity,
+        certifications: newSupplier.certifications.split(',').map(c => c.trim()).filter(Boolean),
+        capabilities: newSupplier.capabilities.split(',').map(c => c.trim()).filter(Boolean),
       });
-      const data = await response.json();
       if (data.success) {
         setSuppliers(prev => [data.supplier, ...prev]);
         setShowAddSupplierModal(false);
@@ -101,6 +120,62 @@ function SupplyChainAgent() {
     } catch (error) {
       console.error('Error adding supplier:', error);
       showToast('Failed to add supplier', 'error');
+    }
+  };
+
+  const handleFindSuppliers = async () => {
+    if (!intakeOverview.trim() || !intakeIndustry.trim() || !intakeRegion.trim()) {
+      showToast('Please fill in Project Context, Industry, and Region', 'warning');
+      return;
+    }
+    setIsSearchingSuppliers(true);
+    setSupplierSearchResults(null);
+    try {
+      const response = await fetch(API_CONFIG.SEARCH_GOOGLE_BUSINESSES, {
+        method: 'POST',
+        headers: authJsonHeaders(),
+        body: JSON.stringify({
+          query: intakeOverview,
+          location: intakeRegion,
+          page_size: 50,
+        }),
+      });
+      const data = await response.json();
+      if (!data.success) {
+        showToast(data.error || 'Failed to search for suppliers', 'error');
+        return;
+      }
+      setSupplierSearchResults(data.businesses || []);
+    } catch (error) {
+      console.error('Error searching for suppliers:', error);
+      showToast('Failed to search for suppliers', 'error');
+    } finally {
+      setIsSearchingSuppliers(false);
+    }
+  };
+
+  const handleAddSearchResult = async (business) => {
+    setAddingResultId(business.id || business.placeId || business.name);
+    try {
+      const data = await createSupplier({
+        name: business.name,
+        location: business.address || intakeRegion,
+        capacity: '',
+        certifications: [],
+        capabilities: intakeIndustry ? [intakeIndustry] : [],
+      });
+      if (data.success) {
+        setSuppliers(prev => [data.supplier, ...prev]);
+        setSupplierSearchResults((prev) => (prev || []).filter((b) => b !== business));
+        showToast(`${business.name} added`, 'success');
+      } else {
+        showToast(data.error || 'Failed to add supplier', 'error');
+      }
+    } catch (error) {
+      console.error('Error adding supplier from search:', error);
+      showToast('Failed to add supplier', 'error');
+    } finally {
+      setAddingResultId(null);
     }
   };
 
@@ -284,6 +359,101 @@ function SupplyChainAgent() {
               <span className="stat-value">{passedCount}</span>
               <span className="stat-label">Qualified</span>
             </div>
+          </div>
+
+          {/* Find Suppliers - structured intake, mirrors Market Research's
+              Supplier Research mode: describe what you need, the industry,
+              and a region, then search real businesses instead of only
+              being able to add suppliers you already know by name. */}
+          <div className="supplier-intake-section">
+            <h2>
+              <img src="/assets/icons/search-analysis.png" alt="" />
+              Find Suppliers
+            </h2>
+            <p className="text-muted">
+              Describe what you're sourcing and we'll search for matching suppliers.
+            </p>
+            <div className="supplier-intake-form">
+              <div className="intake-field">
+                <label>Project Context &amp; Description</label>
+                <input
+                  type="text"
+                  value={intakeOverview}
+                  onChange={(e) => setIntakeOverview(e.target.value)}
+                  placeholder="e.g., CNC-machined aluminum housings for an automotive sensor"
+                  disabled={isHistoryView}
+                />
+              </div>
+              <div className="intake-field">
+                <label>Industry</label>
+                <input
+                  type="text"
+                  value={intakeIndustry}
+                  onChange={(e) => setIntakeIndustry(e.target.value)}
+                  placeholder="e.g., Precision Machining"
+                  disabled={isHistoryView}
+                />
+              </div>
+              <div className="intake-field">
+                <label>Region</label>
+                <input
+                  type="text"
+                  value={intakeRegion}
+                  onChange={(e) => setIntakeRegion(e.target.value)}
+                  placeholder="e.g., Ohio, USA"
+                  disabled={isHistoryView}
+                />
+              </div>
+              <Button
+                variant="primary"
+                onClick={handleFindSuppliers}
+                disabled={isSearchingSuppliers || isHistoryView}
+              >
+                {isSearchingSuppliers ? <Spinner size="sm" color="white" /> : 'Find Suppliers'}
+              </Button>
+            </div>
+
+            {isSearchingSuppliers && (
+              <div className="supplier-search-loading">
+                <Spinner size="md" />
+              </div>
+            )}
+
+            {!isSearchingSuppliers && supplierSearchResults && supplierSearchResults.length > 0 && (
+              <div className="supplier-search-results">
+                {supplierSearchResults.map((business) => {
+                  const resultId = business.id || business.placeId || business.name;
+                  return (
+                    <div key={resultId} className="supplier-result-card">
+                      <div className="supplier-result-info">
+                        <strong>{business.name}</strong>
+                        {business.address && <span className="supplier-result-address">{business.address}</span>}
+                        {business.rating != null && (
+                          <span className="supplier-result-rating">★ {business.rating}{business.userRatingCount ? ` (${business.userRatingCount})` : ''}</span>
+                        )}
+                      </div>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => handleAddSearchResult(business)}
+                        disabled={addingResultId === resultId || isHistoryView}
+                      >
+                        {addingResultId === resultId ? <Spinner size="sm" /> : '+ Add'}
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {!isSearchingSuppliers && supplierSearchResults && supplierSearchResults.length === 0 && (
+              <EmptyState
+                iconType="data"
+                title="No suppliers found"
+                description="Try a broader description or a wider region."
+                size="sm"
+              />
+            )}
           </div>
 
           {/* Suppliers List */}

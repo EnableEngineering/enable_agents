@@ -421,17 +421,16 @@ function Settings() {
 
   const saveBusinessContext = async () => {
     // Save to localStorage (already done in handleBusinessContextChange)
-    // Optionally save to backend ContextStore
+    // Also save to the backend ContextStore under the "user_profile" key,
+    // which agent-dependencies.json expects other agents' prerequisite
+    // checks (e.g. Executive Assistant) to be able to read.
     try {
-      await fetch(`${API_URL}/api/context`, {
+      const res = await fetch(`${API_URL}/api/settings/business-context`, {
         method: 'POST',
         headers: authJsonHeaders(),
-        body: JSON.stringify({
-          agent_id: 'user_profile',
-          data_type: 'business_context',
-          content: businessContext,
-        }),
+        body: JSON.stringify(businessContext),
       });
+      if (!res.ok) throw new Error('Save failed');
       showToast('Business context saved', 'success');
     } catch (err) {
       // Still saved to localStorage

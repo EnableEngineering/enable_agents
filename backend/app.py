@@ -4662,6 +4662,31 @@ def generate_requirements():
     )
     if error:
         return jsonify({"error": error}), 500
+
+    # Record this as the user's company_profile - agent-dependencies.json
+    # declares it provided_by "market_research", but nothing ever actually
+    # wrote it (confirmed by grep - only docstring/test-mock references
+    # existed), so any agent gated on it (e.g. Executive Assistant) could
+    # never clear its prerequisite banner. This is the live, real research
+    # generation path RequirementsGathering.js's "report" modes use.
+    try:
+        from core.context import ContextStore
+
+        ContextStore().set(
+            g.user_id,
+            "market_research",
+            "company_profile",
+            {
+                "industries": data.get('industries', ''),
+                "countries": data.get('countries', ''),
+                "overview": data.get('overview', ''),
+                "response_format": data.get('responseFormat', ''),
+                "updated_at": datetime.utcnow().isoformat(),
+            },
+        )
+    except Exception:
+        pass
+
     return jsonify({"requirements": answer})
 
 @app.route('/simple_search', methods=['POST'])
@@ -6260,6 +6285,30 @@ def upload_content_marketing_documents():
 def list_content_marketing_documents(project_id):
     """List all documents in a project"""
     return cm_service.list_documents(project_id)
+
+
+@app.route('/api/content-marketing/documents/item/<doc_id>', methods=['DELETE'])
+@cross_origin()
+@require_auth
+def delete_content_marketing_document(doc_id):
+    """Delete an uploaded Knowledge Base document - there was previously no
+    way to remove a document once uploaded."""
+    doc = CMDocument.query.filter_by(doc_id=doc_id).first()
+    if not doc:
+        return jsonify({'success': False, 'error': 'Document not found'}), 404
+    project = CMProject.query.filter_by(project_id=doc.project_id).first()
+    if not project or project.user_id != g.user_id:
+        return jsonify({'success': False, 'error': 'Document not found'}), 404
+
+    try:
+        if doc.file_path and os.path.exists(doc.file_path):
+            os.remove(doc.file_path)
+    except OSError:
+        pass
+
+    db.session.delete(doc)
+    db.session.commit()
+    return jsonify({'success': True}), 200
 
 
 @app.route('/api/content-marketing/generate-content', methods=['POST'])

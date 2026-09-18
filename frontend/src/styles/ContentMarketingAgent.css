@@ -295,6 +295,12 @@
 }
 
 /* ========== RIGHT PANEL (CHAT) ========== */
+/* Only ever rendered while chat is open (isChatOpen in
+   ContentMarketingAgent.js), so its flex-basis applies unconditionally -
+   no need for a separate ".cma-main-content--chat-open" scoped override.
+   Shares the row with .cma-workspace (flex: 1, in the "LEFT PANEL"
+   section below - not ".cma-left-panel", which despite the CSS still
+   further down this file doesn't match any element rendered today). */
 .cma-right-panel {
   flex: 0 0 60%;
   height: auto;
@@ -410,6 +416,13 @@
   background: var(--color-surface);
   border-top: 2px solid var(--color-border);
   font-family: var(--font-body);
+  /* App.css has a global "form" selector capping every form at 400px
+     wide (--input-max-width, meant for centered one-off forms like
+     login) - without an override it also caps this chat bar inside a
+     panel that's really 600-700px wide, squeezing the actual text input
+     down to near nothing next to the Send button. */
+  max-width: none;
+  margin: 0;
 }
 
 .chat-input-form input {
@@ -436,6 +449,12 @@
 }
 
 .chat-input-form button {
+  /* App.css has a global "form button { width: 100% }" rule for simple
+     stacked forms (login, etc) - without an override it makes Send claim
+     the whole row via flex-basis:auto resolving to that 100% width,
+     starving the actual text input next to it down to a sliver. */
+  width: auto;
+  flex-shrink: 0;
   padding: var(--space-3) var(--space-6);
   background: var(--gradient-accent);
   color: var(--color-background);
@@ -1005,12 +1024,46 @@
 .doc-chip {
   display: inline-flex;
   align-items: center;
-  padding: 4px 10px;
+  gap: var(--space-2);
+  max-width: 220px;
+  padding: 4px 6px 4px 10px;
   background: var(--color-background);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-full);
   font-size: var(--text-caption);
   color: var(--color-text);
+}
+
+.doc-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doc-chip-remove {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.doc-chip-remove:hover:not(:disabled) {
+  background: var(--color-error-bg);
+  color: var(--color-error);
+}
+
+.doc-chip-remove:disabled {
+  cursor: not-allowed;
 }
 
 /* Workspace responsive */

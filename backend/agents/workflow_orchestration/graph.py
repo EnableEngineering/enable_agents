@@ -99,7 +99,7 @@ def _sync_legacy_state(instance_id: str, stage_id: str, output: Dict[str, Any]) 
     not a hardcoded stage order, so this works for every registered
     template."""
     from core.database import db
-    from models.workflow import WorkflowInstance
+    from models.workflow import WorkflowInstance, _utc_iso
 
     instance = WorkflowInstance.query.filter_by(instance_id=instance_id).first()
     if not instance:
@@ -110,7 +110,7 @@ def _sync_legacy_state(instance_id: str, stage_id: str, output: Dict[str, Any]) 
     states[stage_id] = {
         "status": "completed",
         "data": data,
-        "completedAt": datetime.utcnow().isoformat(),
+        "completedAt": _utc_iso(datetime.utcnow()),
     }
     instance.stage_states = states
 

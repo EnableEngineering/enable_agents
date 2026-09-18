@@ -13,7 +13,7 @@ import json
 from pathlib import Path
 
 from core.database import db
-from models.workflow import WorkflowTemplate, WorkflowInstance
+from models.workflow import WorkflowTemplate, WorkflowInstance, _utc_iso
 from core.models import WorkflowTask, Notification, Project, TeamMember
 
 workflows_bp = Blueprint('workflows', __name__)
@@ -414,7 +414,7 @@ def save_stage_data(instance_id: str, stage_id: str):
     else:
         states[stage_id]["data"] = stage_data
 
-    states[stage_id]["updatedAt"] = datetime.utcnow().isoformat()
+    states[stage_id]["updatedAt"] = _utc_iso(datetime.utcnow())
     instance.stage_states = states
 
     # Also update context with the new data for downstream stages

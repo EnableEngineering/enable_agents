@@ -1,8 +1,20 @@
 """Workflow Templates — SQLAlchemy models."""
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 from typing import Dict, Any, List, Optional
 from core.database import db
+
+
+def _utc_iso(dt: Optional[datetime]) -> Optional[str]:
+    """ISO-format a naive UTC datetime (every timestamp column here is
+    written via datetime.utcnow(), no tzinfo) with an explicit UTC marker.
+    Plain `.isoformat()` on a naive datetime omits the offset entirely, so
+    the frontend's `new Date(iso)` parsed it as local time instead of UTC -
+    the workflow Activity log showed the right date but the wrong time,
+    shifted by the browser's UTC offset."""
+    if dt is None:
+        return None
+    return dt.replace(tzinfo=timezone.utc).isoformat()
 
 
 class WorkflowTemplate(db.Model):
@@ -57,7 +69,7 @@ class WorkflowTemplate(db.Model):
             "isActive": self.is_active,
             "stages": self.stages,
             "stageCount": len(self.stages),
-            "createdAt": self.created_at.isoformat() if self.created_at else None,
+            "createdAt": _utc_iso(self.created_at),
         }
 
 
@@ -128,7 +140,7 @@ class WorkflowInstance(db.Model):
             states[current_id] = {
                 "status": "completed",
                 "data": merged_data,
-                "completedAt": datetime.utcnow().isoformat(),
+                "completedAt": _utc_iso(datetime.utcnow()),
             }
             self.stage_states = states
 
@@ -161,7 +173,7 @@ class WorkflowInstance(db.Model):
             "stageStates": self.stage_states,
             "context": self.context,
             "autonomyMode": self.autonomy_mode or "co-pilot",
-            "startedAt": self.started_at.isoformat() if self.started_at else None,
-            "completedAt": self.completed_at.isoformat() if self.completed_at else None,
-            "createdAt": self.created_at.isoformat() if self.created_at else None,
+            "startedAt": _utc_iso(self.started_at),
+            "completedAt": _utc_iso(self.completed_at),
+            "createdAt": _utc_iso(self.created_at),
         }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useSyncExternalStore } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 
 // Shared UI
@@ -44,6 +44,31 @@ function isLoggedIn() {
   return Boolean(localStorage.getItem('sessionToken') || localStorage.getItem('userEmail'));
 }
 
+// External-store subscription for the login state above, used via
+// useSyncExternalStore instead of useState+useEffect+addEventListener.
+// isLoggedIn() reads localStorage, which doesn't trigger a React re-render
+// on its own - the previous approach listened for a same-tab 'authChange'
+// event (Login dispatches it right after writing localStorage on sign-in,
+// Settings on sign-out) inside a useEffect, but React commits passive
+// effects bottom-up on mount: on the very first render of the OAuth
+// callback redirect landing page, Login's effect (which writes
+// localStorage then dispatches 'authChange') ran before App's effect had
+// registered its listener, so the event fired into a void and the
+// sidebar never appeared until a manual refresh re-derived state fresh.
+// useSyncExternalStore's subscription runs at layout-effect timing, which
+// always completes tree-wide before any passive effect (including
+// Login's dispatch) fires, closing that race regardless of component
+// depth - and it re-checks the snapshot immediately after subscribing,
+// so even a change that slips in between render and subscribe is caught.
+function subscribeAuthChange(callback) {
+  window.addEventListener('authChange', callback);
+  window.addEventListener('storage', callback);
+  return () => {
+    window.removeEventListener('authChange', callback);
+    window.removeEventListener('storage', callback);
+  };
+}
+
 // Root redirect - go to the chat-first Home if logged in, /login otherwise
 function RootRedirect() {
   return <Navigate to={isLoggedIn() ? '/home' : '/login'} replace />;
@@ -59,7 +84,7 @@ const PANEL_HIDDEN_PATHS = ['/home', '/route'];
 const AUTH_ONLY_PATHS = ['/login', '/register'];
 
 function App() {
-  const [loggedIn, setLoggedIn] = useState(isLoggedIn());
+  const loggedIn = useSyncExternalStore(subscribeAuthChange, isLoggedIn);
   const [panelOpen, setPanelOpen] = useState(() => {
     const saved = sessionStorage.getItem('aiAssistantOpen');
     if (saved !== null) return saved === 'true';
@@ -80,21 +105,6 @@ function App() {
       return next;
     });
   };
-
-  // isLoggedIn() reads localStorage, which doesn't trigger a React re-render
-  // on its own - listen for the same custom event used for same-tab
-  // localStorage sync (Login dispatches it on sign-in, Settings
-  // on sign-out) plus the native storage event for cross-tab sign-in/out,
-  // so the panel appears/disappears without a full page reload.
-  useEffect(() => {
-    const handleAuthChange = () => setLoggedIn(isLoggedIn());
-    window.addEventListener('authChange', handleAuthChange);
-    window.addEventListener('storage', handleAuthChange);
-    return () => {
-      window.removeEventListener('authChange', handleAuthChange);
-      window.removeEventListener('storage', handleAuthChange);
-    };
-  }, []);
 
   const handlePanelToggle = (next) => {
     setPanelOpen(next);

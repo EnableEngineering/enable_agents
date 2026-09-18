@@ -2040,3 +2040,73 @@ any `agents/workflow_orchestration/` change during dev-stack testing.
 | `frontend/src/workflows/WorkflowRunner.js` | red error banner, `handleResume` polls for real outcome instead of assuming success |
 | `frontend/src/workflows/WorkflowRunner.css` | `.wf-stage-error` styling |
 | `tests/integration/test_workflow_orchestration_routes.py` | new regression test for the retry/error-surfacing behavior |
+
+---
+
+## QA bug batch (8 items) ✅ FIXED (2026-09-18)
+
+From a QA pass across all agents (excluding Email Outreach). Root causes,
+not just symptoms:
+
+1. **Sidebar missing after login until refresh** — `Login.js` dispatches
+   `authChange` in a passive effect on the OAuth-callback landing page's
+   first mount; `App.js`'s `useEffect` listener hadn't registered yet
+   (children's effects fire before parents'), so the event hit nothing.
+   `App.js` now uses `useSyncExternalStore(subscribeAuthChange, isLoggedIn)`
+   - subscription happens at layout-effect timing, which always finishes
+   tree-wide before any passive effect.
+2. **Project selector width shift** — `.chatroute-project-picker` had
+   `max-width` but no `width`, so it shrink-wrapped to whichever of
+   `<select>`/`<input>` was showing. Now a fixed `width: 78%`.
+3. **Activity log wrong time** — `WorkflowInstance.to_dict()` and the
+   stage-state writers serialized naive UTC datetimes with `.isoformat()`
+   (no offset), so `new Date(iso)` parsed them as local time. New
+   `_utc_iso()` helper in `models/workflow.py`, used everywhere workflow
+   timestamps are serialized (model, `graph.py`, `routes/workflows.py`).
+4. **Knowledge Base upload** — no in-progress state on the upload control
+   itself, docs shown as "Document 1/2/3", no way to remove one. Added a
+   dedicated `isUploadingDocs` state/spinner, real filenames via the
+   existing list endpoint, and a new
+   `DELETE /api/content-marketing/documents/item/<doc_id>` (ownership
+   checked via the doc's project) with a remove button per chip.
+5. **Content Assistant chat input too narrow** — two separate causes,
+   both leaking global `App.css` rules into `.chat-input-form`: bare
+   `form { max-width: 400px }` capped the whole bar, and bare
+   `form button { width: 100% }` made Send claim the row, squeezing the
+   input to ~36px. Both overridden in `ContentMarketingAgent.css`.
+   Also noticed (NOT fixed, out of scope): `.cma-left-panel` CSS is dead -
+   nothing renders that class today; the real left column is
+   `.cma-workspace`, whose two-column grid gets cramped ("Context /
+   Instructions" wraps mid-word) once the chat opens.
+6. **AI Chatbot 3-panel imbalance** — side panels fixed at 600px, center
+   card content-sized. `.chatbot-card` now `height: 600px`, window
+   `flex: 1; min-height: 0`.
+7. **Executive Assistant banner never clearing** — the dependency
+   checker (`agent-dependencies.json` + `dependency_validator.py`) looks
+   for `settings/user_profile` and `market_research/company_profile`, but
+   nothing ever wrote either. Settings.js POSTed to a nonexistent
+   `/api/context` (real route is `/api/context/save`, different body
+   shape). Added `POST /api/settings/business-context` (writes
+   `settings/user_profile`) and a `company_profile` write in
+   `/generate-requirements`. `gmail_connection` was already written
+   correctly - so the banner now correctly narrows to just "Connect
+   Gmail" until a real Gmail account is linked.
+8. **Supply Chain intake (feature)** — new "Find Suppliers" section
+   (Project Context & Description / Industry / Region) reusing the same
+   `/api/search-google-businesses` endpoint Market Research's Supplier
+   Research mode uses, with per-result "+ Add" creating a supplier via the
+   existing create endpoint. No new backend search logic.
+
+### Verification
+Playwright against the dev stack (sidebar-after-OAuth-redirect, picker
+width across toggle, EA prerequisite status before/after real writes,
+`createdAt` carries a UTC offset, chatbot panels all 600px, KB
+upload -> real filename -> remove, chat input 563px, Supply Chain intake
+present). Workflow orchestration suite still 33/33. The wider
+`tests/integration/` suite has ~38 pre-existing failures (401 auth
+setup, MySQL-era context-store tests) - confirmed identical on unmodified
+code via `git stash`, not caused by this batch.
+
+**Test-harness gotcha (again):** `docker cp tests <backend-dev>:/app/tests_it`
+writes through the `./backend:/app` bind mount onto the host as
+`backend/tests_it/` - delete it afterward or it shows up untracked.
