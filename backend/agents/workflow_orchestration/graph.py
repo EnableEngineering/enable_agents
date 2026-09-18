@@ -246,7 +246,7 @@ def run_stage(
             # Any AI call this stage makes is logged against this workflow
             # run + stage (core/usage_context.py) - that's what makes a
             # run's cost, and its per-stage breakdown, computable.
-            with usage_scope(state["instance_id"], stage_id):
+            with usage_scope(state["instance_id"], stage_id, state.get("project_id")):
                 output = execute(state, final_input)
             break
         except Exception as exc:

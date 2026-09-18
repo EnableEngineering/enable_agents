@@ -192,6 +192,26 @@ def _team_id_for_project(project_id: Optional[str]) -> Optional[str]:
     return project.team_id if project else None
 
 
+def _request_project(user_id: Optional[str]) -> Optional[str]:
+    """The project named by this HTTP request's X-Project-Id header - only if
+    that user can actually access it (the header is caller-controlled, so
+    without the check anyone could bill spend to another team's project
+    budget). None outside a request (Celery tasks) or when it isn't sent."""
+    try:
+        from flask import has_request_context, request
+
+        if not has_request_context() or not user_id:
+            return None
+        claimed = (request.headers.get("X-Project-Id") or "").strip()[:36]
+        if not claimed:
+            return None
+        from core.auth import user_can_access_project
+
+        return claimed if user_can_access_project(user_id, claimed) else None
+    except Exception:
+        return None
+
+
 def log_ai_usage(
     user_id: str,
     project_id: Optional[str],
@@ -249,6 +269,11 @@ def _write_usage_row(
     from core.usage_context import current_scope
 
     scope = current_scope()
+    # Most call sites log with project_id=None. Resolve it, most specific
+    # first: the call's own project, else the workflow run's project, else
+    # the project the user is working in (the frontend sends it as
+    # X-Project-Id) - so per-project spend and budgets see this usage.
+    project_id = project_id or scope.get("project_id") or _request_project(user_id)
     entry = AIUsageLog(
         user_id=user_id or "unknown",
         project_id=project_id,

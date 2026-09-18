@@ -1,8 +1,21 @@
 /** Merge JSON headers with optional Bearer session token from login/register/OAuth */
 
+/**
+ * The project the user is working in (?project= in the URL), sent on every API
+ * call so the backend can attribute AI spend to it - most agent code logs its
+ * calls without a project, and per-project cost/budgets would otherwise miss
+ * them. The server only honors it if the user can access that project.
+ */
+function projectHeader() {
+  if (typeof window === 'undefined') return {};
+  const project = new URLSearchParams(window.location.search).get('project');
+  return project ? { 'X-Project-Id': project } : {};
+}
+
 export function authJsonHeaders(extra = {}) {
   const headers = {
     'Content-Type': 'application/json',
+    ...projectHeader(),
     ...extra,
   };
 
@@ -35,7 +48,7 @@ export function navigateAfterLogin(navigate) {
 
 /** For GET requests: only add Authorization when logged in. */
 export function authOptionalHeaders(extra = {}) {
-  const headers = { ...extra };
+  const headers = { ...projectHeader(), ...extra };
 
   if (typeof localStorage !== 'undefined') {
     const token = localStorage.getItem('sessionToken');

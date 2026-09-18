@@ -321,3 +321,61 @@ def test_ready_reports_database_and_schema_revision(monolith_client, monolith_an
     with flask_app.app_context():
         db.session.execute(db.text("DROP TABLE alembic_version"))
         db.session.commit()
+
+
+# ── project attribution for calls that don't name a project ──────────────
+
+def _make_project(owner):
+    from core.models import Project, Team
+
+    pid, tid = f"proj-{uuid.uuid4().hex[:8]}", f"team-{uuid.uuid4().hex[:8]}"
+    db.session.add(Team(team_id=tid, owner_id=owner, name="T"))
+    db.session.add(Project(project_id=pid, team_id=tid, owner_id=owner, name="P"))
+    db.session.commit()
+    return pid
+
+
+def _project_of_last_row(user):
+    from core.models import AIUsageLog
+
+    return AIUsageLog.query.filter_by(user_id=user).order_by(AIUsageLog.id.desc()).first().project_id
+
+
+def test_unattributed_spend_goes_to_the_project_the_request_is_for(flask_app, emails):
+    """Most agent code logs AI calls with project_id=None. The frontend sends
+    the project the user is working in as X-Project-Id, so that spend still
+    reaches the project's cost view and budget."""
+    user = _uid("hdr")
+    pid = _make_project(user)
+    with flask_app.test_request_context(headers={"X-Project-Id": pid}):
+        _log(user, 0.10)                                    # no project given -> header's project
+    assert _project_of_last_row(user) == pid
+
+    other = _make_project(_uid("other-owner"))
+    with flask_app.test_request_context(headers={"X-Project-Id": pid}):
+        _log(user, 0.10, project_id=other)                  # an explicit project always wins
+    assert _project_of_last_row(user) == other
+
+
+def test_a_claimed_project_the_user_cannot_access_is_ignored(flask_app, emails):
+    """The header is caller-controlled: without an access check anyone could
+    bill their spend to someone else's project budget."""
+    user = _uid("spoof")
+    victims_project = _make_project(_uid("victim"))
+    with flask_app.test_request_context(headers={"X-Project-Id": victims_project}):
+        _log(user, 0.50)
+    assert _project_of_last_row(user) is None
+
+    with flask_app.test_request_context(headers={"X-Project-Id": "no-such-project"}):
+        _log(user, 0.50)
+    assert _project_of_last_row(user) is None
+
+
+def test_workflow_stage_spend_goes_to_the_runs_project(flask_app, emails):
+    from core.usage_context import usage_scope
+
+    user = _uid("wfproj")
+    pid = _make_project(user)
+    with usage_scope("wf-x", "qualify", pid):
+        _log(user, 0.20)          # e.g. score_leads_core, which logs project_id=None
+    assert _project_of_last_row(user) == pid

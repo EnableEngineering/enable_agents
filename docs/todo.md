@@ -2319,6 +2319,17 @@ built (migration `t7i6j5k4l3m2`, additive):
   `provider=scrap_io` row via `log_external_usage`, attributed to the
   project/workflow the panel sends - only if the caller can actually access
   them (otherwise anyone could bill spend to someone else's project budget).
+- **Project attribution for spend that names no project.** ~15 AI call sites
+  pass `project_id=None` (market research, sales helper, email generation, ...),
+  so project budgets only saw a fraction of spend. Fixed centrally in the
+  usage logger, most specific first: the call's own project -> the workflow
+  run's project (`usage_scope(..., project_id)`) -> the project named by the
+  request's `X-Project-Id` header, which the frontend now sends from `?project=`
+  on every API call. The header is caller-controlled, so it is only honored if
+  the user can access that project (a claimed foreign project is ignored and
+  the spend stays unattributed - tested). Calls made with no project selected,
+  and Celery work outside a workflow, still land in "No project" (still counted
+  against the user's budget).
 - **Pricing fix:** cost lookup was an exact-name match, so dated model names
   (`gpt-4o-mini-2024-07-18`, `gpt-4-turbo-preview`) silently fell back to the
   default rate; now longest-prefix match. Costs remain *estimates* from a

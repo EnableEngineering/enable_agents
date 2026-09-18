@@ -6,6 +6,10 @@ signature, the workflow engine wraps a stage's execute() in `usage_scope()`
 and log_ai_usage() reads the current scope when it writes the row - so a
 workflow run's cost can be totalled by instance and broken down by stage.
 
+The scope also carries the run's project: most agent code logs its AI calls
+with project_id=None, so without this a workflow's spend would never reach its
+project's budget.
+
 A ContextVar (not a global) so concurrent Celery tasks / threads each see
 only their own scope.
 """
@@ -19,10 +23,12 @@ _scope: ContextVar[Optional[Dict[str, str]]] = ContextVar("ai_usage_scope", defa
 
 
 @contextmanager
-def usage_scope(workflow_instance_id: Optional[str] = None, workflow_stage_id: Optional[str] = None) -> Iterator[None]:
+def usage_scope(workflow_instance_id: Optional[str] = None, workflow_stage_id: Optional[str] = None,
+                project_id: Optional[str] = None) -> Iterator[None]:
     token = _scope.set({
         "workflow_instance_id": workflow_instance_id,
         "workflow_stage_id": workflow_stage_id,
+        "project_id": project_id,
     })
     try:
         yield
@@ -31,4 +37,4 @@ def usage_scope(workflow_instance_id: Optional[str] = None, workflow_stage_id: O
 
 
 def current_scope() -> Dict[str, Optional[str]]:
-    return dict(_scope.get() or {"workflow_instance_id": None, "workflow_stage_id": None})
+    return dict(_scope.get() or {"workflow_instance_id": None, "workflow_stage_id": None, "project_id": None})
