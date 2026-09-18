@@ -42,7 +42,13 @@ if [ "$AHEAD" != "0" ]; then
   echo "         The VM deploys origin/local-preview - push first if you want those shipped." >&2
 fi
 
-gcloud compute ssh "$INSTANCE" --zone="$ZONE" --command="READY_TIMEOUT=$READY_TIMEOUT bash -s" <<'REMOTE'
+# The remote steps are shipped to the VM as a FILE (base64 in --command), not
+# piped to `bash -s`: when the script arrives on stdin, any command that reads
+# stdin (docker compose run without -T did) silently swallows the rest of it
+# and the deploy just stops.
+# (read -d '' rather than $(cat <<EOF): macOS's bash 3.2 mis-parses apostrophes
+# inside a heredoc nested in $( ).)
+IFS= read -r -d '' REMOTE_SCRIPT <<'REMOTE' || true
 set -euo pipefail
 cd /home/rhishi/enable_agents
 
@@ -54,10 +60,17 @@ PREV_FULL="$(sudo git rev-parse HEAD)"
 sudo git reset -q --hard origin/local-preview
 echo "==> deploying $(sudo git rev-parse --short "$PREV_FULL") -> $(sudo git rev-parse --short HEAD)"
 
-echo "==> tagging running images :previous"
+# "previous" = the image each service's container is running RIGHT NOW - not
+# whatever :latest points at. If an earlier run of this script stopped part-way
+# (after building, before cut-over), :latest is already the new build and
+# tagging from it would overwrite the rollback target with the very thing we
+# might need to roll back from.
+echo "==> tagging the running images :previous"
 for svc in $SERVICES; do
-  sudo docker image inspect "enable_agents-$svc:latest" >/dev/null 2>&1 \
-    && sudo docker tag "enable_agents-$svc:latest" "enable_agents-$svc:previous" || true
+  cid="$(sudo docker compose ps -a -q "$svc" | head -1)"
+  if [ -n "$cid" ]; then
+    sudo docker tag "$(sudo docker inspect --format '{{.Image}}' "$cid")" "enable_agents-$svc:previous" || true
+  fi
 done
 
 rollback() {
@@ -80,7 +93,10 @@ echo "==> building images"
 sudo docker compose build $SERVICES frontend-remote
 
 echo "==> running migrations against the new image"
-if ! MIGRATION_OUTPUT="$(sudo docker compose run --rm backend-remote flask db upgrade 2>&1)"; then
+# -T and </dev/null: without them `docker compose run` reads the rest of THIS
+# script from stdin (it arrives via `bash -s`) and the deploy silently stops
+# right after the migration.
+if ! MIGRATION_OUTPUT="$(sudo docker compose run --rm -T backend-remote flask db upgrade 2>&1 </dev/null)"; then
   echo "$MIGRATION_OUTPUT" | tail -25
   rollback "database migration failed"
 fi
@@ -126,3 +142,6 @@ curl -fsS -m 15 https://agents.enableyou.co/health >/dev/null && echo "    /heal
 curl -fsS -m 15 https://agents.enableyou.co/ready >/dev/null && echo "    /ready ok" || echo "    (/ready not routed by nginx yet - inside-VM check above already passed)"
 echo "==> DEPLOY OK: $(sudo git rev-parse --short HEAD)"
 REMOTE
+ENCODED="$(printf '%s' "$REMOTE_SCRIPT" | base64 | tr -d '\n')"
+gcloud compute ssh "$INSTANCE" --zone="$ZONE" \
+  --command="echo $ENCODED | base64 -d > /tmp/deploy_remote_steps.sh && READY_TIMEOUT=$READY_TIMEOUT bash /tmp/deploy_remote_steps.sh"
