@@ -70,6 +70,8 @@ from typing import Any, Callable, Dict, List
 from langgraph.graph import END, StateGraph
 from langgraph.types import interrupt
 
+from core.usage_context import usage_scope
+
 from .state import SupplierQualificationState as WorkflowGraphState
 
 # =============================================================================
@@ -152,19 +154,13 @@ def _autopilot_over_budget(state: WorkflowGraphState) -> bool:
     own spend/cap numbers rather than duplicating the query; deliberately
     does not call check_and_maybe_alert_budget (that function's email side
     effect is a separate concern from this guardrail and this stays scoped
-    to reading the same numbers)."""
-    project_id = state.get("project_id")
-    if not project_id:
-        return False
+    to reading the same numbers). Covers both the project's and the user's
+    own monthly budget."""
+    from core.budget import is_over_budget
 
-    from core.budget import _current_month_spend_usd
-    from core.models import Project
-
-    project = Project.query.filter_by(project_id=project_id).first()
-    if not project or not project.monthly_budget_usd:
-        return False
-
-    return _current_month_spend_usd(project_id) >= project.monthly_budget_usd
+    # The project's monthly budget OR the user's own - either being used up
+    # is a reason for a human to look before autopilot spends more.
+    return is_over_budget(state.get("user_id"), state.get("project_id"))
 
 
 # Side-effect classes a node declares via run_stage(side_effect=...).
@@ -247,7 +243,11 @@ def run_stage(
         if action == "edit":
             final_input.update(decision.get("data") or {})
         try:
-            output = execute(state, final_input)
+            # Any AI call this stage makes is logged against this workflow
+            # run + stage (core/usage_context.py) - that's what makes a
+            # run's cost, and its per-stage breakdown, computable.
+            with usage_scope(state["instance_id"], stage_id):
+                output = execute(state, final_input)
             break
         except Exception as exc:
             error_message = str(exc)

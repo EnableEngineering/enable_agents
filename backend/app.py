@@ -7053,9 +7053,11 @@ def get_email_extraction_usage():
     try:
         _ensure_email_usage_tables()
 
-        username = _normalize_username(
-            request.args.get('username') or request.args.get('userId')
-        )
+        # From the verified session, never the query string: this used to take
+        # ?username= from the caller, so any signed-in user could read anyone
+        # else's lookup quota and spend (the enrich route beside it already
+        # used the session identity).
+        username = _normalize_username(g.user_id)
         quota = _get_or_create_quota(username)
 
         return jsonify({
@@ -7926,6 +7928,32 @@ def enrich_businesses_with_emails():
         db.session.add(usage_log)
         db.session.commit()
 
+        # Put the spend in the platform's cost log too, so it counts toward
+        # per-project / per-user / per-workflow totals and budgets. The
+        # project and workflow ids come from the caller, so they're only
+        # honored if this user can actually access them - otherwise anyone
+        # could bill their lookups to someone else's project budget.
+        try:
+            from core.ai_client import log_external_usage
+            from core.auth import user_can_access_project
+
+            attributed_project = data.get('projectId') or None
+            if attributed_project and not user_can_access_project(g.user_id, attributed_project):
+                attributed_project = None
+            attributed_workflow = data.get('workflowInstanceId') or None
+            if attributed_workflow:
+                from routes.workflows import get_accessible_instance
+                if not get_accessible_instance(attributed_workflow, g.user_id):
+                    attributed_workflow = None
+            log_external_usage(
+                g.user_id, attributed_project, 'email_enrichment', 'scrap_io', 'email-lookup',
+                cost_this_request,
+                workflow_instance_id=attributed_workflow,
+                workflow_stage_id=(data.get('workflowStageId') or None) if attributed_workflow else None,
+            )
+        except Exception as usage_log_error:
+            print(f"[EMAIL_ENRICHMENT] could not record cost in the usage log: {usage_log_error}")
+
         print(f"[EMAIL_ENRICHMENT] Successfully enriched {processed_count} businesses")
         print(f"[EMAIL_ENRICHMENT] ========== REQUEST END ========== (took {request_id})")
         
@@ -8023,6 +8051,8 @@ def delete_own_account():
         TeamMember.query.filter_by(user_id=user_id).delete()
 
         ExecTask.query.filter_by(user_id=user_id).delete()
+        from core.models import UserBudget
+        UserBudget.query.filter_by(user_id=user_id).delete()
         ExecReminder.query.filter_by(user_id=user_id).delete()
         ExecStakeholder.query.filter_by(user_id=user_id).delete()
 
@@ -8058,6 +8088,61 @@ def health_check():
         'service': 'enable-agents-api',
         'timestamp': datetime.now().isoformat()
     }), 200
+
+
+def _readiness_checks():
+    """Can this process actually serve traffic? /health only proves it's
+    alive; this also proves the database answers and that its schema is at
+    the revision this code expects (a new image booted against an
+    un-migrated database would fail on the first query that touches a new
+    column). Redis is reported but not fatal: the context store falls back to
+    Postgres without it."""
+    checks = {}
+    ok = True
+    try:
+        db.session.execute(db.text('SELECT 1'))
+        checks['db'] = 'ok'
+    except Exception as e:
+        db.session.rollback()
+        checks['db'] = f'error: {str(e)[:120]}'
+        return False, checks
+
+    try:
+        from alembic.config import Config
+        from alembic.script import ScriptDirectory
+
+        cfg = Config()
+        cfg.set_main_option('script_location', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'migrations'))
+        head = ScriptDirectory.from_config(cfg).get_current_head()
+        current = db.session.execute(db.text('SELECT version_num FROM alembic_version')).scalar()
+        checks['schema'] = {'current': current, 'expected': head, 'ok': current == head}
+        ok = ok and current == head
+    except Exception as e:
+        db.session.rollback()
+        checks['schema'] = {'ok': False, 'error': str(e)[:120]}
+        ok = False
+
+    try:
+        from core.context import _get_redis
+        rc = _get_redis()
+        checks['redis'] = 'ok' if (rc and rc.ping()) else 'unavailable (context store falls back to Postgres)'
+    except Exception:
+        checks['redis'] = 'unavailable (context store falls back to Postgres)'
+    return ok, checks
+
+
+@app.route('/ready', methods=['GET'])
+def readiness_check():
+    """Readiness probe - used by the production container healthcheck and
+    scripts/deploy_remote.sh to decide a new build is safe to keep. 200 only
+    when the database is reachable and migrated to this code's head."""
+    ok, checks = _readiness_checks()
+    return jsonify({
+        'status': 'ready' if ok else 'not_ready',
+        'service': 'enable-agents-api',
+        'checks': checks,
+        'timestamp': datetime.now().isoformat(),
+    }), (200 if ok else 503)
 
 
 @app.route('/test-connection', methods=['GET'])

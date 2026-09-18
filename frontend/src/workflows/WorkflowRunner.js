@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { BackButton, EmptyState, Spinner } from '../components';
 import { API_CONFIG } from '../config/apiConfig';
 import { authJsonHeaders } from '../core/authHeaders';
@@ -120,6 +120,26 @@ const buildEditFields = (proposedInput) => {
     }
   });
   return fields;
+};
+
+const formatUsd = (value) => {
+  const n = Number(value || 0);
+  return n > 0 && n < 0.01 ? `$${n.toFixed(4)}` : `$${n.toFixed(2)}`;
+};
+
+// One line per budget (yours / this project's) that's at 80%+ - see
+// core/budget.py. Empty when everything is comfortably under budget.
+const budgetWarnings = (overview) => {
+  if (!overview) return [];
+  return [['Your', overview.user], ['This project\'s', overview.project]]
+    .filter(([, b]) => b && (b.state === 'warning' || b.state === 'over'))
+    .map(([who, b]) => ({
+      key: who,
+      over: b.state === 'over',
+      text: b.state === 'over'
+        ? `${who} monthly AI budget is used up (${formatUsd(b.spendUsd)} of ${formatUsd(b.limitUsd)}). Nothing is blocked, but Autopilot will pause for your review before each stage.`
+        : `${who} monthly AI budget is ${Math.round(b.percentUsed)}% used (${formatUsd(b.spendUsd)} of ${formatUsd(b.limitUsd)}).`,
+    }));
 };
 
 // Renders any stage/context value as readable text - agent outputs aren't
@@ -279,6 +299,8 @@ function WorkflowRunner() {
   const [settingAutonomy, setSettingAutonomy] = useState(false);
   const [showAutonomyInfo, setShowAutonomyInfo] = useState(false);
   const [enrichUsage, setEnrichUsage] = useState(null);
+  const [runCost, setRunCost] = useState(null);
+  const [budgetOverview, setBudgetOverview] = useState(null);
   const [enriching, setEnriching] = useState(false);
 
   const fetchInstance = useCallback(async () => {
@@ -304,6 +326,27 @@ function WorkflowRunner() {
   useEffect(() => {
     fetchInstance();
   }, [fetchInstance]);
+
+  // What this run has cost so far, and where the user/project stand against
+  // their monthly budgets. Refetched whenever the run advances.
+  const fetchCostAndBudget = useCallback(async () => {
+    try {
+      const costRes = await fetch(`${API_CONFIG.BASE_URL}/api/workflows/instances/${instanceId}/usage`, { headers: authJsonHeaders() });
+      const cost = await costRes.json();
+      if (cost.success) setRunCost(cost);
+
+      const projectParam = instance?.projectId ? `?project_id=${encodeURIComponent(instance.projectId)}` : '';
+      const budgetRes = await fetch(`${API_CONFIG.BASE_URL}/api/usage/budget-status${projectParam}`, { headers: authJsonHeaders() });
+      const budget = await budgetRes.json();
+      if (budget.success) setBudgetOverview(budget);
+    } catch (err) {
+      // Informational only - never block the workflow screen on it.
+    }
+  }, [instanceId, instance?.projectId]);
+
+  useEffect(() => {
+    if (instance) fetchCostAndBudget();
+  }, [instance?.currentStageIndex, instance?.status, fetchCostAndBudget]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Every task across every stage (not scoped to whichever stage is
   // currently selected) - the source for the activity lane's timeline.
@@ -461,7 +504,13 @@ function WorkflowRunner() {
       const res = await fetch(API_CONFIG.ENRICH_BUSINESSES_WITH_EMAILS, {
         method: 'POST',
         headers: authJsonHeaders(),
-        body: JSON.stringify({ businesses: candidates.map((c) => c.business) }),
+        body: JSON.stringify({
+          businesses: candidates.map((c) => c.business),
+          // So the lookup's cost lands on this project and this run in the usage log.
+          projectId: instance?.projectId || undefined,
+          workflowInstanceId: instanceId,
+          workflowStageId: pendingApproval?.interrupt?.stage_id,
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.success) {
@@ -483,6 +532,7 @@ function WorkflowRunner() {
         return { ...prev, businesses: { ...prev.businesses, value: rows } };
       });
       if (data.usageSummary) setEnrichUsage(data.usageSummary);
+      fetchCostAndBudget();
       const charged = Number(data.costThisRequest || 0).toFixed(2);
       showToast(
         found > 0
@@ -752,6 +802,15 @@ function WorkflowRunner() {
               <span className="wf-template">{instance.templateName}</span>
             </div>
           </div>
+          {runCost && runCost.requestCount > 0 && (
+            <span
+              className="wf-run-cost"
+              title={`${runCost.requestCount} AI request${runCost.requestCount === 1 ? '' : 's'} made by this run's stages`
+                + (runCost.byStage?.length ? ` - ${runCost.byStage.map((st) => `${formatLabel(st.stageId || 'unknown')}: ${formatUsd(st.costUsd)}`).join(', ')}` : '')}
+            >
+              AI cost this run: <strong>{formatUsd(runCost.totalCostUsd)}</strong>
+            </span>
+          )}
           <span className={`wf-status wf-status-${instance.status}`}>
             {instance.status === 'completed' && <img src="/assets/icons/checklist.png" alt="" />}
             {instance.status === 'running' && <img src="/assets/icons/process.png" alt="" />}
@@ -851,6 +910,12 @@ function WorkflowRunner() {
           <div className="wf-main-lane">
             {!selectedStage ? (
               <>
+                {!isCompleted && budgetWarnings(budgetOverview).map((w) => (
+                  <div key={w.key} className={w.over ? 'wf-stage-error' : 'wf-stage-notice'} role="note">
+                    <strong>{w.over ? 'Over budget:' : 'Budget:'}</strong> {w.text}{' '}
+                    <Link to="/usage">See usage</Link>
+                  </div>
+                ))}
                 {isGraphOrchestrated && !isCompleted && (
                   <div className="wf-autonomy-panel">
                     <div className="wf-autonomy-label-row">

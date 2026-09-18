@@ -2279,3 +2279,65 @@ finding and a CI gap found on the way.
   passes with a stub key and a wiped database and runs in ~4s instead of
   ~10s. Rule of thumb for this suite: it must pass with
   `OPENAI_API_KEY=test-openai-key` and no network.
+
+---
+
+## Cost tracking & budgets, per user and per project ✅ (2026-09-19)
+
+Asked for: track cost per project / per usage, and check when a user or a
+project runs over budget. Existing pieces: `AIUsageLog` (one row per LLM
+call: user/project/team/agent/model/tokens/cost), `/api/usage/*`, a project
+`monthly_budget_usd` with a one-time alert email. What was missing and is now
+built (migration `t7i6j5k4l3m2`, additive):
+
+- **Per-user budgets** (`user_budgets`; `GET/PUT /api/usage/me/budget`, set
+  on the Usage page's "My usage" tab). Counts all of that user's spend across
+  every project, including calls with no project.
+- **Budget status, not just an email.** `core/budget.py` -> `budget_state`:
+  none | ok | warning (>= 80%) | over, for the project and the user;
+  `GET /api/usage/budget-status?project_id=`. Alerts (project -> owner,
+  user -> that user): one email at 80% and one when over, each at most once
+  per calendar month per budget (a budget that jumps straight past its limit
+  gets only the "over" email); changing a budget re-arms them. Checked after
+  every usage write - including calls with no project - and can never raise
+  into the AI call that triggered it. Nothing is blocked (deliberate: a hard
+  stop mid-workflow is a confusing failure); Autopilot pauses for review once
+  the project OR the user is over.
+- **Cost per workflow run.** Each stage's `execute()` runs inside
+  `core/usage_context.usage_scope()` (a ContextVar), and `log_ai_usage` stamps
+  `workflow_instance_id` / `workflow_stage_id` on the row - no call-site
+  signatures changed. `GET /api/workflows/instances/<id>/usage` (total, by
+  stage, by agent); the run header shows "AI cost this run: $X". Only AI calls
+  made inside a stage are attributed to a run - calls a person makes on an
+  agent's own page count toward the user/project.
+- **Usage dashboard:** budget card with progress + "Nearing budget"/"Over
+  budget" badge (editable for your own), "By project" (incl. "No project") and
+  "By workflow run" tables; workflow screen shows 80%+/over banners for both
+  budgets, stating the Autopilot consequence.
+- **Non-token spend is in the same log.** The paid email lookup
+  (`/api/enrich-businesses-with-emails`, $0.20 per email found) now writes a
+  `provider=scrap_io` row via `log_external_usage`, attributed to the
+  project/workflow the panel sends - only if the caller can actually access
+  them (otherwise anyone could bill spend to someone else's project budget).
+- **Pricing fix:** cost lookup was an exact-name match, so dated model names
+  (`gpt-4o-mini-2024-07-18`, `gpt-4-turbo-preview`) silently fell back to the
+  default rate; now longest-prefix match. Costs remain *estimates* from a
+  static rate table, not provider invoices; unknown models still use a default
+  rate.
+- Fixed while here: `GET /api/email-extraction-usage` took `username` from the
+  query string (any user could read anyone's lookup quota); now the session.
+  Project budget setter rejects non-numeric/negative values (was a 500).
+- **Not built (say if wanted):** hard spend caps / blocking, team-level
+  budgets, budgets denominated per key source (own-key vs platform-key spend
+  are both counted), per-stage cost broken out in the UI beyond the tooltip.
+
+## Deploy & health follow-ups ✅ (2026-09-19)
+
+- `/ready` (DB + schema-at-head + Redis note); production container
+  healthchecks now use it; host nginx whitelist includes `ready`.
+- `scripts/deploy_remote.sh`: gated deploy with rollback (docs/deploy.md
+  "Method 0"); it also syncs the tracked nginx config so route-whitelist edits
+  ship with the code that needs them.
+- gunicorn `--preload` + `post_fork` pool dispose (`backend/gunicorn_conf.py`):
+  measured 1.15GiB -> 0.49GiB steady-state, 400/400 requests OK across 16
+  parallel connections, zero DB connection errors.

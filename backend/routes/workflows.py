@@ -566,6 +566,57 @@ def set_autonomy_mode(instance_id: str):
     return jsonify({"success": True, "instance": instance.to_dict()})
 
 
+@workflows_bp.route('/api/workflows/instances/<instance_id>/usage', methods=['GET'])
+@require_auth
+def get_instance_usage(instance_id: str):
+    """What this workflow run has cost so far: total, and broken down by
+    stage and by agent/model call. Attribution comes from
+    core/usage_context.py (run_stage wraps each stage's execute() in it),
+    so only AI calls made inside a stage count - calls a person makes on
+    the agent's own page are billed to the user/project, not the run."""
+    from sqlalchemy import func
+    from core.models import AIUsageLog
+
+    user_id = get_user_id()
+    instance = get_accessible_instance(instance_id, user_id) if user_id else None
+    if not instance:
+        return jsonify({"error": "Instance not found"}), 404
+
+    base = AIUsageLog.query.filter(AIUsageLog.workflow_instance_id == instance.instance_id)
+    total_cost, total_tokens, requests = base.with_entities(
+        func.coalesce(func.sum(AIUsageLog.estimated_cost_usd), 0.0),
+        func.coalesce(func.sum(AIUsageLog.total_tokens), 0),
+        func.count(AIUsageLog.id),
+    ).first()
+    by_stage = base.with_entities(
+        AIUsageLog.workflow_stage_id,
+        func.sum(AIUsageLog.estimated_cost_usd),
+        func.sum(AIUsageLog.total_tokens),
+        func.count(AIUsageLog.id),
+    ).group_by(AIUsageLog.workflow_stage_id).order_by(func.sum(AIUsageLog.estimated_cost_usd).desc()).all()
+    by_agent = base.with_entities(
+        AIUsageLog.agent,
+        func.sum(AIUsageLog.estimated_cost_usd),
+        func.count(AIUsageLog.id),
+    ).group_by(AIUsageLog.agent).order_by(func.sum(AIUsageLog.estimated_cost_usd).desc()).all()
+
+    return jsonify({
+        "success": True,
+        "instanceId": instance.instance_id,
+        "totalCostUsd": round(float(total_cost), 6),
+        "totalTokens": int(total_tokens),
+        "requestCount": int(requests),
+        "byStage": [
+            {"stageId": stage, "costUsd": round(float(cost), 6), "tokens": int(tokens or 0), "requestCount": int(count)}
+            for stage, cost, tokens, count in by_stage
+        ],
+        "byAgent": [
+            {"agent": agent, "costUsd": round(float(cost), 6), "requestCount": int(count)}
+            for agent, cost, count in by_agent
+        ],
+    })
+
+
 @workflows_bp.route('/api/workflows/instances/<instance_id>', methods=['DELETE'])
 @require_auth
 def delete_instance(instance_id: str):

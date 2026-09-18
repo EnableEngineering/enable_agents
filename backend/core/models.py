@@ -198,6 +198,8 @@ class Project(db.Model):
     # "YYYY-MM" of the last month a budget-exceeded alert was sent, so we
     # only email once per month even though usage is logged on every call.
     budget_alert_month = db.Column(db.String(7), nullable=True)
+    # Same, for the earlier "80% of budget used" warning (core/budget.py).
+    budget_warn_month = db.Column(db.String(7), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -396,11 +398,17 @@ class AIUsageLog(db.Model):
     completion_tokens = db.Column(db.Integer, nullable=False, default=0)
     total_tokens = db.Column(db.Integer, nullable=False, default=0)
     estimated_cost_usd = db.Column(db.Float, nullable=False, default=0.0)
+    # Set when the call happened inside a workflow stage (core/usage_context.py),
+    # so a workflow run's cost can be totalled and broken down by stage.
+    workflow_instance_id = db.Column(db.String(36), nullable=True, index=True)
+    workflow_stage_id = db.Column(db.String(100), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "userId": self.user_id,
+            "workflowInstanceId": self.workflow_instance_id,
+            "workflowStageId": self.workflow_stage_id,
             "projectId": self.project_id,
             "teamId": self.team_id,
             "agent": self.agent,
@@ -413,3 +421,17 @@ class AIUsageLog(db.Model):
             "estimatedCostUsd": round(self.estimated_cost_usd, 6),
             "createdAt": self.created_at.isoformat() if self.created_at else None,
         }
+
+
+class UserBudget(db.Model):
+    """A user's own monthly spend limit across every project and agent -
+    the per-user counterpart of Project.monthly_budget_usd (core/budget.py
+    evaluates both). One row per user; no row = no budget."""
+    __tablename__ = "user_budgets"
+
+    user_id = db.Column(db.String(255), primary_key=True)
+    monthly_budget_usd = db.Column(db.Float, nullable=True)
+    # "YYYY-MM" of the last month each alert was sent (once per month each).
+    warn_month = db.Column(db.String(7), nullable=True)
+    over_month = db.Column(db.String(7), nullable=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

@@ -100,8 +100,23 @@ _COST_PER_1K_TOKENS: Dict[str, Dict[str, float]] = {
 _DEFAULT_COST_PER_1K = {"prompt": 0.005, "completion": 0.015}  # unknown-model fallback
 
 
+def _rates_for(model: str) -> Dict[str, float]:
+    """Exact match, else the longest known model name that `model` starts
+    with. Providers report dated snapshots ("gpt-4o-mini-2024-07-18",
+    "gpt-4-turbo-preview") that an exact lookup missed, silently pricing
+    them at the unknown-model default - the wrong rate, and for cheap models
+    off by 20x+. Longest prefix wins so "gpt-4o-..." doesn't match "gpt-4"."""
+    name = (model or "").lower()
+    if name in _COST_PER_1K_TOKENS:
+        return _COST_PER_1K_TOKENS[name]
+    matches = [known for known in _COST_PER_1K_TOKENS if name.startswith(known)]
+    if matches:
+        return _COST_PER_1K_TOKENS[max(matches, key=len)]
+    return _DEFAULT_COST_PER_1K
+
+
 def estimate_cost_usd(model: str, prompt_tokens: int, completion_tokens: int) -> float:
-    rates = _COST_PER_1K_TOKENS.get(model, _DEFAULT_COST_PER_1K)
+    rates = _rates_for(model)
     return (prompt_tokens / 1000) * rates["prompt"] + (completion_tokens / 1000) * rates["completion"]
 
 
@@ -187,9 +202,53 @@ def log_ai_usage(
     completion_tokens: int,
     key_source: str,
 ) -> None:
+    _write_usage_row(
+        user_id=user_id, project_id=project_id, agent=agent, provider=provider, model=model,
+        key_source=key_source, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,
+        cost_usd=estimate_cost_usd(model, prompt_tokens, completion_tokens),
+    )
+
+
+def log_external_usage(
+    user_id: str,
+    project_id: Optional[str],
+    agent: str,
+    provider: str,
+    model: str,
+    cost_usd: float,
+    workflow_instance_id: Optional[str] = None,
+    workflow_stage_id: Optional[str] = None,
+) -> None:
+    """Record spend that isn't LLM tokens (e.g. the paid email lookup) in
+    the same log, so it counts toward per-project / per-user / per-workflow
+    totals and budgets like everything else. Zero-cost calls are skipped."""
+    if not cost_usd or cost_usd <= 0:
+        return
+    _write_usage_row(
+        user_id=user_id, project_id=project_id, agent=agent, provider=provider, model=model,
+        key_source="platform", prompt_tokens=0, completion_tokens=0, cost_usd=float(cost_usd),
+        workflow_instance_id=workflow_instance_id, workflow_stage_id=workflow_stage_id,
+    )
+
+
+def _write_usage_row(
+    user_id: str,
+    project_id: Optional[str],
+    agent: str,
+    provider: str,
+    model: str,
+    key_source: str,
+    prompt_tokens: int,
+    completion_tokens: int,
+    cost_usd: float,
+    workflow_instance_id: Optional[str] = None,
+    workflow_stage_id: Optional[str] = None,
+) -> None:
     from core.database import db
     from core.models import AIUsageLog
+    from core.usage_context import current_scope
 
+    scope = current_scope()
     entry = AIUsageLog(
         user_id=user_id or "unknown",
         project_id=project_id,
@@ -201,14 +260,17 @@ def log_ai_usage(
         prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens,
         total_tokens=prompt_tokens + completion_tokens,
-        estimated_cost_usd=estimate_cost_usd(model, prompt_tokens, completion_tokens),
+        estimated_cost_usd=cost_usd,
+        workflow_instance_id=workflow_instance_id or scope.get("workflow_instance_id"),
+        workflow_stage_id=workflow_stage_id or scope.get("workflow_stage_id"),
     )
     db.session.add(entry)
     db.session.commit()
 
-    if project_id:
-        from core.budget import check_and_maybe_alert_budget
-        check_and_maybe_alert_budget(project_id)
+    # Checked for the user too (not only when a project is set): plenty of
+    # calls carry no project, and a per-user budget has to see those.
+    from core.budget import check_and_maybe_alert_budget
+    check_and_maybe_alert_budget(project_id, user_id)
 
 
 class NoApiKeyConfigured(RuntimeError):

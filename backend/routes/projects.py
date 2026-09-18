@@ -119,8 +119,15 @@ def update_project(project_id):
         if not user_can_manage_project_settings(g.user_id, project_id):
             return jsonify({'error': 'Only the project owner or a team admin can change the budget'}), 403
         value = data['monthlyBudgetUsd']
-        project.monthly_budget_usd = float(value) if value not in (None, '') else None
+        try:
+            budget = float(value) if value not in (None, '') else None
+        except (TypeError, ValueError):
+            return jsonify({'error': 'monthlyBudgetUsd must be a number'}), 400
+        if budget is not None and budget < 0:
+            return jsonify({'error': 'monthlyBudgetUsd must be zero or more'}), 400
+        project.monthly_budget_usd = budget
         project.budget_alert_month = None  # reset so a new/raised budget can alert again if crossed
+        project.budget_warn_month = None
 
     project.updated_at = datetime.utcnow()
     db.session.commit()

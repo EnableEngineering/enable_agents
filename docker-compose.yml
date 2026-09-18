@@ -192,6 +192,7 @@ services:
     container_name: enable_agents_backend
     command: >
       gunicorn "app:app" --bind 0.0.0.0:8000 --workers 4 --timeout 120
+      --preload -c /app/gunicorn_conf.py
       --access-logfile - --error-logfile - --log-level info --capture-output
     env_file:
       - .env.docker
@@ -227,7 +228,9 @@ services:
           "5",
           "--max-time",
           "15",
-          "http://127.0.0.1:8000/health",
+          # /ready, not /health: "healthy" must mean the database answers and is
+          # migrated to this build's revision, not just "process is up".
+          "http://127.0.0.1:8000/ready",
         ]
       interval: 15s
       timeout: 20s
@@ -323,6 +326,7 @@ services:
     container_name: enable_agents_backend_remote
     command: >
       gunicorn "app:app" --bind 0.0.0.0:8000 --workers 4 --timeout 120
+      --preload -c /app/gunicorn_conf.py
       --access-logfile - --error-logfile - --log-level info --capture-output
     env_file:
       - .env.docker
@@ -359,7 +363,9 @@ services:
           "5",
           "--max-time",
           "15",
-          "http://127.0.0.1:8000/health",
+          # /ready, not /health: "healthy" must mean the database answers and is
+          # migrated to this build's revision, not just "process is up".
+          "http://127.0.0.1:8000/ready",
         ]
       interval: 15s
       timeout: 20s

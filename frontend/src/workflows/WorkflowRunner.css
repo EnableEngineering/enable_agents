@@ -1579,3 +1579,17 @@ a.wf-btn {
   color: var(--color-text-muted);
   line-height: 1.45;
 }
+
+/* Running AI cost of this workflow run, beside the status pill. */
+.wf-run-cost {
+  margin-left: auto;
+  margin-right: var(--space-3);
+  font-size: var(--text-caption);
+  color: var(--color-text-muted);
+  align-self: center;
+  white-space: nowrap;
+}
+
+.wf-run-cost strong {
+  color: var(--color-text);
+}

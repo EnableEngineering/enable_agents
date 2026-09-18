@@ -243,6 +243,66 @@
   background: var(--color-error, var(--color-error));
 }
 
+.usage-breakdown-bar-fill.warn {
+  background: var(--color-warning);
+}
+
+.status-badge.warning {
+  background: var(--color-warning-bg);
+  color: var(--color-accent-dark);
+}
+
+.usage-budget-edit {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+}
+
+.usage-budget-edit label {
+  display: block;
+  font-size: var(--text-caption);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  margin-bottom: 6px;
+}
+
+.usage-budget-edit-row {
+  display: flex;
+  gap: 8px;
+  max-width: 320px;
+}
+
+.usage-budget-edit-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-body);
+}
+
+.usage-budget-save {
+  padding: 8px 16px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.usage-budget-save:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.usage-budget-hint {
+  margin: 8px 0 0;
+  font-size: var(--text-caption);
+  color: var(--color-text-muted);
+  line-height: 1.45;
+}
+
 /* Responsive */
 @media (max-width: 640px) {
   .usage-container {

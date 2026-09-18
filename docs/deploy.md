@@ -95,6 +95,40 @@ curl -I http://agents.enableyou.co/
 
 ## Deployment Methods
 
+### Method 0 (recommended): `scripts/deploy_remote.sh`
+
+One command from your machine that does everything in Method 1 correctly, plus
+a readiness gate and automatic rollback:
+
+```bash
+git push origin local-preview     # the VM deploys origin/local-preview
+./scripts/deploy_remote.sh
+```
+
+It fast-forwards the VM, tags the running images `:previous`, stops celery
+(RAM), builds all four images, runs `flask db upgrade` against the new image,
+starts the new backend + celery and **waits for `/ready`** - database reachable
+AND schema at this build's alembic head. If it isn't ready in
+`DEPLOY_READY_TIMEOUT` (default 300s) it re-tags `:previous`, restarts the old
+build and exits 1. Only after the gate passes does it swap the frontend static
+files and sync the tracked host nginx config (`nginx -t` first; the previous
+config is restored if it's rejected).
+
+- **Migrations must be additive/backward compatible.** They run *before* the
+  cut-over, so if the new build is rolled back the old code has to keep working
+  against the already-migrated database. (Adding tables/nullable columns is
+  fine; dropping or renaming something the old code reads is not - do that in
+  two deploys.)
+- **What it can't do:** there is one backend container on one 4GB VM, so the
+  seconds while the new one starts are still a gap. `--preload` (see
+  `backend/gunicorn_conf.py`; the workers share one import instead of four
+  parallel ones) roughly halves steady-state backend memory (measured
+  1.15GiB -> 0.49GiB) and shortens that gap. The gate makes a *bad* build safe;
+  true zero-downtime needs a second backend instance, i.e. a bigger VM.
+- `/health` = process is alive (cheap, what load balancers poll). `/ready` =
+  can actually serve (DB + migrated schema; Redis reported but not fatal).
+  The production container healthchecks use `/ready`.
+
 ### Method 1: Build on VM (Simple)
 
 SSH into VM and rebuild containers:

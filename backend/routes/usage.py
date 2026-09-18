@@ -22,7 +22,8 @@ def _since(days: int) -> datetime:
     return datetime.utcnow() - timedelta(days=max(1, min(days, 365)))
 
 
-def _summarize(base_query, group_by_user: bool = False) -> dict:
+def _summarize(base_query, group_by_user: bool = False, group_by_project: bool = False,
+               group_by_workflow: bool = False) -> dict:
     """Aggregates an AIUsageLog query into totals + breakdowns by agent,
     model, day, and (optionally) user - all via SQL GROUP BY rather than
     pulling every row into Python."""
@@ -86,6 +87,47 @@ def _summarize(base_query, group_by_user: bool = False) -> dict:
             for user_id, tokens, cost, count in by_user
         ]
 
+    if group_by_project:
+        from core.models import Project
+
+        rows = base_query.filter(AIUsageLog.project_id.isnot(None)).with_entities(
+            AIUsageLog.project_id,
+            func.sum(AIUsageLog.total_tokens),
+            func.sum(AIUsageLog.estimated_cost_usd),
+            func.count(AIUsageLog.id),
+        ).group_by(AIUsageLog.project_id).order_by(func.sum(AIUsageLog.estimated_cost_usd).desc()).all()
+        names = {p.project_id: p.name for p in Project.query.filter(
+            Project.project_id.in_([r[0] for r in rows])).all()} if rows else {}
+        result['byProject'] = [
+            {'projectId': pid, 'name': names.get(pid, pid), 'tokens': int(tokens or 0),
+             'costUsd': round(float(cost), 6), 'requestCount': int(count)}
+            for pid, tokens, cost, count in rows
+        ]
+        # Spend logged with no project at all still counts toward the user's
+        # total - show it as its own line so the table adds up.
+        unassigned = base_query.filter(AIUsageLog.project_id.is_(None)).with_entities(
+            func.coalesce(func.sum(AIUsageLog.estimated_cost_usd), 0.0), func.count(AIUsageLog.id)).first()
+        if unassigned and unassigned[1]:
+            result['byProject'].append({'projectId': None, 'name': 'No project', 'tokens': 0,
+                                        'costUsd': round(float(unassigned[0]), 6), 'requestCount': int(unassigned[1])})
+
+    if group_by_workflow:
+        from models.workflow import WorkflowInstance
+
+        rows = base_query.filter(AIUsageLog.workflow_instance_id.isnot(None)).with_entities(
+            AIUsageLog.workflow_instance_id,
+            func.sum(AIUsageLog.total_tokens),
+            func.sum(AIUsageLog.estimated_cost_usd),
+            func.count(AIUsageLog.id),
+        ).group_by(AIUsageLog.workflow_instance_id).order_by(func.sum(AIUsageLog.estimated_cost_usd).desc()).limit(25).all()
+        names = {i.instance_id: i.name for i in WorkflowInstance.query.filter(
+            WorkflowInstance.instance_id.in_([r[0] for r in rows])).all()} if rows else {}
+        result['byWorkflow'] = [
+            {'instanceId': iid, 'name': names.get(iid, 'Deleted workflow'), 'tokens': int(tokens or 0),
+             'costUsd': round(float(cost), 6), 'requestCount': int(count)}
+            for iid, tokens, cost, count in rows
+        ]
+
     return result
 
 
@@ -98,7 +140,14 @@ def get_my_usage():
         AIUsageLog.user_id == g.user_id,
         AIUsageLog.created_at >= _since(days),
     )
-    return jsonify({'success': True, 'days': days, 'usage': _summarize(query)})
+    from core.budget import user_budget_status
+
+    return jsonify({
+        'success': True,
+        'days': days,
+        'usage': _summarize(query, group_by_project=True, group_by_workflow=True),
+        'budget': user_budget_status(g.user_id),
+    })
 
 
 @usage_bp.route('/api/projects/<project_id>/usage', methods=['GET'])
@@ -117,16 +166,17 @@ def get_project_usage(project_id):
         AIUsageLog.created_at >= _since(days),
     )
 
-    from core.budget import _current_month_spend_usd
+    from core.budget import _current_month_spend_usd, project_budget_status
     from core.models import Project
     project = Project.query.filter_by(project_id=project_id).first()
 
     return jsonify({
         'success': True,
         'days': days,
-        'usage': _summarize(query, group_by_user=True),
+        'usage': _summarize(query, group_by_user=True, group_by_workflow=True),
         'monthlyBudgetUsd': project.monthly_budget_usd if project else None,
         'currentMonthSpendUsd': round(_current_month_spend_usd(project_id), 6) if project else None,
+        'budget': project_budget_status(project_id),
     })
 
 
@@ -148,3 +198,40 @@ def get_team_usage():
         AIUsageLog.created_at >= _since(days),
     )
     return jsonify({'success': True, 'days': days, 'usage': _summarize(query, group_by_user=True)})
+
+
+@usage_bp.route('/api/usage/budget-status', methods=['GET'])
+@require_auth
+def get_budget_status():
+    """Where the current user (and, with ?project_id=, that project) stands
+    against their monthly budgets: spend, limit, percent used and a state of
+    none | ok | warning | over. Cheap enough for screens to poll."""
+    from core.budget import budget_overview
+
+    project_id = request.args.get('project_id') or None
+    if project_id and not user_can_access_project(g.user_id, project_id):
+        return jsonify({'error': 'Project not found'}), 404
+    return jsonify({'success': True, **budget_overview(g.user_id, project_id)})
+
+
+@usage_bp.route('/api/usage/me/budget', methods=['GET', 'PUT'])
+@require_auth
+def my_budget():
+    """The current user's own monthly AI budget (across every project).
+    PUT { monthlyBudgetUsd: number | null } sets it, or removes it with null."""
+    from core.budget import get_user_budget, set_user_budget, user_budget_status
+
+    if request.method == 'PUT':
+        data = request.get_json(silent=True) or {}
+        raw = data.get('monthlyBudgetUsd')
+        try:
+            value = float(raw) if raw not in (None, '') else None
+            set_user_budget(g.user_id, value)
+        except (TypeError, ValueError):
+            return jsonify({'error': 'monthlyBudgetUsd must be a number of zero or more, or null'}), 400
+
+    return jsonify({
+        'success': True,
+        'monthlyBudgetUsd': get_user_budget(g.user_id),
+        'budget': user_budget_status(g.user_id),
+    })
