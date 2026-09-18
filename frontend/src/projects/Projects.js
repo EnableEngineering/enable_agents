@@ -361,6 +361,29 @@ function Projects() {
     }
   };
 
+  const handleSetEnforcement = async (enforcement) => {
+    setSavingBudget(true);
+    try {
+      const res = await fetch(`${API_URL}/api/projects/${settingsProject.id}`, {
+        method: 'PUT',
+        headers: authJsonHeaders(),
+        body: JSON.stringify({ budgetEnforcement: enforcement }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast(enforcement === 'block' ? 'AI requests will be blocked once the budget is used up' : 'Budget is now alert-only', 'success');
+        setSettingsProject(data.project);
+        fetchProjects();
+      } else {
+        showToast(data.error || 'Failed to save budget setting', 'error');
+      }
+    } catch {
+      showToast('Failed to save budget setting', 'error');
+    } finally {
+      setSavingBudget(false);
+    }
+  };
+
   const Icon = ({ name }) => {
     const I = Icons[name];
     return I ? <I /> : null;
@@ -617,8 +640,25 @@ function Projects() {
                       </p>
                     )}
                     <p className="field-hint">
-                      Informational only - AI actions are never blocked. The project owner gets a single email the first time spend crosses this in a calendar month.
+                      The project owner gets an email at 80% and again the first time spend crosses this in a calendar month, and Autopilot workflows pause once it's used up.
                     </p>
+                    {settingsProject.monthlyBudgetUsd != null && (
+                      <label className="project-budget-enforce" htmlFor="project-budget-block">
+                        <input
+                          id="project-budget-block"
+                          type="checkbox"
+                          checked={settingsProject.budgetEnforcement === 'block'}
+                          disabled={!canManageSettings || savingBudget}
+                          onChange={(e) => handleSetEnforcement(e.target.checked ? 'block' : 'alert')}
+                        />
+                        <span>
+                          <strong>Block AI requests once this budget is used up</strong>
+                          <span className="field-hint">
+                            Off: only warnings. On: every member's AI actions in this project stop with a clear message until the budget is raised or the month rolls over.
+                          </span>
+                        </span>
+                      </label>
+                    )}
                   </div>
 
                   {AI_KEY_FIELDS.map(field => {

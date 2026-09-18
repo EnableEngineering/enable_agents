@@ -21,6 +21,22 @@ let expiryHandled = false;
 let lastNetworkErrorToastAt = 0;
 const NETWORK_ERROR_TOAST_COOLDOWN_MS = 8000; // several requests failing together (e.g. a dashboard's parallel fetches) should surface as one toast, not a stack of identical ones
 
+let lastBudgetToast = { message: '', at: 0 };
+const BUDGET_TOAST_COOLDOWN_MS = 6000;
+
+// The backend answers a blocked AI call with 402 { code: 'budget_exceeded',
+// error: '<which budget, and how to lift it>' } (backend/core/budget.py). Most
+// call sites just show "failed", which would leave the person guessing, so the
+// reason is surfaced once here, app-wide, without touching the caller's own
+// handling of the response.
+function notifyBudgetExceeded(body) {
+  if (body?.code !== 'budget_exceeded' || !body.error) return;
+  const now = Date.now();
+  if (lastBudgetToast.message === body.error && now - lastBudgetToast.at < BUDGET_TOAST_COOLDOWN_MS) return;
+  lastBudgetToast = { message: body.error, at: now };
+  showToast(body.error, 'warning', 9000);
+}
+
 function isAuthEndpoint(url) {
   return /\/(login|register)(\?|$)/.test(url || '');
 }
@@ -64,6 +80,8 @@ export function installSessionExpiryHandler() {
     if (response.status === 401) {
       const url = typeof args[0] === 'string' ? args[0] : args[0]?.url;
       if (!isAuthEndpoint(url)) handleExpiredSession();
+    } else if (response.status === 402) {
+      response.clone().json().then(notifyBudgetExceeded).catch(() => {});
     }
     return response;
   };
@@ -73,6 +91,8 @@ export function installSessionExpiryHandler() {
     (error) => {
       if (error?.response?.status === 401 && !isAuthEndpoint(error.config?.url)) {
         handleExpiredSession();
+      } else if (error?.response?.status === 402) {
+        notifyBudgetExceeded(error.response.data);
       } else if (!error?.response) {
         // Axios has no `response` at all for a network-level failure
         // (as opposed to a real HTTP error status).

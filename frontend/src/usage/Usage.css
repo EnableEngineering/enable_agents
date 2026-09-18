@@ -252,6 +252,11 @@
   color: var(--color-accent-dark);
 }
 
+.status-badge.error {
+  background: var(--color-error-bg);
+  color: var(--color-error);
+}
+
 .usage-budget-edit {
   margin-top: 16px;
   padding-top: 12px;
@@ -301,6 +306,40 @@
   font-size: var(--text-caption);
   color: var(--color-text-muted);
   line-height: 1.45;
+}
+
+.usage-budget-edit .usage-budget-enforce {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 14px 0 0;
+  font-weight: 400;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+/* App.css gives every input width:100% and padding - undo that for the checkbox. */
+.usage-budget-enforce input {
+  width: auto;
+  flex: none;
+  margin: 3px 0 0;
+  padding: 0;
+}
+
+.usage-budget-enforce > span {
+  flex: 1;
+  min-width: 0;
+}
+
+.usage-budget-enforce strong {
+  display: block;
+  font-size: var(--text-body);
+  font-weight: 600;
+}
+
+.usage-budget-enforce .usage-budget-hint {
+  display: block;
+  margin-top: 2px;
 }
 
 /* Responsive */

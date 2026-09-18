@@ -2300,9 +2300,9 @@ built (migration `t7i6j5k4l3m2`, additive):
   per calendar month per budget (a budget that jumps straight past its limit
   gets only the "over" email); changing a budget re-arms them. Checked after
   every usage write - including calls with no project - and can never raise
-  into the AI call that triggered it. Nothing is blocked (deliberate: a hard
-  stop mid-workflow is a confusing failure); Autopilot pauses for review once
-  the project OR the user is over.
+  into the AI call that triggered it. Alert-only by default; a budget can opt
+  in to blocking (see "Hard spend caps, team budgets, per-stage cost" below).
+  Autopilot pauses for review once the project, the user OR the team is over.
 - **Cost per workflow run.** Each stage's `execute()` runs inside
   `core/usage_context.usage_scope()` (a ContextVar), and `log_ai_usage` stamps
   `workflow_instance_id` / `workflow_stage_id` on the row - no call-site
@@ -2338,9 +2338,9 @@ built (migration `t7i6j5k4l3m2`, additive):
 - Fixed while here: `GET /api/email-extraction-usage` took `username` from the
   query string (any user could read anyone's lookup quota); now the session.
   Project budget setter rejects non-numeric/negative values (was a 500).
-- **Not built (say if wanted):** hard spend caps / blocking, team-level
-  budgets, budgets denominated per key source (own-key vs platform-key spend
-  are both counted), per-stage cost broken out in the UI beyond the tooltip.
+- **Not built (say if wanted):** budgets denominated per key source (own-key
+  vs platform-key spend are both counted). (Hard caps, team budgets and the
+  per-stage cost UI were built the same day - next section.)
 
 ## Deploy & health follow-ups ✅ (2026-09-19)
 
@@ -2352,3 +2352,55 @@ built (migration `t7i6j5k4l3m2`, additive):
 - gunicorn `--preload` + `post_fork` pool dispose (`backend/gunicorn_conf.py`):
   measured 1.15GiB -> 0.49GiB steady-state, 400/400 requests OK across 16
   parallel connections, zero DB connection errors.
+
+## Hard spend caps, team budgets, per-stage cost ✅ (2026-09-19)
+
+- **Hard caps (opt-in, per budget).** Every budget - user (`UserBudget`),
+  project, team - has `enforcement`: `alert` (default; warn/email only) or
+  `block`. `core/budget.py::enforce_budget(user_id, project_id)` raises
+  `BudgetExceeded` when a covering budget set to `block` is used up
+  (`spend >= limit`, so a $0 block budget blocks everything). Called from
+  `core/ai_client.py`'s three chokepoints (`ai_chat_completion`,
+  `ai_embeddings`, `get_langchain_llm` via `enforce_budget_for_call`, which
+  resolves the project exactly as spend is attributed: explicit -> workflow
+  scope -> `X-Project-Id`), from the paid email-enrichment route, and before
+  the LangChain embeddings in `process_documents_with_kg_rag` (the one side
+  door that skips `ai_client`). No spend query at all unless a covering budget
+  is set to `block`; it **fails open** - a broken budget lookup never takes AI
+  features down.
+- **What the user sees.** HTTP 402 `{code: "budget_exceeded", scope, error,
+  budget}`; the message names the budget and how to lift it. An `after_request`
+  hook turns routes' own `except Exception -> 500` into that 402 too. The
+  global fetch/axios wrapper (`core/sessionExpiry.js`) toasts the reason once.
+  A workflow stage that hits it re-pauses with the message as its error (Autopilot
+  already stops on errors), so nothing is silently skipped. Toggles: Usage page
+  (My usage / Team tabs) and project AI settings; alert emails say when a
+  budget is blocking.
+- **Team budgets.** `Team.monthly_budget_usd/budget_enforcement/...`;
+  `GET/PUT /api/team/budget` (any member reads - it can block them; only
+  owner/admin writes). Team spend = everyone on the team plus the team's
+  projects (matched by `team_id` OR member, so older rows without `team_id`
+  count); usage rows now fall back to the user's team. Alerts go to the team
+  owner; `budget_overview` / `is_over_budget` / Autopilot's pause include the
+  team. Editable on Usage -> Team (owner/admin).
+- **Per-stage cost.** Stage rows show `$ - N AI requests`; the stage detail
+  view has an "AI cost" section (share of the run + a per-agent/model table,
+  from `byStageCall` on `/api/workflows/instances/<id>/usage`).
+- **Real gap found and fixed by the browser test:** helpers such as
+  `get_embeddings_batch` call `ai_embeddings(user_id=None)`, and inside a
+  Celery task there is no request to fall back on - so those calls were logged
+  under user `"unknown"` (invisible to the user's budget) and would have
+  slipped past a block. `usage_scope` now carries the run's `user_id`, and
+  `_current_user_id` falls back to it.
+- Also fixed: the "Over budget" badge on the Usage page rendered green (no
+  `.status-badge.error` rule); Usage tabs flashed the previous tab's numbers
+  under the new title for one frame.
+- Migration `u8j7k6l5m4n3` (additive columns only; safe to roll back code
+  over). 24 new tests (`test_budget_enforcement.py`); suite 146 integration +
+  9 sanity.
+- **Known limits:** LangChain `OpenAIEmbeddings` calls are not usage-logged
+  (cheap) though their entry points are enforced; code that wraps AI calls in
+  its own `except Exception` and degrades (e.g. the optional LLM refinement in
+  `score_leads_core`) will quietly degrade instead of failing when blocked; a
+  block is checked before each call, so one in-flight call can overshoot the
+  limit by its own cost.

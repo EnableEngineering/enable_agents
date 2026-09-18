@@ -159,7 +159,8 @@ def _autopilot_over_budget(state: WorkflowGraphState) -> bool:
     from core.budget import is_over_budget
 
     # The project's monthly budget OR the user's own - either being used up
-    # is a reason for a human to look before autopilot spends more.
+    # is a reason for a human to look before autopilot spends more (the
+    # team's budget too - is_over_budget covers all three).
     return is_over_budget(state.get("user_id"), state.get("project_id"))
 
 
@@ -246,7 +247,7 @@ def run_stage(
             # Any AI call this stage makes is logged against this workflow
             # run + stage (core/usage_context.py) - that's what makes a
             # run's cost, and its per-stage breakdown, computable.
-            with usage_scope(state["instance_id"], stage_id, state.get("project_id")):
+            with usage_scope(state["instance_id"], stage_id, state.get("project_id"), user_id=state.get("user_id")):
                 output = execute(state, final_input)
             break
         except Exception as exc:

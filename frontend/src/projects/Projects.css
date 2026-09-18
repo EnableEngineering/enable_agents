@@ -547,3 +547,35 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Scoped under .projects-page .field so these beat that block's label/input rules. */
+.projects-page .field .project-budget-enforce {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 12px 0 0;
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.projects-page .field .project-budget-enforce input {
+  width: auto;
+  flex: none;
+  margin: 3px 0 0;
+  padding: 0;
+}
+
+.projects-page .field .project-budget-enforce > span {
+  flex: 1;
+  min-width: 0;
+}
+
+.projects-page .field .project-budget-enforce strong {
+  display: block;
+  font-weight: 600;
+}
+
+.projects-page .field .project-budget-enforce .field-hint {
+  display: block;
+  margin-top: 2px;
+}

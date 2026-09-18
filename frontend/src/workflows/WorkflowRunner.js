@@ -127,19 +127,32 @@ const formatUsd = (value) => {
   return n > 0 && n < 0.01 ? `$${n.toFixed(4)}` : `$${n.toFixed(2)}`;
 };
 
-// One line per budget (yours / this project's) that's at 80%+ - see
-// core/budget.py. Empty when everything is comfortably under budget.
+// One line per budget (yours / this project's / your team's) that's at 80%+ -
+// see core/budget.py. Empty when everything is comfortably under budget. A
+// budget set to "block" that is used up says so: AI stages will fail with the
+// reason until it's raised, not just pause Autopilot.
 const budgetWarnings = (overview) => {
   if (!overview) return [];
-  return [['Your', overview.user], ['This project\'s', overview.project]]
+  return [['Your', overview.user], ['This project\'s', overview.project], ['Your team\'s', overview.team]]
     .filter(([, b]) => b && (b.state === 'warning' || b.state === 'over'))
     .map(([who, b]) => ({
       key: who,
       over: b.state === 'over',
-      text: b.state === 'over'
-        ? `${who} monthly AI budget is used up (${formatUsd(b.spendUsd)} of ${formatUsd(b.limitUsd)}). Nothing is blocked, but Autopilot will pause for your review before each stage.`
-        : `${who} monthly AI budget is ${Math.round(b.percentUsed)}% used (${formatUsd(b.spendUsd)} of ${formatUsd(b.limitUsd)}).`,
+      text: b.blocking
+        ? `${who} monthly AI budget is used up (${formatUsd(b.spendUsd)} of ${formatUsd(b.limitUsd)}) and is set to block AI requests, so stages that use AI will stop with an error until it is raised or the month rolls over.`
+        : b.state === 'over'
+          ? `${who} monthly AI budget is used up (${formatUsd(b.spendUsd)} of ${formatUsd(b.limitUsd)}). Nothing is blocked, but Autopilot will pause for your review before each stage.`
+          : `${who} monthly AI budget is ${Math.round(b.percentUsed)}% used (${formatUsd(b.spendUsd)} of ${formatUsd(b.limitUsd)})${b.enforcement === 'block' ? ' and set to block AI requests once it is used up' : ''}.`,
     }));
+};
+
+// stageId -> { costUsd, requestCount } from the run-usage response.
+const stageCostMap = (runCost) => {
+  const map = {};
+  (runCost?.byStage || []).forEach((row) => {
+    if (row.stageId) map[row.stageId] = row;
+  });
+  return map;
 };
 
 // Renders any stage/context value as readable text - agent outputs aren't
@@ -300,6 +313,7 @@ function WorkflowRunner() {
   const [showAutonomyInfo, setShowAutonomyInfo] = useState(false);
   const [enrichUsage, setEnrichUsage] = useState(null);
   const [runCost, setRunCost] = useState(null);
+  const stageCosts = React.useMemo(() => stageCostMap(runCost), [runCost]);
   const [budgetOverview, setBudgetOverview] = useState(null);
   const [enriching, setEnriching] = useState(false);
 
@@ -892,6 +906,12 @@ function WorkflowRunner() {
                           <img src={getAgentIcon(stage.agent)} alt="" />
                           <span>{getAgentLabel(stage.agent)}</span>
                         </div>
+                        {stageCosts[stage.id]?.costUsd > 0 && (
+                          <div className="wf-stage-cost" title="AI cost of this stage - select the stage for the breakdown">
+                            {formatUsd(stageCosts[stage.id].costUsd)}
+                            <span> · {stageCosts[stage.id].requestCount} AI request{stageCosts[stage.id].requestCount === 1 ? '' : 's'}</span>
+                          </div>
+                        )}
                         {isStageCompleted && state.outcome === 'skipped' && (
                           <div className="wf-stage-skipped-note">
                             Skipped{state.data?.reason && state.data.reason !== 'paused' ? ` - ${state.data.reason}` : state.data?.reason === 'paused' ? ' - workflow was paused' : ''}
@@ -1205,6 +1225,7 @@ function WorkflowRunner() {
                 stage={selectedStage}
                 stageState={stageStates[selectedStage.id]}
                 instance={instance}
+                runCost={runCost}
                 onBack={() => setSelectedStage(null)}
                 onTasksChange={fetchAllTasks}
               />
@@ -1292,7 +1313,44 @@ function RepeatableRowsField({ columns, rows, onChange }) {
 }
 
 /* Stage Detail View - Shows inputs, outputs, tasks, and agent info */
-function StageDetailView({ stage, stageState, instance, onBack, onTasksChange }) {
+// What this stage cost, and which AI calls made up that cost. Comes from the
+// run-usage endpoint (byStage / byStageCall); a stage that hasn't run yet, or
+// only does non-AI work, has nothing to show and the section stays out of the way.
+function StageCostSection({ stageId, runCost }) {
+  const total = stageCostMap(runCost)[stageId];
+  if (!total || !(total.costUsd > 0)) return null;
+  const calls = (runCost.byStageCall || []).filter((c) => c.stageId === stageId);
+  const share = runCost.totalCostUsd > 0 ? Math.round((total.costUsd / runCost.totalCostUsd) * 100) : 0;
+  return (
+    <div className="wf-detail-section wf-cost-section">
+      <h3>AI cost</h3>
+      <p className="wf-cost-summary">
+        <strong>{formatUsd(total.costUsd)}</strong> across {total.requestCount} AI request{total.requestCount === 1 ? '' : 's'}
+        {runCost.totalCostUsd > 0 && <> - {share}% of this run's {formatUsd(runCost.totalCostUsd)}</>}
+      </p>
+      {calls.length > 0 && (
+        <table className="wf-cost-table">
+          <thead>
+            <tr><th>Agent</th><th>Model</th><th>Requests</th><th>Tokens</th><th>Cost</th></tr>
+          </thead>
+          <tbody>
+            {calls.map((c) => (
+              <tr key={`${c.agent}-${c.model}`}>
+                <td>{c.agent}</td>
+                <td>{c.model}</td>
+                <td>{c.requestCount}</td>
+                <td>{c.tokens.toLocaleString()}</td>
+                <td>{formatUsd(c.costUsd)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+function StageDetailView({ stage, stageState, instance, runCost, onBack, onTasksChange }) {
   const [tasks, setTasks] = useState([]);
   const [taskStats, setTaskStats] = useState({ total: 0, done: 0, required_pending: 0, can_complete: true });
   const [loadingTasks, setLoadingTasks] = useState(true);
@@ -1519,6 +1577,8 @@ function StageDetailView({ stage, stageState, instance, onBack, onTasksChange })
           </div>
         </div>
       )}
+
+      <StageCostSection stageId={stage.id} runCost={runCost} />
 
       {/* Tasks Section */}
       <div className="wf-detail-section wf-tasks-section">

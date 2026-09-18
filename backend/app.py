@@ -1,4 +1,5 @@
 ﻿from flask import Flask, request, jsonify, redirect, g
+from core.budget import BudgetExceeded
 import requests
 import sqlite3
 import shutil
@@ -245,6 +246,25 @@ for _o in _cors_origins:
         _seen_cors.add(_o)
         CORS_ORIGINS.append(_o)
 CORS(app, origins=CORS_ORIGINS, supports_credentials=False)
+
+
+@app.after_request
+def _budget_exceeded_as_402(response):
+    """A blocked AI call (core.budget.BudgetExceeded) is a 402 with a
+    message naming the budget - even when the route caught the exception
+    itself and answered with a generic 4xx/5xx. Registered after CORS, so
+    flask-cors still decorates the replacement response."""
+    exc = getattr(g, "budget_exceeded", None)
+    if exc is not None and response.status_code >= 400 and response.status_code != 402:
+        replacement = jsonify(exc.to_dict())
+        replacement.status_code = 402
+        return replacement
+    return response
+
+
+@app.errorhandler(BudgetExceeded)
+def _handle_budget_exceeded(exc):
+    return jsonify(exc.to_dict()), 402
 
 GOOGLE_CLIENT_ID = (os.getenv('GOOGLE_CLIENT_ID') or '').strip()
 GOOGLE_CLIENT_SECRET = (os.getenv('GOOGLE_CLIENT_SECRET') or '').strip()
@@ -5891,7 +5911,10 @@ def process_documents_with_kg_rag(documents, nodes, edges, query, include_contex
             text = extract_text_from_document(local_path)
             all_text += text + "\n\n"
         
-        # Create chunks and embeddings
+        # Create chunks and embeddings. These go through LangChain rather than
+        # core.ai_client, so the budget check has to be made here.
+        from core.ai_client import enforce_budget_for_call
+        enforce_budget_for_call(user_id, project_id)
         chunks = chunk_text(all_text)
         embeddings_model = OpenAIEmbeddings()
         embeddings = create_embeddings(chunks)
@@ -7622,7 +7645,16 @@ def enrich_businesses_with_emails():
                 'success': False,
                 'error': 'No businesses provided'
             }), 400
-        
+
+        # Paid per email found ($0.20) - a used-up budget set to "block"
+        # refuses it like any other paid AI call.
+        from core.ai_client import enforce_budget_for_call
+        from core.auth import user_can_access_project as _can_access_project
+        _billed_project = data.get('projectId') or None
+        if _billed_project and not _can_access_project(g.user_id, _billed_project):
+            _billed_project = None
+        enforce_budget_for_call(g.user_id, _billed_project)
+
         if not scrap_io_api_key:
             return jsonify({
                 'success': False,

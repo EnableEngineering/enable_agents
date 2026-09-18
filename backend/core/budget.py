@@ -1,6 +1,7 @@
 """
-Monthly spend budgets - per project (Project.monthly_budget_usd) and per user
-(UserBudget) - and the checks around them.
+Monthly spend budgets - per project (Project.monthly_budget_usd), per user
+(UserBudget) and per team (Team.monthly_budget_usd) - and the checks around
+them.
 
 Spend is always read from AIUsageLog (one row per LLM call, plus non-token
 costs like email lookups via log_external_usage), for the current UTC
@@ -13,14 +14,19 @@ What a budget does:
               anyone reads an email.
   * alerts  - one email when a budget first reaches 80%, one when it's
               exceeded, each at most once per calendar month (per budget).
-              Project alerts go to the project owner, user alerts to the user.
-  * autopilot - an over-budget project OR user makes Autopilot hand the next
-              stage to a human (graph.py's run_stage).
-
-What it deliberately does NOT do: block AI calls. Blocking a shared key
-mid-workflow is a confusing, hard-to-diagnose failure for whoever hits it
-next, and there's no way here to explain it to them at that moment. Callers
-who want a hard stop can build on is_over_budget().
+              Project alerts go to the project owner, user alerts to the
+              user, team alerts to the team owner.
+  * autopilot - an over-budget project, user OR team makes Autopilot hand the
+              next stage to a human (graph.py's run_stage).
+  * enforcement - opt-in, per budget: "alert" (default - warn, never block)
+              or "block". A "block" budget that is used up makes
+              enforce_budget() raise BudgetExceeded before the next paid AI
+              call (core/ai_client.py's chokepoints call it); the API turns
+              that into HTTP 402 with a message saying which budget and how
+              to lift it. It is opt-in because blocking a shared key
+              mid-workflow is disruptive - whoever turns it on has chosen
+              that trade-off. Failures reading budgets fail OPEN: a broken
+              budget lookup must never take AI features down.
 """
 from __future__ import annotations
 
@@ -32,6 +38,32 @@ logger = logging.getLogger(__name__)
 
 # A budget is "warning" once this fraction of it has been spent.
 WARN_FRACTION = 0.8
+
+ENFORCEMENTS = ("alert", "block")
+
+
+class BudgetExceeded(Exception):
+    """A budget set to "block" is used up. str(e) is written for the person
+    who hits it: which budget, and what to do about it."""
+
+    def __init__(self, scope: str, label: str, status: Dict[str, Any]):
+        self.scope = scope  # "user" | "project" | "team"
+        self.label = label
+        self.status = status
+        limit = status.get("limitUsd") or 0.0
+        spent = status.get("spendUsd") or 0.0
+        fix = {
+            "user": "Raise your budget or switch it to alert-only on the Usage page",
+            "project": "Raise the project's budget or switch it to alert-only (Projects page)",
+            "team": "Ask a team owner or admin to raise the team budget (Team page)",
+        }.get(scope, "Raise the budget")
+        super().__init__(
+            f"{label} has used its ${limit:.2f} monthly AI budget (${spent:.2f} spent) and is set to block "
+            f"further AI requests. {fix}, or wait for the new month."
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {"error": str(self), "code": "budget_exceeded", "scope": self.scope, "budget": self.status}
 
 
 def _month_start() -> datetime:
@@ -74,6 +106,51 @@ def current_month_user_spend_usd(user_id: str) -> float:
     return _sum_spend(AIUsageLog.user_id == user_id)
 
 
+def _team_member_ids(team_id: str) -> list:
+    from core.models import TeamMember
+
+    return [m.user_id for m in TeamMember.query.filter_by(team_id=team_id).all()]
+
+
+def current_month_team_spend_usd(team_id: str) -> float:
+    """This month's spend by everyone on the team, plus anything logged
+    against the team's projects (rows written before team_id fell back to the
+    user's team have no team_id, so members are matched by user too)."""
+    from sqlalchemy import or_
+    from core.models import AIUsageLog
+
+    conditions = [AIUsageLog.team_id == team_id]
+    members = _team_member_ids(team_id)
+    if members:
+        conditions.append(AIUsageLog.user_id.in_(members))
+    return _sum_spend(or_(*conditions))
+
+
+def team_id_for_user(user_id: Optional[str]) -> Optional[str]:
+    if not user_id:
+        return None
+    from core.models import TeamMember
+
+    member = TeamMember.query.filter_by(user_id=user_id).first()
+    return member.team_id if member else None
+
+
+def applicable_team_ids(user_id: Optional[str], project_id: Optional[str]) -> list:
+    """Teams whose budget covers this call: the user's own team and the
+    project's team (usually the same one), in that order."""
+    ids = [team_id_for_user(user_id)]
+    if project_id:
+        from core.models import Project
+
+        project = Project.query.filter_by(project_id=project_id).first()
+        ids.append(project.team_id if project else None)
+    out: list = []
+    for tid in ids:
+        if tid and tid not in out:
+            out.append(tid)
+    return out
+
+
 # ── Status ───────────────────────────────────────────────────────────────
 
 def budget_state(spend: float, limit: Optional[float]) -> Dict[str, Any]:
@@ -99,6 +176,26 @@ def budget_state(spend: float, limit: Optional[float]) -> Dict[str, Any]:
     }
 
 
+def _clean_enforcement(value: Optional[str]) -> str:
+    return value if value in ENFORCEMENTS else "alert"
+
+
+def validate_enforcement(value: Any) -> str:
+    if value not in ENFORCEMENTS:
+        raise ValueError('Enforcement must be "alert" or "block"')
+    return value
+
+
+def _with_enforcement(status: Dict[str, Any], enforcement: Optional[str]) -> Dict[str, Any]:
+    """Add the alert/block setting, and whether that setting is blocking right
+    now, to a budget_state() dict."""
+    enforcement = _clean_enforcement(enforcement)
+    limit, spend = status.get("limitUsd"), status.get("spendUsd") or 0.0
+    status["enforcement"] = enforcement
+    status["blocking"] = bool(enforcement == "block" and limit is not None and spend >= limit)
+    return status
+
+
 def get_user_budget(user_id: str) -> Optional[float]:
     from core.models import UserBudget
 
@@ -106,14 +203,17 @@ def get_user_budget(user_id: str) -> Optional[float]:
     return row.monthly_budget_usd if row else None
 
 
-def set_user_budget(user_id: str, monthly_budget_usd: Optional[float]) -> Optional[float]:
+def set_user_budget(user_id: str, monthly_budget_usd: Optional[float], enforcement: Optional[str] = None) -> Optional[float]:
     """Set (or, with None, remove) a user's monthly budget. Resets the
-    per-month alert markers so a new/raised budget can alert again."""
+    per-month alert markers so a new/raised budget can alert again.
+    `enforcement` ("alert" | "block") is left as it was when None."""
     from core.database import db
     from core.models import UserBudget
 
     if monthly_budget_usd is not None and monthly_budget_usd < 0:
         raise ValueError("Budget must be zero or more")
+    if enforcement is not None:
+        validate_enforcement(enforcement)
 
     row = UserBudget.query.filter_by(user_id=user_id).first()
     if monthly_budget_usd is None:
@@ -125,6 +225,8 @@ def set_user_budget(user_id: str, monthly_budget_usd: Optional[float]) -> Option
         row = UserBudget(user_id=user_id)
         db.session.add(row)
     row.monthly_budget_usd = float(monthly_budget_usd)
+    if enforcement is not None:
+        row.enforcement = enforcement
     row.warn_month = None
     row.over_month = None
     db.session.commit()
@@ -132,7 +234,11 @@ def set_user_budget(user_id: str, monthly_budget_usd: Optional[float]) -> Option
 
 
 def user_budget_status(user_id: str) -> Dict[str, Any]:
-    return budget_state(current_month_user_spend_usd(user_id), get_user_budget(user_id))
+    from core.models import UserBudget
+
+    row = UserBudget.query.filter_by(user_id=user_id).first()
+    status = budget_state(current_month_user_spend_usd(user_id), row.monthly_budget_usd if row else None)
+    return _with_enforcement(status, row.enforcement if row else None)
 
 
 def project_budget_status(project_id: str) -> Dict[str, Any]:
@@ -140,27 +246,149 @@ def project_budget_status(project_id: str) -> Dict[str, Any]:
 
     project = Project.query.filter_by(project_id=project_id).first()
     limit = project.monthly_budget_usd if project else None
-    return budget_state(_current_month_spend_usd(project_id), limit)
+    status = budget_state(_current_month_spend_usd(project_id), limit)
+    return _with_enforcement(status, project.budget_enforcement if project else None)
+
+
+def team_budget_status(team_id: str) -> Dict[str, Any]:
+    from core.models import Team
+
+    team = Team.query.filter_by(team_id=team_id).first()
+    limit = team.monthly_budget_usd if team else None
+    status = budget_state(current_month_team_spend_usd(team_id) if limit is not None else 0.0, limit)
+    return _with_enforcement(status, team.budget_enforcement if team else None)
+
+
+def set_team_budget(team_id: str, monthly_budget_usd: Optional[float], enforcement: Optional[str] = None) -> Optional[float]:
+    """Set (or, with None, remove) a team's monthly budget; same rules as
+    set_user_budget."""
+    from core.database import db
+    from core.models import Team
+
+    if monthly_budget_usd is not None and monthly_budget_usd < 0:
+        raise ValueError("Budget must be zero or more")
+    if enforcement is not None:
+        validate_enforcement(enforcement)
+
+    team = Team.query.filter_by(team_id=team_id).first()
+    if not team:
+        raise ValueError("Team not found")
+    team.monthly_budget_usd = None if monthly_budget_usd is None else float(monthly_budget_usd)
+    if monthly_budget_usd is None:
+        team.budget_enforcement = None
+    elif enforcement is not None:
+        team.budget_enforcement = enforcement
+    team.budget_warn_month = None
+    team.budget_alert_month = None
+    db.session.commit()
+    return team.monthly_budget_usd
+
+
+_RANK = {"none": 0, "ok": 1, "warning": 2, "over": 3}
 
 
 def budget_overview(user_id: str, project_id: Optional[str] = None) -> Dict[str, Any]:
-    """Both budgets that apply to a user working (optionally) in a project,
-    plus the worst state of the two - what a screen needs to decide whether
-    to show a warning."""
+    """Every budget that applies to a user working (optionally) in a project,
+    plus the worst state among them and any that are blocking right now -
+    what a screen needs to decide whether to show a warning."""
     user = user_budget_status(user_id)
     project = project_budget_status(project_id) if project_id else None
-    rank = {"none": 0, "ok": 1, "warning": 2, "over": 3}
-    worst = max((user["state"], (project or {}).get("state", "none")), key=lambda s: rank[s])
-    return {"user": user, "project": project, "worstState": worst}
+    team = None
+    for tid in applicable_team_ids(user_id, project_id):
+        candidate = team_budget_status(tid)
+        if team is None or (candidate["state"] != "none" and team["state"] == "none"):
+            team = candidate
+    statuses = {"user": user, "project": project, "team": team}
+    worst = max((s["state"] for s in statuses.values() if s), key=lambda st: _RANK[st], default="none")
+    return {
+        "user": user,
+        "project": project,
+        "team": team,
+        "worstState": worst,
+        "blockedBy": [scope for scope, s in statuses.items() if s and s["blocking"]],
+    }
+
+
+def _applicable_budgets(user_id: Optional[str], project_id: Optional[str]):
+    """(scope, label, enforcement, limit, spend_fn) for every budget with a
+    limit that covers this call. Cheap: reads only the budget rows; spend is
+    computed lazily by the caller, and only for budgets it cares about."""
+    from core.models import Project, Team, UserBudget
+
+    budgets = []
+    if project_id:
+        project = Project.query.filter_by(project_id=project_id).first()
+        if project and project.monthly_budget_usd is not None:
+            budgets.append((
+                "project", f'The project "{project.name}"', project.budget_enforcement,
+                project.monthly_budget_usd, lambda pid=project_id: _current_month_spend_usd(pid),
+            ))
+    if user_id:
+        row = UserBudget.query.filter_by(user_id=user_id).first()
+        if row and row.monthly_budget_usd is not None:
+            budgets.append((
+                "user", "Your account", row.enforcement,
+                row.monthly_budget_usd, lambda uid=user_id: current_month_user_spend_usd(uid),
+            ))
+    for tid in applicable_team_ids(user_id, project_id):
+        team = Team.query.filter_by(team_id=tid).first()
+        if team and team.monthly_budget_usd is not None:
+            budgets.append((
+                "team", f'Your team "{team.name or "Team"}"', team.budget_enforcement,
+                team.monthly_budget_usd, lambda t=tid: current_month_team_spend_usd(t),
+            ))
+    return budgets
+
+
+def _remember_for_response(exc: "BudgetExceeded") -> None:
+    """Note on the current request that a budget blocked something, so the
+    after_request hook in app.py can answer 402 even when a route's own
+    `except Exception` turned the error into a generic 500."""
+    try:
+        from flask import g, has_request_context
+
+        if has_request_context():
+            g.budget_exceeded = exc
+    except Exception:
+        pass
+
+
+def enforce_budget(user_id: Optional[str], project_id: Optional[str] = None) -> None:
+    """Raise BudgetExceeded if a budget set to "block" that covers this call
+    is used up. Call before every paid AI request. A no-op (no spend query at
+    all) unless a covering budget is set to block, and it fails open: only
+    BudgetExceeded ever escapes."""
+    if not user_id:
+        return
+    try:
+        for scope, label, enforcement, limit, spend_fn in _applicable_budgets(user_id, project_id):
+            if _clean_enforcement(enforcement) != "block":
+                continue
+            spend = spend_fn()
+            if spend >= float(limit):
+                status = _with_enforcement(budget_state(spend, limit), enforcement)
+                exc = BudgetExceeded(scope, label, status)
+                _remember_for_response(exc)
+                raise exc
+    except BudgetExceeded:
+        raise
+    except Exception as e:
+        logger.warning(f"Budget enforcement check failed - allowing the call: {e}")
+        try:
+            from core.database import db
+            db.session.rollback()
+        except Exception:
+            pass
 
 
 def is_over_budget(user_id: Optional[str], project_id: Optional[str]) -> bool:
-    """True if the project's OR the user's monthly budget is used up."""
+    """True if the project's, the user's OR their team's monthly budget is used
+    up (whether or not it is set to block)."""
     if project_id and project_budget_status(project_id)["state"] == "over":
         return True
     if user_id and user_budget_status(user_id)["state"] == "over":
         return True
-    return False
+    return any(team_budget_status(t)["state"] == "over" for t in applicable_team_ids(user_id, project_id))
 
 
 # ── Alerts ───────────────────────────────────────────────────────────────
@@ -176,27 +404,39 @@ def _send_alert(recipient: str, subject: str, body: str) -> None:
         logger.warning(f"Budget alert email to {recipient} failed: {e}")
 
 
-def _alert_for(label: str, recipient: str, status: Dict[str, Any], month: str, warned: Optional[str], over: Optional[str]):
+def _alert_for(label: str, recipient: str, status: Dict[str, Any], month: str, warned: Optional[str], over: Optional[str],
+               enforcement: Optional[str] = None):
     """Decide which alert (if any) a budget is due, send it, and return the
     updated (warn_month, over_month). A budget that jumps straight past its
     limit gets only the "over" email, and counts as warned too."""
     state = status["state"]
+    blocking = _clean_enforcement(enforcement) == "block"
     if state == "over" and over != month:
+        consequence = (
+            'This budget is set to block, so new AI requests are now refused until it is raised or the month rolls over. '
+            if blocking else
+            'AI actions are not blocked, but Autopilot workflows will now pause for your review. '
+        )
         _send_alert(
             recipient,
             f'{label} has crossed its AI budget for {month}',
             f'{label} has spent an estimated ${status["spendUsd"]:.2f} on AI usage this month, '
             f'crossing the ${status["limitUsd"]:.2f} budget.\n\n'
-            'AI actions are not blocked, but Autopilot workflows will now pause for your review. '
+            f'{consequence}'
             'See the full breakdown by agent, project and workflow in the Usage dashboard.',
         )
         return month, month
     if state == "warning" and warned != month:
+        consequence = (
+            'This budget is set to block: new AI requests will be refused once it is used up.'
+            if blocking else
+            'This is a heads-up - nothing is blocked.'
+        )
         _send_alert(
             recipient,
             f'{label} has used {status["percentUsed"]:.0f}% of its AI budget for {month}',
             f'{label} has spent an estimated ${status["spendUsd"]:.2f} of its ${status["limitUsd"]:.2f} '
-            'monthly AI budget. This is a heads-up - nothing is blocked. '
+            f'monthly AI budget. {consequence} '
             'See the Usage dashboard for what is driving it.',
         )
         return month, over
@@ -204,13 +444,13 @@ def _alert_for(label: str, recipient: str, status: Dict[str, Any], month: str, w
 
 
 def check_and_maybe_alert_budget(project_id: Optional[str] = None, user_id: Optional[str] = None) -> None:
-    """Called after every usage log write. A cheap no-op unless the project
-    or the user has a budget; each budget sends at most one "80% used" and
-    one "over budget" email per calendar month. Never raises - a budget
-    check must not break the AI call that triggered it."""
+    """Called after every usage log write. A cheap no-op unless the project,
+    the user or their team has a budget; each budget sends at most one "80%
+    used" and one "over budget" email per calendar month. Never raises - a
+    budget check must not break the AI call that triggered it."""
     try:
         from core.database import db
-        from core.models import Project, UserBudget
+        from core.models import Project, Team, UserBudget
 
         month = _month_key()
 
@@ -220,7 +460,7 @@ def check_and_maybe_alert_budget(project_id: Optional[str] = None, user_id: Opti
                 status = budget_state(_current_month_spend_usd(project_id), project.monthly_budget_usd)
                 warned, over = _alert_for(
                     f'"{project.name}"', project.owner_id, status, month,
-                    project.budget_warn_month, project.budget_alert_month,
+                    project.budget_warn_month, project.budget_alert_month, project.budget_enforcement,
                 )
                 if (warned, over) != (project.budget_warn_month, project.budget_alert_month):
                     project.budget_warn_month, project.budget_alert_month = warned, over
@@ -231,10 +471,22 @@ def check_and_maybe_alert_budget(project_id: Optional[str] = None, user_id: Opti
             if row and row.monthly_budget_usd:
                 status = budget_state(current_month_user_spend_usd(user_id), row.monthly_budget_usd)
                 warned, over = _alert_for(
-                    "Your account", user_id, status, month, row.warn_month, row.over_month,
+                    "Your account", user_id, status, month, row.warn_month, row.over_month, row.enforcement,
                 )
                 if (warned, over) != (row.warn_month, row.over_month):
                     row.warn_month, row.over_month = warned, over
+                    db.session.commit()
+
+        for team_id in applicable_team_ids(user_id, project_id):
+            team = Team.query.filter_by(team_id=team_id).first()
+            if team and team.monthly_budget_usd:
+                status = budget_state(current_month_team_spend_usd(team_id), team.monthly_budget_usd)
+                warned, over = _alert_for(
+                    f'Team "{team.name or "Team"}"', team.owner_id, status, month,
+                    team.budget_warn_month, team.budget_alert_month, team.budget_enforcement,
+                )
+                if (warned, over) != (team.budget_warn_month, team.budget_alert_month):
+                    team.budget_warn_month, team.budget_alert_month = warned, over
                     db.session.commit()
     except Exception as e:
         logger.warning(f"Budget check failed (ignored): {e}")

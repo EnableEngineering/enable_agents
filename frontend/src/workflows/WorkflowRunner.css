@@ -1560,6 +1560,55 @@ a.wf-btn {
   color: var(--color-text-muted);
 }
 
+.wf-stage-cost {
+  margin-top: var(--space-1);
+  font-size: var(--text-caption);
+  font-weight: 600;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.wf-stage-cost span {
+  font-weight: 400;
+  color: var(--color-text-muted);
+}
+
+/* "AI cost" section of a stage's detail view. */
+.wf-cost-summary {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-body);
+  color: var(--color-text-muted);
+}
+
+.wf-cost-summary strong {
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.wf-cost-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-caption);
+  font-variant-numeric: tabular-nums;
+}
+
+.wf-cost-table th,
+.wf-cost-table td {
+  padding: 6px 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.wf-cost-table th {
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.wf-cost-table th:nth-child(n+3),
+.wf-cost-table td:nth-child(n+3) {
+  text-align: right;
+}
+
 /* Explicit, cost-visible "find missing emails" action on email stages. */
 .wf-enrich-box {
   display: flex;

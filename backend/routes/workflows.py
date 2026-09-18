@@ -599,6 +599,17 @@ def get_instance_usage(instance_id: str):
         func.sum(AIUsageLog.estimated_cost_usd),
         func.count(AIUsageLog.id),
     ).group_by(AIUsageLog.agent).order_by(func.sum(AIUsageLog.estimated_cost_usd).desc()).all()
+    # One row per (stage, agent, model): what the stage detail view lists
+    # under "AI cost" so a stage's total can be explained call by call.
+    by_stage_call = base.with_entities(
+        AIUsageLog.workflow_stage_id,
+        AIUsageLog.agent,
+        AIUsageLog.model,
+        func.sum(AIUsageLog.estimated_cost_usd),
+        func.sum(AIUsageLog.total_tokens),
+        func.count(AIUsageLog.id),
+    ).group_by(AIUsageLog.workflow_stage_id, AIUsageLog.agent, AIUsageLog.model).order_by(
+        func.sum(AIUsageLog.estimated_cost_usd).desc()).all()
 
     return jsonify({
         "success": True,
@@ -613,6 +624,11 @@ def get_instance_usage(instance_id: str):
         "byAgent": [
             {"agent": agent, "costUsd": round(float(cost), 6), "requestCount": int(count)}
             for agent, cost, count in by_agent
+        ],
+        "byStageCall": [
+            {"stageId": stage, "agent": agent, "model": model, "costUsd": round(float(cost), 6),
+             "tokens": int(tokens or 0), "requestCount": int(count)}
+            for stage, agent, model, cost, tokens, count in by_stage_call
         ],
     })
 

@@ -128,6 +128,13 @@ def update_project(project_id):
         project.monthly_budget_usd = budget
         project.budget_alert_month = None  # reset so a new/raised budget can alert again if crossed
         project.budget_warn_month = None
+    if 'budgetEnforcement' in data:
+        if not user_can_manage_project_settings(g.user_id, project_id):
+            return jsonify({'error': 'Only the project owner or a team admin can change the budget'}), 403
+        from core.budget import ENFORCEMENTS
+        if data['budgetEnforcement'] not in ENFORCEMENTS:
+            return jsonify({'error': 'budgetEnforcement must be "alert" or "block"'}), 400
+        project.budget_enforcement = data['budgetEnforcement']
 
     project.updated_at = datetime.utcnow()
     db.session.commit()

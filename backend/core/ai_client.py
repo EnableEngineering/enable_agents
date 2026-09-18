@@ -60,17 +60,21 @@ from typing import Any, Dict, List, Optional, Tuple
 def _current_user_id(explicit: Optional[str]) -> Optional[str]:
     """Falls back to the authenticated request's g.user_id when a call site
     doesn't have an explicit user_id handy (e.g. a helper several calls deep
-    inside a request). Returns None outside a request context (e.g. Celery
-    tasks) - callers there should pass user_id explicitly."""
+    inside a request), then to the running workflow stage's user (Celery
+    tasks have no request). None otherwise - callers there should pass
+    user_id explicitly."""
     if explicit:
         return explicit
     try:
         from flask import g, has_request_context
-        if has_request_context():
-            return getattr(g, "user_id", None)
+        if has_request_context() and getattr(g, "user_id", None):
+            return g.user_id
     except RuntimeError:
         pass
-    return None
+    # Inside a workflow stage (Celery task) there is no request; the stage's
+    # usage scope knows whose run it is.
+    from core.usage_context import current_scope
+    return current_scope().get("user_id")
 
 
 def infer_provider(model: str) -> str:
@@ -192,6 +196,14 @@ def _team_id_for_project(project_id: Optional[str]) -> Optional[str]:
     return project.team_id if project else None
 
 
+def _team_id_for_user(user_id: Optional[str]) -> Optional[str]:
+    if not user_id:
+        return None
+    from core.models import TeamMember
+    member = TeamMember.query.filter_by(user_id=user_id).first()
+    return member.team_id if member else None
+
+
 def _request_project(user_id: Optional[str]) -> Optional[str]:
     """The project named by this HTTP request's X-Project-Id header - only if
     that user can actually access it (the header is caller-controlled, so
@@ -210,6 +222,19 @@ def _request_project(user_id: Optional[str]) -> Optional[str]:
         return claimed if user_can_access_project(user_id, claimed) else None
     except Exception:
         return None
+
+
+def enforce_budget_for_call(user_id: Optional[str], project_id: Optional[str] = None) -> None:
+    """Refuse a paid call (BudgetExceeded) if a budget set to "block" that
+    covers it is used up. The project is resolved exactly as
+    _write_usage_row will attribute the spend, so what is blocked is what
+    would have been charged. Public: call sites that reach a provider without
+    going through the functions below (see app.py) call it themselves."""
+    from core.budget import enforce_budget
+    from core.usage_context import current_scope
+
+    project_id = project_id or current_scope().get("project_id") or _request_project(user_id)
+    enforce_budget(user_id, project_id)
 
 
 def log_ai_usage(
@@ -277,7 +302,7 @@ def _write_usage_row(
     entry = AIUsageLog(
         user_id=user_id or "unknown",
         project_id=project_id,
-        team_id=_team_id_for_project(project_id),
+        team_id=_team_id_for_project(project_id) or _team_id_for_user(user_id),
         agent=agent,
         provider=provider,
         model=model,
@@ -384,6 +409,7 @@ def ai_chat_completion(
     (functions/response_format) or an explicit `provider` is passed.
     """
     user_id = _current_user_id(user_id)
+    enforce_budget_for_call(user_id, project_id)
 
     if provider is not None:
         resolved_model, resolved_provider = model, provider
@@ -436,6 +462,7 @@ def ai_embeddings(
     import openai
 
     user_id = _current_user_id(user_id)
+    enforce_budget_for_call(user_id, project_id)
     api_key, key_source = resolve_api_key(user_id, project_id, "openai")
     if not api_key:
         raise NoApiKeyConfigured(
@@ -475,6 +502,7 @@ def get_langchain_llm(
     .invoke() returns before we'd have a chance to intercept.
     """
     user_id = _current_user_id(user_id)
+    enforce_budget_for_call(user_id, project_id)
     resolved_model, provider = resolve_model_and_provider(user_id, project_id, model)
 
     api_key, key_source = resolve_api_key(user_id, project_id, provider)

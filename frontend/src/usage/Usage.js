@@ -86,17 +86,19 @@ const BUDGET_BADGES = {
   over: { label: 'Over budget', className: 'error' },
 };
 
+const BLOCKING_NOW_BADGE = { label: 'AI requests blocked', className: 'error' };
+
 /* Where spend stands against a monthly budget. `budget` is the status object
    from the API (core/budget.py): limitUsd, spendUsd, percentUsed, state.
    With `onSave` it's also where the budget is set/changed/removed. */
-function BudgetCard({ title, budget, onSave, saving, editHint }) {
+function BudgetCard({ title, budget, onSave, onSetEnforcement, saving, editHint }) {
   const [input, setInput] = useState('');
   useEffect(() => {
     setInput(budget && budget.limitUsd != null ? String(budget.limitUsd) : '');
   }, [budget?.limitUsd]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!budget || (budget.state === 'none' && !onSave)) return null;
-  const badge = BUDGET_BADGES[budget.state];
+  const badge = budget.blocking ? BLOCKING_NOW_BADGE : BUDGET_BADGES[budget.state];
   const pct = budget.percentUsed == null ? 0 : Math.min(100, budget.percentUsed);
 
   return (
@@ -138,17 +140,48 @@ function BudgetCard({ title, budget, onSave, saving, editHint }) {
             </button>
           </div>
           <p className="usage-budget-hint">{editHint}</p>
+          {onSetEnforcement && budget.limitUsd != null && (
+            <label className="usage-budget-enforce" htmlFor="usage-budget-block">
+              <input
+                id="usage-budget-block"
+                type="checkbox"
+                checked={budget.enforcement === 'block'}
+                disabled={saving}
+                onChange={(e) => onSetEnforcement(e.target.checked ? 'block' : 'alert')}
+              />
+              <span>
+                <strong>Block AI requests once this budget is used up</strong>
+                <span className="usage-budget-hint">
+                  Off: you're only warned. On: AI actions stop with a clear message until the budget is raised or the month rolls over.
+                </span>
+              </span>
+            </label>
+          )}
         </div>
+      )}
+      {!onSave && budget.limitUsd != null && (
+        <p className="usage-budget-hint">
+          {budget.enforcement === 'block'
+            ? 'This budget blocks AI requests once it is used up.'
+            : 'This budget only warns - AI requests are not blocked.'}
+        </p>
       )}
     </section>
   );
 }
 
-function UsageDetail({ usage, showByUser, budgetTitle, budget, onSaveBudget, savingBudget, budgetHint }) {
+function UsageDetail({ usage, showByUser, budgetTitle, budget, onSaveBudget, onSetEnforcement, savingBudget, budgetHint }) {
   return (
     <>
       <SummaryCards usage={usage} />
-      <BudgetCard title={budgetTitle} budget={budget} onSave={onSaveBudget} saving={savingBudget} editHint={budgetHint} />
+      <BudgetCard
+        title={budgetTitle}
+        budget={budget}
+        onSave={onSaveBudget}
+        onSetEnforcement={onSetEnforcement}
+        saving={savingBudget}
+        editHint={budgetHint}
+      />
       <div className="usage-breakdown-grid">
         <BreakdownTable title="By agent" rows={usage.byAgent} keyField="agent" />
         <BreakdownTable title="By model" rows={usage.byModel} keyField="model" />
@@ -178,11 +211,16 @@ function Usage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [usage, setUsage] = useState(EMPTY_USAGE);
+  // Which tab/period/project `usage` and `budget` belong to. Without it, the
+  // first render after switching tabs shows the previous tab's numbers under
+  // the new tab's title until the fetch effect flips `loading`.
+  const [loadedKey, setLoadedKey] = useState('');
   const [budget, setBudget] = useState(null);
   const [savingBudget, setSavingBudget] = useState(false);
 
   const [projects, setProjects] = useState([]);
   const [selectedProjectId, setSelectedProjectId] = useState('');
+  const viewKey = `${tab}|${days}|${selectedProjectId}`;
 
   useEffect(() => {
     fetch(`${API_CONFIG.BASE_URL}/api/projects`, { headers: authOptionalHeaders() })
@@ -196,6 +234,7 @@ function Usage() {
   }, []);
 
   const fetchUsage = useCallback(async () => {
+    const key = `${tab}|${days}|${selectedProjectId}`;
     setLoading(true);
     setError('');
     try {
@@ -208,6 +247,7 @@ function Usage() {
         url = `${API_CONFIG.BASE_URL}/api/projects/${selectedProjectId}/usage?days=${days}`;
       } else {
         setUsage(EMPTY_USAGE);
+        setLoadedKey(key);
         setLoading(false);
         return;
       }
@@ -227,6 +267,7 @@ function Usage() {
       setBudget(null);
       setError('Could not load usage data.');
     } finally {
+      setLoadedKey(key);
       setLoading(false);
     }
   }, [tab, days, selectedProjectId]);
@@ -235,21 +276,22 @@ function Usage() {
     fetchUsage();
   }, [fetchUsage]);
 
-  // Personal budget (My usage tab only - project budgets are set in the
-  // project's own settings, by its owner or a team admin).
-  const saveMyBudget = async (rawValue) => {
-    const trimmed = String(rawValue).trim();
+  // Personal budget (My usage tab) and the team budget (Team tab, owner/admin
+  // only - that tab isn't reachable for anyone else). Project budgets are set
+  // in the project's own settings, by its owner or a team admin.
+  const budgetEndpoint = tab === 'team' ? '/api/team/budget' : '/api/usage/me/budget';
+  const saveBudget = async (patch, successMessage) => {
     setSavingBudget(true);
     try {
-      const res = await fetch(`${API_CONFIG.BASE_URL}/api/usage/me/budget`, {
+      const res = await fetch(`${API_CONFIG.BASE_URL}${budgetEndpoint}`, {
         method: 'PUT',
         headers: authJsonHeaders(),
-        body: JSON.stringify({ monthlyBudgetUsd: trimmed === '' ? null : Number(trimmed) }),
+        body: JSON.stringify(patch),
       });
       const data = await res.json();
       if (res.ok && data.success) {
         setBudget(data.budget);
-        showToast(trimmed === '' ? 'Budget removed' : 'Monthly budget saved', 'success');
+        showToast(successMessage, 'success');
       } else {
         showToast(data.error || 'Failed to save budget', 'error');
       }
@@ -259,6 +301,17 @@ function Usage() {
       setSavingBudget(false);
     }
   };
+  const saveAmount = (rawValue) => {
+    const trimmed = String(rawValue).trim();
+    return saveBudget(
+      { monthlyBudgetUsd: trimmed === '' ? null : Number(trimmed) },
+      trimmed === '' ? 'Budget removed' : 'Monthly budget saved',
+    );
+  };
+  const saveEnforcement = (enforcement) => saveBudget(
+    { enforcement },
+    enforcement === 'block' ? 'AI requests will be blocked once the budget is used up' : 'Budget is now alert-only',
+  );
 
   return (
     <div className="usage-page">
@@ -300,7 +353,7 @@ function Usage() {
           </div>
         )}
 
-        {loading ? (
+        {loading || loadedKey !== viewKey ? (
           <div className="loading"><Spinner size="lg" /></div>
         ) : error ? (
           <div className="usage-card-section usage-error">
@@ -310,11 +363,14 @@ function Usage() {
           <UsageDetail
             usage={usage}
             showByUser={tab !== 'me'}
-            budgetTitle={tab === 'me' ? 'My monthly budget' : 'Project monthly budget'}
-            budget={tab === 'team' ? null : budget}
-            onSaveBudget={tab === 'me' ? saveMyBudget : null}
+            budgetTitle={tab === 'me' ? 'My monthly budget' : tab === 'team' ? 'Team monthly budget' : 'Project monthly budget'}
+            budget={budget}
+            onSaveBudget={tab === 'project' ? null : saveAmount}
+            onSetEnforcement={tab === 'project' ? null : saveEnforcement}
             savingBudget={savingBudget}
-            budgetHint="Counts everything you spend across all projects. You'll get an email at 80% and again if you go over; Autopilot workflows pause once it's used up. Nothing is blocked."
+            budgetHint={tab === 'team'
+              ? "Counts everyone on the team across every project. The team owner gets an email at 80% and again if it's exceeded; Autopilot workflows pause for everyone once it's used up."
+              : "Counts everything you spend across all projects. You'll get an email at 80% and again if you go over; Autopilot workflows pause once it's used up."}
           />
         )}
       </div>

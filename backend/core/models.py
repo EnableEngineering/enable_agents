@@ -140,6 +140,11 @@ class Team(db.Model):
     team_id = db.Column(db.String(36), nullable=False, unique=True, index=True)
     owner_id = db.Column(db.String(255), nullable=False, index=True)
     name = db.Column(db.String(255), nullable=True)
+    # Team-wide monthly AI budget across every member and project (core/budget.py).
+    monthly_budget_usd = db.Column(db.Float, nullable=True)
+    budget_enforcement = db.Column(db.String(10), nullable=True)  # "alert" | "block"
+    budget_warn_month = db.Column(db.String(7), nullable=True)
+    budget_alert_month = db.Column(db.String(7), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -200,6 +205,9 @@ class Project(db.Model):
     budget_alert_month = db.Column(db.String(7), nullable=True)
     # Same, for the earlier "80% of budget used" warning (core/budget.py).
     budget_warn_month = db.Column(db.String(7), nullable=True)
+    # "alert" (default: warn/email only) | "block" (AI calls are refused once
+    # this budget is used up) - see core/budget.py's BudgetExceeded.
+    budget_enforcement = db.Column(db.String(10), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -240,6 +248,7 @@ class Project(db.Model):
             "status": self.status,
             "data": self.data,
             "monthlyBudgetUsd": self.monthly_budget_usd,
+            "budgetEnforcement": self.budget_enforcement or "alert",
             "createdAt": self.created_at.strftime("%Y-%m-%d") if self.created_at else None,
             "updatedAt": self.updated_at.isoformat() if self.updated_at else None,
         }
@@ -432,6 +441,7 @@ class UserBudget(db.Model):
     user_id = db.Column(db.String(255), primary_key=True)
     monthly_budget_usd = db.Column(db.Float, nullable=True)
     # "YYYY-MM" of the last month each alert was sent (once per month each).
+    enforcement = db.Column(db.String(10), nullable=True)  # "alert" | "block"
     warn_month = db.Column(db.String(7), nullable=True)
     over_month = db.Column(db.String(7), nullable=True)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
