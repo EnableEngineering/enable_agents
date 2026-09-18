@@ -2259,3 +2259,14 @@ finding and a CI gap found on the way.
   Unverified until it runs on GitHub.
 - **Known and left alone:** `/health` is liveness only (no DB check) - so
   it can't back a readiness-gated rollout yet; that's the open deploy item.
+
+- **Suite is now hermetic (found by the first CI run).** Three test modules
+  `import app` at collection time, and importing the monolith queries
+  `workflow_templates` - so on an empty database (fresh CI container, or
+  after a previous run's teardown `drop_all()`) collection crashed with
+  UndefinedTable. That is the "bootstrap the schema before every pytest
+  run" chore this project has needed all along. `tests/integration/
+  conftest.py` now creates the core + workflow tables at import, before
+  collection: verified from a fully wiped database, twice in a row, no
+  manual step. The first CI run failing on this is the gate working as
+  intended - `ci.yml`'s old backend job would have hidden it forever.

@@ -37,6 +37,30 @@ if _BACKEND not in sys.path:
     sys.path.insert(0, _BACKEND)
 
 
+def _bootstrap_schema():
+    """Create the core + workflow tables before pytest collects any test
+    module. Several test modules `import app` (the full monolith) at module
+    level, and importing it runs load_system_templates(), which queries
+    workflow_templates - so on an empty database (a fresh CI service
+    container, or after a previous session's teardown db.drop_all()) test
+    *collection* itself crashed with UndefinedTable. conftest.py is imported
+    before the test modules in this directory, so doing it here makes the
+    suite hermetic instead of requiring a manual schema bootstrap first."""
+    from flask import Flask
+
+    from core.database import db, init_db
+
+    bootstrap_app = Flask("schema_bootstrap")
+    init_db(bootstrap_app)
+    with bootstrap_app.app_context():
+        import core.models  # noqa: F401
+        import models.workflow  # noqa: F401
+        db.create_all()
+
+
+_bootstrap_schema()
+
+
 def _build_test_app():
     """Create a minimal Flask app for blueprint/agent testing."""
     from flask import Flask
