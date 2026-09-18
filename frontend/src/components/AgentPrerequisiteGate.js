@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
+import { useSelectedProjectId } from '../hooks/useSelectedProjectId';
 import { API_CONFIG } from '../config/apiConfig';
 import { authJsonHeaders } from '../core/authHeaders';
 import Button from './Button';
@@ -30,10 +31,16 @@ function AgentPrerequisiteGate({ agentId, children, onReady, hardBlockKeys = [] 
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [dismissed, setDismissed] = useState(false);
+  // company_profile is a per-project dependency - research done in one
+  // project doesn't satisfy another's - so the check (and the "Get from"
+  // links below, which must land the user back in the same project or
+  // their research would be recorded against none) carry the project id.
+  const projectId = useSelectedProjectId();
 
   const checkDependencies = useCallback(async () => {
     try {
-      const res = await fetch(`${API_CONFIG.BASE_URL}/api/dependencies/status/${agentId}`, {
+      const query = projectId ? `?project_id=${encodeURIComponent(projectId)}` : '';
+      const res = await fetch(`${API_CONFIG.BASE_URL}/api/dependencies/status/${agentId}${query}`, {
         headers: authJsonHeaders(),
       });
       if (res.ok) {
@@ -50,7 +57,7 @@ function AgentPrerequisiteGate({ agentId, children, onReady, hardBlockKeys = [] 
     } finally {
       setLoading(false);
     }
-  }, [agentId, onReady]);
+  }, [agentId, onReady, projectId]);
 
   useEffect(() => {
     checkDependencies();
@@ -97,7 +104,7 @@ function AgentPrerequisiteGate({ agentId, children, onReady, hardBlockKeys = [] 
                   {dep.providers.map((provider) => (
                     <Link
                       key={provider}
-                      to={getAgentRoute(provider)}
+                      to={withProject(getAgentRoute(provider), projectId)}
                       className="provider-link"
                     >
                       {formatAgentName(provider)}
@@ -120,7 +127,7 @@ function AgentPrerequisiteGate({ agentId, children, onReady, hardBlockKeys = [] 
           ) : (
             status.missing[0]?.providers?.[0] && (
               <Link
-                to={getAgentRoute(status.missing[0].providers[0])}
+                to={withProject(getAgentRoute(status.missing[0].providers[0]), projectId)}
                 className="btn btn-primary"
               >
                 Go to {formatAgentName(status.missing[0].providers[0])}
@@ -174,6 +181,10 @@ function formatAgentName(agentId) {
     data_insights: 'Data Insights',
   };
   return names[agentId] || formatDependencyName(agentId);
+}
+
+function withProject(route, projectId) {
+  return projectId ? `${route}?project=${encodeURIComponent(projectId)}` : route;
 }
 
 function getAgentRoute(agentId) {

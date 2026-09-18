@@ -12,6 +12,7 @@ import { formatDate } from '../utils/dateFormat';
 import { showToast } from '../core/toast';
 import { confirmSendEmail } from '../core/emailActionWarnings';
 import { useWorkflowContext, usePendingAgentPrefill, notifyAgentCompleted } from '../hooks';
+import { useSelectedProjectId } from '../hooks/useSelectedProjectId';
 import { STRINGS } from '../constants';
 
 const SUPPLIER_TEMPLATE = `Dear [Vendor Name / Sir / Madam],
@@ -82,6 +83,9 @@ const RESEARCH_TYPE_OPTIONS = [
 ];
 
 function RequirementsGathering() {
+  // Sent with report generation so the company_profile it records is
+  // scoped to this project (see dependency_validator.scoped_key).
+  const selectedProjectId = useSelectedProjectId();
   // Workflow context - for loading/saving workflow data
   const { isInWorkflow, isHistoryView, stageData, context: workflowContext, saveStageData } = useWorkflowContext();
 
@@ -514,6 +518,7 @@ function RequirementsGathering() {
         analysisFrameworks,
         responseFormat,
         googleBusinessData: googleData,
+        projectId: selectedProjectId,
       };
 
       const response = await fetch(API_CONFIG.GENERATE_REQUIREMENTS, {

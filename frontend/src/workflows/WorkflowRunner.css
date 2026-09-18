@@ -1531,3 +1531,31 @@ a.wf-btn {
   opacity: 1 !important;
   color: var(--color-error);
 }
+
+/* Informational (not an error) note in the pending-approval panel - e.g.
+   why Autopilot stopped here, or that an email stage has no addresses. */
+.wf-stage-notice {
+  background: rgba(var(--color-warning-rgb), 0.1);
+  border: 1px solid var(--color-warning);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  margin-bottom: var(--space-4);
+  font-size: var(--text-caption);
+  line-height: 1.45;
+  color: var(--color-text);
+}
+
+/* A stage that was resolved without doing its work (skipped by the user,
+   the pause kill switch, or nothing to act on) - muted, not the green
+   check that means "did its job". */
+.wf-stage-check.wf-stage-skipped {
+  background: var(--color-surface);
+  border: 2px solid var(--color-border);
+  color: var(--color-text-muted);
+}
+
+.wf-stage-skipped-note {
+  margin-top: var(--space-1);
+  font-size: var(--text-caption);
+  color: var(--color-text-muted);
+}

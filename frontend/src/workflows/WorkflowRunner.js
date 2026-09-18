@@ -58,6 +58,23 @@ const DEFAULT_ROW_COLUMNS = {
   tasks: ['title', 'description'],
 };
 
+// Business rows from a search carry a dozen columns (id, address, latitude,
+// rating, ...) but never an email - which is the one column an email stage
+// needs. Show only the columns a person would act on, always including
+// Email so missing addresses can be typed in. Other keys on each row are
+// kept as-is (rows are edited as copies) - they're just not displayed.
+const BUSINESS_DISPLAY_COLUMNS = ['name', 'email', 'phone', 'website'];
+const businessColumns = (rows) => {
+  const present = new Set(rows.flatMap((item) => Object.keys(item)));
+  return BUSINESS_DISPLAY_COLUMNS.filter((c) => c === 'name' || c === 'email' || present.has(c));
+};
+
+const hasValidEmail = (business) => {
+  const email = business && business.email;
+  return typeof email === 'string' && email !== 'N/A' && email.includes('@');
+};
+const countRecipients = (businesses) => (Array.isArray(businesses) ? businesses.filter(hasValidEmail).length : 0);
+
 // Builds the per-field edit state for a pending-approval card's
 // proposed_input - never raw JSON for the common cases:
 //   - plain string/number -> 'text', a single-line text box.
@@ -82,9 +99,11 @@ const buildEditFields = (proposedInput) => {
       const isLong = text.includes('\n') || text.length > 80;
       fields[key] = { kind: isLong ? 'multiline' : 'text', value: text };
     } else if (Array.isArray(value) && (value.length === 0 || isFlatObjectArray(value))) {
-      const columns = value.length > 0
-        ? Array.from(new Set(value.flatMap((item) => Object.keys(item))))
-        : (DEFAULT_ROW_COLUMNS[key] || ['value']);
+      const columns = key === 'businesses'
+        ? businessColumns(value)
+        : value.length > 0
+          ? Array.from(new Set(value.flatMap((item) => Object.keys(item))))
+          : (DEFAULT_ROW_COLUMNS[key] || ['value']);
       fields[key] = { kind: 'rows', columns, value: value.map((item) => ({ ...item })) };
     } else {
       fields[key] = { kind: 'json', value: JSON.stringify(value, null, 2) };
@@ -404,12 +423,21 @@ function WorkflowRunner() {
       const stageId = pendingApproval.interrupt.stage_id;
       const stage = (instance?.stages || []).find((s) => (s.id || s.stage_id) === stageId);
       if (stage?.agent === 'email_outreach') {
-        const businesses = pendingApproval.interrupt.proposed_input?.businesses;
-        const confirmed = await confirmSendEmail({
-          recipientCount: Array.isArray(businesses) ? businesses.length : undefined,
-          context: `the "${stage.name || formatLabel(stageId)}" stage`,
-        });
-        if (!confirmed) return;
+        // What will actually go out: the rows as edited on "Save Edit &
+        // Approve", the server's proposal on plain Approve - and only rows
+        // with a usable address (the rest are ignored by the send). Zero
+        // means approving just records a skip, so there's nothing to warn about.
+        const businesses = action === 'edit' && editFields.businesses
+          ? editFields.businesses.value
+          : pendingApproval.interrupt.proposed_input?.businesses;
+        const recipientCount = countRecipients(businesses);
+        if (recipientCount > 0) {
+          const confirmed = await confirmSendEmail({
+            recipientCount,
+            context: `the "${stage.name || formatLabel(stageId)}" stage`,
+          });
+          if (!confirmed) return;
+        }
       }
     }
 
@@ -686,7 +714,11 @@ function WorkflowRunner() {
                       onClick={() => setSelectedStage({ ...stage, index: idx, state })}
                     >
                       <div className="wf-stage-indicator">
-                        {isStageCompleted ? (
+                        {isStageCompleted && state.outcome === 'skipped' ? (
+                          <div className="wf-stage-check wf-stage-skipped" title="Skipped">
+                            –
+                          </div>
+                        ) : isStageCompleted ? (
                           <div className="wf-stage-check">
                             ✓
                           </div>
@@ -717,6 +749,11 @@ function WorkflowRunner() {
                           <img src={getAgentIcon(stage.agent)} alt="" />
                           <span>{getAgentLabel(stage.agent)}</span>
                         </div>
+                        {isStageCompleted && state.outcome === 'skipped' && (
+                          <div className="wf-stage-skipped-note">
+                            Skipped{state.data?.reason && state.data.reason !== 'paused' ? ` - ${state.data.reason}` : state.data?.reason === 'paused' ? ' - workflow was paused' : ''}
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
@@ -750,10 +787,10 @@ function WorkflowRunner() {
                           <strong>Suggest</strong> - every stage pauses and shows you what it's about to do. Nothing runs until you approve, edit, or skip it.
                         </div>
                         <div>
-                          <strong>Co-pilot</strong> - the same review step, but for routine stages the workflow moves faster; anything that emails someone still stops for your review first.
+                          <strong>Co-pilot</strong> - behaves the same as Suggest today: every stage pauses for your review.
                         </div>
                         <div>
-                          <strong>Autopilot</strong> - every stage runs on its own with no pause. If the project's monthly AI budget is already over its cap, the next stage still stops for your review.
+                          <strong>Autopilot</strong> - stages run on their own with no pause, except: stages that send email always wait for you (a sent email can't be taken back), a stage that fails stops for correction, and once the project's monthly AI budget is over its cap the next stage stops too.
                         </div>
                       </div>
                     )}
@@ -771,10 +808,8 @@ function WorkflowRunner() {
                     </div>
                     <p className="wf-autonomy-hint">
                       {instance.autonomyMode === 'autopilot'
-                        ? "Every stage runs on its own. If the project's monthly AI budget is already over its cap, the next stage still pauses for your review."
-                        : instance.autonomyMode === 'suggest'
-                          ? 'Every stage pauses for your review before it runs.'
-                          : 'Routine stages pause for your review before they run.'}
+                        ? "Stages run on their own - but any stage that sends email, fails, or hits the AI budget cap still waits for you."
+                        : 'Every stage pauses for your review before it runs.'}
                     </p>
                   </div>
                 )}
@@ -817,6 +852,23 @@ function WorkflowRunner() {
                         <p>Proposed input for this stage - approve it as-is, edit it below, or skip the stage entirely.</p>
                       </div>
                     </div>
+
+                    {pendingApproval.interrupt.autopilot_pause_reason && pendingApproval.interrupt.autopilot_pause_reason !== 'error' && (
+                      <div className="wf-stage-notice" role="note">
+                        <strong>Autopilot paused here:</strong>{' '}
+                        {pendingApproval.interrupt.autopilot_pause_reason === 'irreversible'
+                          ? "this stage sends real email, and a sent email can't be taken back - so Autopilot always waits for you before it."
+                          : "the project's monthly AI budget is at its cap."}
+                      </div>
+                    )}
+
+                    {pendingApproval.interrupt.side_effect === 'irreversible' && editFields.businesses
+                      && countRecipients(editFields.businesses.value) === 0 && (
+                      <div className="wf-stage-notice" role="note">
+                        <strong>No email addresses yet:</strong> none of these businesses has an email, so approving as-is will skip sending.
+                        Type addresses into the Email column below and use Save Edit &amp; Approve, or skip this stage.
+                      </div>
+                    )}
 
                     {pendingApproval.interrupt.error && (
                       <div className="wf-stage-error" role="alert">
@@ -1254,7 +1306,7 @@ function StageDetailView({ stage, stageState, instance, onBack, onTasksChange })
           <p>{stage.description}</p>
         </div>
         <span className={`wf-detail-status ${isCompleted ? 'completed' : isCurrent ? 'current' : 'pending'}`}>
-          {isCompleted ? 'Completed' : isCurrent ? 'In Progress' : 'Pending'}
+          {isCompleted ? (stageState?.outcome === 'skipped' ? 'Skipped' : 'Completed') : isCurrent ? 'In Progress' : 'Pending'}
         </span>
       </div>
 

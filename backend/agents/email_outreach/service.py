@@ -100,7 +100,8 @@ def generate_email():
 
 
 def send_bulk_emails_core(subject, body, businesses, user_email, user_id,
-                           campaign_name="Untitled Campaign", use_ai_personalization=False):
+                           campaign_name="Untitled Campaign", use_ai_personalization=False,
+                           on_sent=None):
     """Plain-argument core of app.py's send_bulk_emails - callable from a
     LangGraph node (or anywhere else outside a Flask request) with no
     request/g dependency. `user_email` and `user_id` are the same value at
@@ -113,6 +114,13 @@ def send_bulk_emails_core(subject, body, businesses, user_email, user_id,
     _ensure_campaign_reply_tracking_columns, generate_email_content) still
     live in app.py - imported lazily here rather than duplicated, same
     pattern this file already used for send_campaign/generate_email/send_bulk.
+
+    `on_sent(recipient_email)`, if given, is called right after each
+    individual email is handed to Gmail/SMTP - before this function's own
+    single end-of-loop commit of recipient rows, which an exception midway
+    never reaches. It exists so a caller (the workflow engine's send
+    ledger) can durably record who has already been emailed and not
+    re-send to them if this call errors out after a partial send.
 
     Returns (result_dict_or_None, error_message_or_None, http_status).
     """
@@ -272,6 +280,13 @@ def send_bulk_emails_core(subject, body, businesses, user_email, user_id,
                 server.send_message(msg)
 
             sent_count += 1
+            if on_sent:
+                try:
+                    on_sent(recipient)
+                except Exception as ledger_error:
+                    # Never let bookkeeping abort a send loop that has
+                    # already delivered this email.
+                    print(f"[SEND_EMAILS] on_sent callback failed for {recipient}: {ledger_error}")
 
             recipient_record = EmailCampaignRecipient(
                 campaign_id=campaign_id,

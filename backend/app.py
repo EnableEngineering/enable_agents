@@ -4671,19 +4671,24 @@ def generate_requirements():
     # generation path RequirementsGathering.js's "report" modes use.
     try:
         from core.context import ContextStore
+        from core.dependency_validator import scoped_key
 
-        ContextStore().set(
-            g.user_id,
-            "market_research",
-            "company_profile",
-            {
-                "industries": data.get('industries', ''),
-                "countries": data.get('countries', ''),
-                "overview": data.get('overview', ''),
-                "response_format": data.get('responseFormat', ''),
-                "updated_at": datetime.utcnow().isoformat(),
-            },
-        )
+        profile = {
+            "industries": data.get('industries', ''),
+            "countries": data.get('countries', ''),
+            "overview": data.get('overview', ''),
+            "response_format": data.get('responseFormat', ''),
+            "project_id": data.get('projectId') or None,
+            "updated_at": datetime.utcnow().isoformat(),
+        }
+        store = ContextStore()
+        # User-level "latest" copy (what a check with no project selected
+        # reads) plus, when the page knows its project, that project's own
+        # copy - company_profile is a scope:"project" dependency, so only
+        # the project-scoped copy satisfies that project's prerequisites.
+        store.set(g.user_id, "market_research", scoped_key("company_profile", None), profile)
+        if data.get('projectId'):
+            store.set(g.user_id, "market_research", scoped_key("company_profile", data['projectId']), profile)
     except Exception:
         pass
 

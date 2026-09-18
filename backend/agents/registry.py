@@ -233,7 +233,7 @@ def agent_dependencies(agent_id: str):
     if not manifest:
         return jsonify({"error": "agent not found"}), 404
 
-    status = get_dependency_status(agent_id, g.user_id)
+    status = get_dependency_status(agent_id, g.user_id, request.args.get("project_id") or None)
     return jsonify(status)
 
 

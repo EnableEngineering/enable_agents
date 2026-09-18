@@ -11,6 +11,7 @@
       "description": "Company research data (competitors, market size, etc)",
       "required_by": ["content_marketing", "email_outreach", "executive_assistant"],
       "provided_by": ["market_research"],
+      "scope": "project",
       "fallback_provider": null
     },
     "prospect_list": {

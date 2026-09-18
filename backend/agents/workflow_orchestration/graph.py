@@ -62,6 +62,8 @@ below with no extra code:
     check_and_maybe_alert_budget itself and does not touch that
     function's alert-only behavior anywhere else in the app.
 """
+import hashlib
+import os
 from datetime import datetime
 from typing import Any, Callable, Dict, List
 
@@ -106,15 +108,23 @@ def _sync_legacy_state(instance_id: str, stage_id: str, output: Dict[str, Any]) 
         return
 
     data = output if isinstance(output, dict) else {}
+    skipped = bool(data.get("skipped"))
     states = instance.stage_states
     states[stage_id] = {
+        # "completed" stays the status every existing consumer gates on
+        # (a skipped stage has still been *resolved* - nothing is pending
+        # on it); `outcome` is what lets the UI tell a stage that really
+        # did its work from one that was skipped (by the user, by the
+        # kill switch, or because there was nothing to act on), instead
+        # of showing all of them as the same green check.
         "status": "completed",
+        "outcome": "skipped" if skipped else "done",
         "data": data,
         "completedAt": _utc_iso(datetime.utcnow()),
     }
     instance.stage_states = states
 
-    if data:
+    if data and not skipped:
         ctx = instance.context
         ctx.update(data)
         instance.context = ctx
@@ -157,11 +167,33 @@ def _autopilot_over_budget(state: WorkflowGraphState) -> bool:
     return _current_month_spend_usd(project_id) >= project.monthly_budget_usd
 
 
+# Side-effect classes a node declares via run_stage(side_effect=...).
+#   "read"         - searches/analysis/internal records; safe to auto-run.
+#   "irreversible" - reaches outside the platform in a way that can't be
+#                    taken back (sending real email). Autopilot never
+#                    auto-approves these: the point of autopilot is to skip
+#                    *routine* review, and "can't be undone" is exactly the
+#                    case review exists for. Suggest/co-pilot already pause
+#                    on every node, so this only changes autopilot.
+SIDE_EFFECT_READ = "read"
+SIDE_EFFECT_IRREVERSIBLE = "irreversible"
+
+
+def _autopilot_review_reason(state: WorkflowGraphState, side_effect: str):
+    """Why autopilot must hand this node to a human, or None to auto-approve."""
+    if side_effect == SIDE_EFFECT_IRREVERSIBLE:
+        return "irreversible"
+    if _autopilot_over_budget(state):
+        return "budget"
+    return None
+
+
 def run_stage(
     state: WorkflowGraphState,
     stage_id: str,
     propose: Callable[[WorkflowGraphState], Dict[str, Any]],
     execute: Callable[[WorkflowGraphState, Dict[str, Any]], Dict[str, Any]],
+    side_effect: str = SIDE_EFFECT_READ,
 ) -> Dict[str, Any]:
     if _instance_paused(state["instance_id"]):
         stage_outputs = dict(state.get("stage_outputs") or {})
@@ -188,10 +220,19 @@ def run_stage(
     # even in autopilot mode - autopilot should not auto-retry a stage that
     # just failed with the same input.
     while True:
-        if error_message is None and autonomy_mode == "autopilot" and not _autopilot_over_budget(state):
+        review_reason = None
+        if autonomy_mode == "autopilot" and error_message is None:
+            review_reason = _autopilot_review_reason(state, side_effect)
+
+        if autonomy_mode == "autopilot" and error_message is None and review_reason is None:
             decision = {"action": "approve"}
         else:
             payload = {"stage_id": stage_id, "proposed_input": proposed_input}
+            if side_effect != SIDE_EFFECT_READ:
+                payload["side_effect"] = side_effect
+            if autonomy_mode == "autopilot":
+                # Lets the UI say *why* autopilot stopped here.
+                payload["autopilot_pause_reason"] = "error" if error_message else review_reason
             if error_message:
                 payload["error"] = error_message
             decision = interrupt(payload)
@@ -229,34 +270,112 @@ def _stage_input(state: WorkflowGraphState, stage_id: str) -> Dict[str, Any]:
     return dict((state.get("initial_inputs") or {}).get(stage_id) or {})
 
 
-def _send_bulk_emails_or_skip(state: WorkflowGraphState, args: Dict[str, Any]) -> Dict[str, Any]:
-    """Shared execute() body for every email-sending node (rfq_outreach,
-    outreach, sequence). A genuinely empty/invalid recipient list (e.g. an
-    earlier search stage found zero businesses) is not something a human
-    can "fix" by editing this stage's proposed input, so it's a benign
-    no-op rather than an error - run_stage's retry loop would otherwise
-    force a pointless human checkpoint on every zero-result run. Anything
-    else send_bulk_emails_core rejects (missing sender email, missing
-    subject/body without AI personalization) is genuinely actionable, so
-    that still raises and re-pauses this stage for correction."""
-    businesses = args.get("businesses") or []
-    valid_emails = [
-        b.get("email") for b in businesses
+def _valid_recipient_emails(businesses) -> list:
+    return [
+        b.get("email") for b in (businesses or [])
         if b.get("email") and b.get("email") != "N/A" and "@" in str(b.get("email"))
     ]
-    if not valid_emails:
-        return {"skipped": True, "reason": "no valid recipient emails", "sent": 0}
+
+
+def _max_email_recipients_per_stage() -> int:
+    try:
+        return max(1, int(os.getenv("WORKFLOW_MAX_EMAIL_RECIPIENTS", "50")))
+    except ValueError:
+        return 50
+
+
+def _send_ledger_key(state: WorkflowGraphState, stage_id: str, args: Dict[str, Any]) -> str:
+    """One ledger per (instance, stage, message content). Hashing the
+    content means editing the subject/body starts a fresh ledger (a
+    genuinely different email may go to the same people), while
+    re-approving an unchanged message after a partial failure - or a
+    replayed/retried task - continues the old one."""
+    digest = hashlib.sha1(
+        f"{args.get('subject', '')}|{args.get('body', '')}|{bool(args.get('use_ai_personalization'))}".encode("utf-8")
+    ).hexdigest()[:12]
+    return f"{state['instance_id']}:{stage_id}:{digest}"
+
+
+def _send_bulk_emails_or_skip(state: WorkflowGraphState, stage_id: str, args: Dict[str, Any]) -> Dict[str, Any]:
+    """Shared execute() body for every email-sending node (rfq_outreach,
+    outreach, sequence) - the platform's one irreversible action, so it
+    carries three guards no other stage needs:
+
+    1. Nothing to send is not an error. A genuinely empty/invalid
+       recipient list (e.g. the search found businesses but none has an
+       email) can't be fixed by a human editing this stage's proposal, so
+       it returns skipped=True with a reason - which the UI now shows as
+       "Skipped", not as a green check - instead of raising and forcing a
+       pointless checkpoint. Anything else send_bulk_emails_core rejects
+       (missing sender email, missing subject/body without AI
+       personalization) is actionable, so that still raises and re-pauses
+       this stage for correction.
+    2. At-most-once per recipient. send_bulk_emails_core sends in a loop
+       and only records recipients in one commit at the end, and on any
+       exception it returns an error after some emails have already gone
+       out - so approving again used to email those people a second time.
+       A ContextStore ledger records each address the moment it's sent;
+       a retry (human re-approve, or a replayed task) only sends to
+       whoever is left.
+    3. A per-stage recipient cap (WORKFLOW_MAX_EMAIL_RECIPIENTS, default
+       50) so one approval can't fan out to an entire 200-row search
+       result by accident.
+    """
+    businesses = args.get("businesses") or []
+    valid = _valid_recipient_emails(businesses)
+    if not valid:
+        return {
+            "skipped": True,
+            "reason": (
+                f"none of the {len(businesses)} businesses has an email address"
+                if businesses else "no recipients"
+            ),
+            "sent": 0,
+        }
+
+    from core.context import ContextStore
+
+    store = ContextStore()
+    ledger_key = _send_ledger_key(state, stage_id, args)
+    ledger = store.get(state["user_id"], "workflow_send_ledger", ledger_key, default=None) or {}
+    already_sent = {str(e).lower() for e in ledger.get("sent", [])}
+
+    remaining = [
+        b for b in businesses
+        if b.get("email") in valid and str(b.get("email")).lower() not in already_sent
+    ]
+    if not remaining:
+        return {
+            "skipped": True,
+            "reason": f"all {len(already_sent)} recipients were already emailed by this stage",
+            "sent": 0,
+        }
+
+    cap = _max_email_recipients_per_stage()
+    if len(remaining) > cap:
+        raise RuntimeError(
+            f"This stage would email {len(remaining)} recipients, over the per-stage limit of {cap}. "
+            "Remove some rows below and approve again."
+        )
 
     from agents.email_outreach.service import send_bulk_emails_core
 
+    sent_now = set(already_sent)
+
+    def _record_sent(recipient: str) -> None:
+        sent_now.add(str(recipient).lower())
+        store.set(state["user_id"], "workflow_send_ledger", ledger_key, {"sent": sorted(sent_now)})
+
     result, error, status = send_bulk_emails_core(
-        args["subject"], args["body"], businesses,
+        args["subject"], args["body"], remaining,
         state["user_id"], state["user_id"],
         campaign_name=args["campaign_name"],
         use_ai_personalization=args["use_ai_personalization"],
+        on_sent=_record_sent,
     )
     if error:
-        raise RuntimeError(error)
+        already = f" ({len(sent_now - already_sent)} were sent before it failed and won't be re-sent)" if sent_now - already_sent else ""
+        raise RuntimeError(f"{error}{already}")
     return result
 
 
@@ -318,9 +437,9 @@ def rfq_outreach_node(state: WorkflowGraphState) -> Dict[str, Any]:
         }
 
     def execute(s, args):
-        return _send_bulk_emails_or_skip(s, args)
+        return _send_bulk_emails_or_skip(s, "rfq_outreach", args)
 
-    return run_stage(state, "rfq_outreach", propose, execute)
+    return run_stage(state, "rfq_outreach", propose, execute, side_effect=SIDE_EFFECT_IRREVERSIBLE)
 
 
 def response_analysis_node(state: WorkflowGraphState) -> Dict[str, Any]:
@@ -487,9 +606,9 @@ def vendor_outreach_node(state: WorkflowGraphState) -> Dict[str, Any]:
         }
 
     def execute(s, args):
-        return _send_bulk_emails_or_skip(s, args)
+        return _send_bulk_emails_or_skip(s, "outreach", args)
 
-    return run_stage(state, "outreach", propose, execute)
+    return run_stage(state, "outreach", propose, execute, side_effect=SIDE_EFFECT_IRREVERSIBLE)
 
 
 def evaluation_node(state: WorkflowGraphState) -> Dict[str, Any]:
@@ -616,9 +735,9 @@ def sequence_node(state: WorkflowGraphState) -> Dict[str, Any]:
         }
 
     def execute(s, args):
-        return _send_bulk_emails_or_skip(s, args)
+        return _send_bulk_emails_or_skip(s, "sequence", args)
 
-    return run_stage(state, "sequence", propose, execute)
+    return run_stage(state, "sequence", propose, execute, side_effect=SIDE_EFFECT_IRREVERSIBLE)
 
 
 def followup_node(state: WorkflowGraphState) -> Dict[str, Any]:

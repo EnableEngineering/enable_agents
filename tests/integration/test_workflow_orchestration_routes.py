@@ -296,12 +296,14 @@ def test_legacy_manual_routes_reject_graph_orchestrated_instance(client, flask_a
     assert "graph engine" in res.get_json()["error"]
 
 
-def test_autopilot_runs_all_stages_with_zero_interrupts(client, flask_app, instance, monkeypatch):
-    """Autopilot mode must run every stage's real function with no pause.
-    document_analysis is mocked outright (its real path calls OpenAI even
-    for an empty document list); every other stage naturally short-circuits
-    safely on empty input (no valid emails / no requirement text / no
-    audits / no tasks) without needing a mock."""
+def test_autopilot_runs_read_stages_but_always_pauses_before_sending_email(client, flask_app, instance, monkeypatch):
+    """Autopilot runs every read-only stage with no pause, but must stop
+    at rfq_outreach - the one stage that sends real email - and say why.
+    (This test used to assert zero interrupts across the whole pipeline;
+    that was the behavior being fixed - see docs/todo.md's 2026-09-18
+    entry.) document_analysis is mocked outright (its real path calls
+    OpenAI even for an empty document list); the other read stages
+    short-circuit safely on empty input."""
     import agents.market_research.google_business_helper as gbh
     import app as app_module
 
@@ -321,8 +323,24 @@ def test_autopilot_runs_all_stages_with_zero_interrupts(client, flask_app, insta
     assert res.status_code == 202
 
     res = client.get(f"/api/workflows/instances/{instance}/pending-approval", headers=headers)
+    data = res.get_json()
+    assert data["pending"] is True
+    assert data["interrupt"]["stage_id"] == "rfq_outreach"
+    assert data["interrupt"]["side_effect"] == "irreversible"
+    assert data["interrupt"]["autopilot_pause_reason"] == "irreversible"
+
+    # Approving with no businesses is a visible skip, not a send - and the
+    # rest of the pipeline then finishes on its own.
+    res = client.post(f"/api/workflows/instances/{instance}/resume", json={"action": "approve"}, headers=headers)
+    assert res.status_code == 202
+
+    res = client.get(f"/api/workflows/instances/{instance}/pending-approval", headers=headers)
     assert res.get_json()["pending"] is False
 
     with flask_app.app_context():
         refreshed = WorkflowInstance.query.filter_by(instance_id=instance).first()
         assert refreshed.status == "completed"
+        rfq = refreshed.stage_states["rfq_outreach"]
+        assert rfq["outcome"] == "skipped"
+        assert rfq["data"]["reason"] == "no recipients"
+        assert refreshed.stage_states["supplier_discovery"]["outcome"] == "done"

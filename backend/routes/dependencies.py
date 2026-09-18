@@ -4,7 +4,7 @@ Dependencies API Routes.
 Exposes dependency validation status for agents.
 """
 
-from flask import Blueprint, jsonify, g
+from flask import request, Blueprint, jsonify, g
 from core.auth import require_auth
 from core.dependency_validator import get_dependency_status, validator
 
@@ -15,7 +15,7 @@ dependencies_bp = Blueprint("dependencies", __name__, url_prefix="/api/dependenc
 @require_auth
 def check_agent_dependencies(agent_id):
     """Get dependency status for a specific agent."""
-    status = get_dependency_status(agent_id, g.user_id)
+    status = get_dependency_status(agent_id, g.user_id, request.args.get("project_id") or None)
     return jsonify(status)
 
 

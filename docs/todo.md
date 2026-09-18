@@ -2110,3 +2110,88 @@ code via `git stash`, not caused by this batch.
 **Test-harness gotcha (again):** `docker cp tests <backend-dev>:/app/tests_it`
 writes through the `./backend:/app` bind mount onto the host as
 `backend/tests_it/` - delete it afterward or it shows up untracked.
+
+---
+
+## Platform-critique follow-through: irreversible actions, visible skips, per-project context ✅ (2026-09-18)
+
+From a critic-role review of agents/workflows. Three items done; two
+deliberately NOT done (below).
+
+### 1. Irreversible-action policy (`workflow_orchestration/graph.py`)
+- `run_stage(..., side_effect="read"|"irreversible")`. The three email
+  nodes (`rfq_outreach`, `outreach`, `sequence`) are `irreversible`;
+  **Autopilot never auto-approves an irreversible stage** (it previously
+  auto-sent real email with no confirmation - the manual-UI warning
+  never applied to it). The interrupt now carries `side_effect` and
+  `autopilot_pause_reason` ("irreversible" | "budget" | "error") so the
+  panel says *why* Autopilot stopped.
+- **At-most-once per recipient.** `send_bulk_emails_core` sends in a loop
+  and only records recipients in one commit at the end; on an exception
+  it returned an error after some mail had already gone out, so
+  re-approving re-emailed those people. New optional `on_sent` callback +
+  a `ContextStore` ledger (`workflow_send_ledger`, keyed by
+  instance:stage:hash(subject|body|ai)) records each address as it's
+  sent; retries send only to whoever is left. Editing the message starts
+  a fresh ledger. Caveat: `ContextStore.set` swallows Postgres write
+  failures (Redis + PG both failing would silently lose a ledger write);
+  a real table would be stricter.
+- **Per-stage recipient cap** `WORKFLOW_MAX_EMAIL_RECIPIENTS` (default
+  50); over it the stage re-pauses with a clear error.
+- **Mode copy corrected.** Suggest and Co-pilot are *functionally
+  identical* (every node interrupts in both - see state.py). The info
+  popover I wrote on 2026-09-16 claimed Co-pilot "moves faster" for
+  routine stages, which was false. Copy now says so. Making them differ
+  is a product decision (an auto-approved read stage would run with the
+  empty inputs that the approval panel exists to collect) - either
+  merge the modes or define a real difference.
+
+### 2. Skips are visible, not green checks
+- `stage_states[stage].outcome` = "skipped" | "done" (status stays
+  "completed" - every consumer gates on it). UI shows a muted "–" marker,
+  "Skipped - <reason>" under the stage, and "Skipped" in the detail
+  header. Skip markers no longer merge into the flat `context`.
+- "Nothing to send" reasons: "none of the N businesses has an email
+  address" / "no recipients" / "all N recipients were already emailed".
+- Business rows in the approval panel show Name / Email / Phone / Website
+  (was every raw Places column, with no Email column to type into); a
+  notice appears when no row has an address; the send warning now counts
+  only rows that will actually send (edited rows on Save Edit & Approve)
+  and doesn't appear when that's zero.
+- **NOT done - email enrichment in the graph.** Google Places never
+  returns emails; enrichment exists only as the UI-triggered
+  `/api/enrich-businesses-with-emails` (scrap.io, paid + per-user
+  quota, ~20s per business serially, 340-line request handler). Calling
+  that from a graph node without a cost/quota/async design would spend
+  the user's money unannounced. Until then, orchestrated email stages
+  need addresses typed in (or supplied as stage inputs); otherwise they
+  visibly skip.
+
+### 3. Per-project context
+- `company_profile` is now `"scope": "project"` in
+  `agent-dependencies.json`. ContextStore identity is (user, agent, key)
+  only, so scope lives in the key: `scoped_key("company_profile", pid)`
+  -> `company_profile@<pid>` (plain key = user-level "latest").
+  `check_dependencies` honors it (it previously accepted `project_id`
+  and ignored it - research in project A cleared project B's banner).
+  `/generate-requirements` writes both copies when the page sends
+  `projectId`; the status endpoints take `?project_id=`; the prerequisite
+  gate sends it and its "Get from ..." links keep `?project=` (without
+  that, doing the research would record it against no project and the
+  user would stay blocked). `user_profile` stays per-user.
+- Not done: `require_dependencies` (unused decorator) trusts an
+  `X-User-Id` header - dead code today, but delete or fix before use.
+
+### Verification
+`tests/integration`: new `test_workflow_orchestration_email_safety.py`
+(5: visible skip, partial-failure-then-reapprove sends only the rest,
+full replay sends nothing, edited message = fresh ledger, cap) and
+`test_dependency_project_scope.py` (4); the old "autopilot runs with
+zero interrupts" test was rewritten to assert the new pause. 45 pass
+(orchestration + scope + registry-validation). `test_agent_registry.py`
+fails identically on unmodified code (pre-existing 401 setup). Playwright
+on dev: autopilot pauses at Email Sequence with both notices, Email
+column, "1 recipient" warning (cancelled - nothing sent), visible skips
+with reasons, project A vs B prerequisites, gate link keeps project.
+**Test-isolation note:** the send ledger outlives a test run (Redis+PG),
+so tests must use unique instance ids.

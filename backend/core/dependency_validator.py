@@ -16,6 +16,15 @@ from core.context import ContextStore
 CONFIG_PATH = Path(__file__).parent.parent / "config" / "agent-dependencies.json"
 
 
+def scoped_key(dep_key: str, project_id: Optional[str]) -> str:
+    """ContextStore key for a dependency. ContextStore rows are identified
+    by (user_id, agent_id, key) only, so project scope has to live in the
+    key itself: "company_profile@<project_id>" for one project's copy,
+    plain "company_profile" for the user-level "latest" copy. Writers and
+    the validator both go through here so the format lives in one place."""
+    return f"{dep_key}@{project_id}" if project_id else dep_key
+
+
 class DependencyValidator:
     """Validates agent dependencies against available context data."""
 
@@ -84,9 +93,15 @@ class DependencyValidator:
             # the actual agent_id that wrote them, there's no real wildcard).
             dep_info = deps.get(dep_key, {})
             providers = dep_info.get("provided_by") or []
+            # A "scope": "project" dependency is only satisfied by *this*
+            # project's copy - research done for project A must not clear
+            # project B's prerequisite banner. With no project selected
+            # there's nothing to scope by, so it falls back to the
+            # user-level "latest" copy.
+            lookup_key = scoped_key(dep_key, project_id if dep_info.get("scope") == "project" else None)
             value = None
             for provider in providers:
-                value = context_store.get(user_id, provider, dep_key)
+                value = context_store.get(user_id, provider, lookup_key)
                 if value:
                     break
             if not value:
@@ -164,7 +179,7 @@ def require_dependencies(agent_id: str):
     return decorator
 
 
-def get_dependency_status(agent_id: str, user_id: str) -> Dict[str, Any]:
+def get_dependency_status(agent_id: str, user_id: str, project_id: Optional[str] = None) -> Dict[str, Any]:
     """
     Get full dependency status for an agent.
 
@@ -175,12 +190,13 @@ def get_dependency_status(agent_id: str, user_id: str) -> Dict[str, Any]:
         - ready: Boolean if agent can run
     """
     requirements = validator.get_agent_requirements(agent_id)
-    satisfied, missing = validator.check_dependencies(agent_id, user_id)
+    satisfied, missing = validator.check_dependencies(agent_id, user_id, project_id)
 
     satisfied_keys = [r for r in requirements if r not in [m["key"] for m in missing]]
 
     return {
         "agent_id": agent_id,
+        "project_id": project_id,
         "requirements": requirements,
         "satisfied": satisfied_keys,
         "missing": missing,
