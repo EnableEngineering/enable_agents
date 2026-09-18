@@ -54,8 +54,8 @@ class BudgetExceeded(Exception):
         spent = status.get("spendUsd") or 0.0
         fix = {
             "user": "Raise your budget or switch it to alert-only on the Usage page",
-            "project": "Raise the project's budget or switch it to alert-only (Projects page)",
-            "team": "Ask a team owner or admin to raise the team budget (Team page)",
+            "project": "Raise the project's budget or switch it to alert-only in the project's AI settings (Projects page)",
+            "team": "Ask a team owner or admin to raise the team budget (Usage page, Team tab)",
         }.get(scope, "Raise the budget")
         super().__init__(
             f"{label} has used its ${limit:.2f} monthly AI budget (${spent:.2f} spent) and is set to block "

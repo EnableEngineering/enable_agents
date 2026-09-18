@@ -2396,10 +2396,25 @@ built (migration `t7i6j5k4l3m2`, additive):
   `.status-badge.error` rule); Usage tabs flashed the previous tab's numbers
   under the new title for one frame.
 - Migration `u8j7k6l5m4n3` (additive columns only; safe to roll back code
-  over). 24 new tests (`test_budget_enforcement.py`); suite 146 integration +
-  9 sanity.
+  over). 25 tests in `test_budget_enforcement.py`; suite 147 integration +
+  9 sanity. Mutation-checked: disabling the chokepoint check, treating
+  alert-only as block, `>` instead of `>=`, dropping the workflow-scope user,
+  and dropping member-matching in team spend each make a test fail.
+- **Audit follow-up (same day):** a coverage sweep for AI calls that bypass
+  `core/ai_client.py` found the cached branch of `process_documents_with_kg_rag`
+  still made a paid query embedding un-checked - the check now sits at the top
+  of that function. `RAGContentGenerator` (also uses `OpenAIEmbeddings`) is
+  never instantiated anywhere and its constructor goes through the enforced
+  `get_langchain_llm` anyway; `core/key_testing.py` (the "Test key" button)
+  and the dead `init_llm()` are deliberately not enforced. The block message
+  for a team budget now points to Usage -> Team (it said "Team page").
 - **Known limits:** LangChain `OpenAIEmbeddings` calls are not usage-logged
-  (cheap) though their entry points are enforced; code that wraps AI calls in
+  (cheap) though their entry points are enforced; a personal budget is
+  self-service (you can lift your own cap; only project/team caps are set by
+  someone else); a `$0` budget blocks but sends no alert emails (alerts key
+  off a truthy limit); the 402 rewrite applies to any 4xx/5xx a request
+  returns after a block was hit, so a route that survived a block and then
+  failed for an unrelated reason would show the budget message; code that wraps AI calls in
   its own `except Exception` and degrades (e.g. the optional LLM refinement in
   `score_leads_core`) will quietly degrade instead of failing when blocked; a
   block is checked before each call, so one in-flight call can overshoot the

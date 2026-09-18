@@ -5880,6 +5880,12 @@ Provide a detailed answer:"""
 
 def process_documents_with_kg_rag(documents, nodes, edges, query, include_context=False, user_id=None, project_id=None):
     """Main processing pipeline combining document loading, KG building, and RAG with caching"""
+    # The embeddings below (documents on a cache miss, always the query) go
+    # through LangChain rather than core.ai_client, so the budget check is
+    # made here, before any of them.
+    from core.ai_client import enforce_budget_for_call
+    enforce_budget_for_call(user_id, project_id)
+
     # Generate cache keys
     doc_cache_key = get_document_cache_key(documents)
     kg_cache_key = get_kg_cache_key(nodes, edges)
@@ -5911,10 +5917,6 @@ def process_documents_with_kg_rag(documents, nodes, edges, query, include_contex
             text = extract_text_from_document(local_path)
             all_text += text + "\n\n"
         
-        # Create chunks and embeddings. These go through LangChain rather than
-        # core.ai_client, so the budget check has to be made here.
-        from core.ai_client import enforce_budget_for_call
-        enforce_budget_for_call(user_id, project_id)
         chunks = chunk_text(all_text)
         embeddings_model = OpenAIEmbeddings()
         embeddings = create_embeddings(chunks)

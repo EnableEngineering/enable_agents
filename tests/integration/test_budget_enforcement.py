@@ -205,6 +205,24 @@ def test_team_spend_is_shared_across_members_and_their_projects(flask_app, email
     enforce_budget(outsider, None)                    # not on the team
 
 
+def test_team_spend_counts_older_rows_that_have_no_team_id(flask_app, emails):
+    """Rows written before usage started falling back to the user's team have
+    team_id NULL; they still belong to the team through their user."""
+    from core.budget import current_month_team_spend_usd
+    from core.models import AIUsageLog
+
+    owner, member = _uid("own"), _uid("mem")
+    tid = _make_team(owner, [member])
+    db.session.add(AIUsageLog(user_id=member, project_id=None, team_id=None, agent="legacy", provider="openai",
+                              model="m", key_source="platform", prompt_tokens=0, completion_tokens=0,
+                              total_tokens=0, estimated_cost_usd=1.25))
+    db.session.add(AIUsageLog(user_id=_uid("stranger"), project_id=None, team_id=None, agent="legacy",
+                              provider="openai", model="m", key_source="platform", prompt_tokens=0,
+                              completion_tokens=0, total_tokens=0, estimated_cost_usd=9.0))
+    db.session.commit()
+    assert current_month_team_spend_usd(tid) == pytest.approx(1.25)
+
+
 def test_usage_rows_fall_back_to_the_users_team(flask_app, emails):
     from core.models import AIUsageLog
 
