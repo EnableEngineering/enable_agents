@@ -2270,3 +2270,12 @@ finding and a CI gap found on the way.
   collection: verified from a fully wiped database, twice in a row, no
   manual step. The first CI run failing on this is the gate working as
   intended - `ci.yml`'s old backend job would have hidden it forever.
+- **A test was quietly spending money (found by CI).**
+  `test_requirements_flows_into_vendor_search_and_evaluation` let
+  `evaluation` run the real `score_leads_core`, which calls OpenAI when a
+  key is set: real calls (and cost) on every local run in a dev container,
+  a 401 -> re-paused stage -> `running != completed` failure in CI, where
+  the key is a stub. Mocked like the lead-nurture test; the suite now
+  passes with a stub key and a wiped database and runs in ~4s instead of
+  ~10s. Rule of thumb for this suite: it must pass with
+  `OPENAI_API_KEY=test-openai-key` and no network.

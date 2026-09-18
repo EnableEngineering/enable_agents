@@ -119,6 +119,15 @@ def test_requirements_flows_into_vendor_search_and_evaluation(client, flask_app,
     top-ranked vendor gets a real ExecTask created."""
     import agents.market_research_core as mrc
     import agents.market_research.google_business_helper as gbh
+    import agents.sales_helper_core as shc
+
+    # evaluation's execute() runs the real score_leads_core, which calls
+    # OpenAI whenever OPENAI_API_KEY is set: with a real key (a dev
+    # container) this test silently spent money on every run, and with the
+    # stub key CI uses it 401'd and the stage re-paused instead of
+    # completing. Mocked like test_workflow_orchestration_lead_nurture.py.
+    def _fake_score_leads_core(requirement, businesses, user_id):
+        return [{"index": i, "match_score": 90 - 10 * i, "short_summary": "fit"} for i in range(len(businesses))], None, 200
 
     def _fake_generate_requirements_core(overview, user_id, **kwargs):
         return "Need a reliable CNC machining vendor with ISO 9001 certification.", None
@@ -134,6 +143,7 @@ def test_requirements_flows_into_vendor_search_and_evaluation(client, flask_app,
         }
 
     monkeypatch.setattr(mrc, "generate_requirements_core", _fake_generate_requirements_core)
+    monkeypatch.setattr(shc, "score_leads_core", _fake_score_leads_core)
     monkeypatch.setattr(gbh.GoogleBusinessSearcher, "search_businesses", _fake_search_businesses)
 
     headers = _bearer(flask_app, "user_vendor_eval")
