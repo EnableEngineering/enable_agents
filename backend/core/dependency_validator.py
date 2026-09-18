@@ -1,15 +1,16 @@
 """
 Agent Dependency Validator.
 
-Validates that required context data is available before an agent executes.
-Can operate in warn mode (log warnings) or strict mode (block execution).
+Reports whether an agent's required context data exists (per user, and per
+project for scope:"project" dependencies) - see get_dependency_status and
+the /api/dependencies routes. (A require_dependencies route decorator that
+trusted an X-User-Id header for identity used to live here; nothing used it
+and it was deleted rather than left as a spoofable-auth footgun.)
 """
 
 import json
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
-from functools import wraps
-from flask import request, jsonify, current_app
 
 from core.context import ContextStore
 
@@ -128,55 +129,6 @@ class DependencyValidator:
 
 # Global validator instance
 validator = DependencyValidator()
-
-
-def require_dependencies(agent_id: str):
-    """
-    Decorator for route handlers that enforces dependency checks.
-
-    Usage:
-        @bp.route('/api/some-agent/action', methods=['POST'])
-        @require_dependencies('some_agent')
-        def some_action():
-            ...
-    """
-    def decorator(f):
-        @wraps(f)
-        def wrapper(*args, **kwargs):
-            user_id = request.headers.get("X-User-Id", "")
-            if not user_id:
-                return jsonify({"error": "Not authenticated"}), 401
-
-            # Check demo mode bypass
-            is_demo = request.headers.get("X-Demo-Mode", "false").lower() == "true"
-            enforcement = validator.config.get("enforcement", {})
-            if is_demo and enforcement.get("bypass_in_demo_mode", True):
-                return f(*args, **kwargs)
-
-            # Check dependencies
-            satisfied, missing = validator.check_dependencies(agent_id, user_id)
-
-            if not satisfied:
-                mode = validator.get_enforcement_mode()
-                is_strict = validator.is_strict_for_agent(agent_id)
-
-                if mode == "strict" or is_strict:
-                    return jsonify({
-                        "error": "Missing required dependencies",
-                        "missing_dependencies": missing,
-                        "message": f"Agent '{agent_id}' requires data from: {', '.join(m['key'] for m in missing)}",
-                    }), 428  # Precondition Required
-
-                else:
-                    # Warn mode - log but allow
-                    current_app.logger.warning(
-                        f"[dependency_validator] Agent '{agent_id}' missing dependencies: "
-                        f"{[m['key'] for m in missing]}"
-                    )
-
-            return f(*args, **kwargs)
-        return wrapper
-    return decorator
 
 
 def get_dependency_status(agent_id: str, user_id: str, project_id: Optional[str] = None) -> Dict[str, Any]:

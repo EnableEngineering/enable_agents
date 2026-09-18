@@ -7,10 +7,24 @@ class RepositorySanityTests(unittest.TestCase):
         self.repo_root = Path(__file__).resolve().parents[2]
 
     def test_shell_scripts_are_in_scripts_folder(self):
-        shell_files = list(self.repo_root.rglob("*.sh"))
+        # Only the repo's own files count: skip vendored/generated trees and
+        # hidden dirs (.git, local .repo-agent worktrees - other checkouts of
+        # this repo, not part of it). The root run.sh is a documented
+        # one-line wrapper that execs scripts/run.sh.
+        vendored = {"venv", "node_modules", "build"}
+        shell_files = []
+        for path in self.repo_root.rglob("*.sh"):
+            parts = path.relative_to(self.repo_root).parts
+            if vendored.intersection(parts) or any(part.startswith(".") for part in parts):
+                continue
+            if path == self.repo_root / "run.sh":
+                continue
+            shell_files.append(path)
         self.assertGreater(len(shell_files), 0, "Expected at least one shell script.")
+        # scripts/ at any depth (scripts/lib/common.sh is shared helper code).
         non_scripts_dir = [
-            path for path in shell_files if path.parent.name != "scripts"
+            path for path in shell_files
+            if "scripts" not in path.relative_to(self.repo_root).parts[:-1]
         ]
         self.assertEqual(
             non_scripts_dir,

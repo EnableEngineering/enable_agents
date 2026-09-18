@@ -5,6 +5,18 @@ from typing import Dict, Any, List, Optional
 from core.database import db
 
 
+AUTONOMY_MODES = ("co-pilot", "autopilot")
+
+
+def normalize_autonomy_mode(mode: Optional[str]) -> str:
+    """"suggest" used to be a third mode, but it never behaved differently
+    from "co-pilot" (every stage pauses in both - only autopilot is
+    special-cased in graph.py's run_stage), so the two were merged
+    2026-09-18. Rows written before that may still say "suggest"; treat
+    it, and an unset value, as "co-pilot" everywhere it's read or set."""
+    return "autopilot" if mode == "autopilot" else "co-pilot"
+
+
 def _utc_iso(dt: Optional[datetime]) -> Optional[str]:
     """ISO-format a naive UTC datetime (every timestamp column here is
     written via datetime.utcnow(), no tzinfo) with an explicit UTC marker.
@@ -90,7 +102,8 @@ class WorkflowInstance(db.Model):
     current_stage_index = db.Column(db.Integer, default=0)
     _stage_states = db.Column("stage_states", db.Text, default="{}")  # JSON: {stage_id: {status, data, completedAt}}
     _context = db.Column("context", db.Text, default="{}")  # Accumulated data passed between stages
-    # Suggest | co-pilot | autopilot - read by agents/workflow_orchestration/graph.py
+    # co-pilot | autopilot (legacy "suggest" rows read as co-pilot - see
+    # normalize_autonomy_mode) - read by agents/workflow_orchestration/graph.py
     # to decide whether a stage's node pauses on interrupt() for human review.
     autonomy_mode = db.Column(db.String(20), nullable=True, default="co-pilot")
     started_at = db.Column(db.DateTime, nullable=True)
@@ -172,8 +185,32 @@ class WorkflowInstance(db.Model):
             "stages": stages,  # Include all stage definitions for frontend
             "stageStates": self.stage_states,
             "context": self.context,
-            "autonomyMode": self.autonomy_mode or "co-pilot",
+            "autonomyMode": normalize_autonomy_mode(self.autonomy_mode),
             "startedAt": _utc_iso(self.started_at),
             "completedAt": _utc_iso(self.completed_at),
             "createdAt": _utc_iso(self.created_at),
         }
+
+
+class WorkflowSendLedger(db.Model):
+    """One row per address a workflow email stage has actually emailed -
+    the durable record that makes re-approving/retrying a send stage
+    at-most-once per recipient (graph.py's _send_bulk_emails_or_skip).
+
+    Keyed by instance + stage + a hash of the message content, so editing
+    the subject/body starts a fresh ledger while an unchanged retry
+    continues the old one. A real table (not ContextStore, which swallows
+    Postgres write failures) so a failed ledger write is loud, and the
+    unique constraint makes double-recording harmless."""
+    __tablename__ = "workflow_send_ledger"
+    __table_args__ = (
+        db.UniqueConstraint("instance_id", "stage_id", "content_hash", "recipient_email",
+                            name="uq_workflow_send_ledger_recipient"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    instance_id = db.Column(db.String(36), nullable=False, index=True)
+    stage_id = db.Column(db.String(100), nullable=False)
+    content_hash = db.Column(db.String(16), nullable=False)
+    recipient_email = db.Column(db.String(320), nullable=False)
+    sent_at = db.Column(db.DateTime, default=datetime.utcnow)

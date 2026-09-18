@@ -121,14 +121,20 @@ jobs:
           pip install -r requirements.txt
           pip install pytest pytest-cov
 
+      # The suite lives in the repo-root tests/ (tests/integration builds its
+      # own minimal app + loads the app.py monolith for the routes defined
+      # there; tests/sanity checks repo layout), NOT backend/tests/ - and it
+      # runs from the repo root, so this step overrides the job's default
+      # working-directory. It used to run `pytest tests/` from backend/ and
+      # end with `|| echo "No tests found yet"`, so it could never fail.
+      # See tests/integration/conftest.py for the env it defaults.
       - name: Run tests
+        working-directory: .
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/enable_test
           REDIS_URL: redis://localhost:6379
-          FLASK_ENV: testing
           SECRET_KEY: test-secret-key
-        run: |
-          pytest tests/ -v --cov=. --cov-report=xml || echo "No tests found yet"
+        run: python -m pytest tests/sanity tests/integration -v
 
   # E2E tests with Playwright
   e2e-tests:

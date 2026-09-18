@@ -699,6 +699,16 @@ def _require_context_service_key_or_401():
     return None
 
 
+def _dev_login_enabled():
+    """The "dev123" password shortcut on /login. Fails closed: only when
+    ENVIRONMENT is explicitly "development" (what docker-compose's dev
+    profile sets). It used to be `FLASK_ENV != 'production'` - a different
+    variable from the one the rest of the app keys off, and open by
+    default, so an unset FLASK_ENV would have let anyone log in as any
+    account with that password."""
+    return os.getenv('ENVIRONMENT', '').strip().lower() == 'development'
+
+
 def _production_auth_strict():
     return os.getenv('ENVIRONMENT', '').strip().lower() == 'production'
 
@@ -5109,7 +5119,7 @@ def login():
         return jsonify({'error': 'Email and password required'}), 400
 
     # DEV MODE: Allow login with password "dev123" for local testing
-    if password == 'dev123' and os.environ.get('FLASK_ENV') != 'production':
+    if password == 'dev123' and _dev_login_enabled():
         from core.session_token import issue_browser_session_token
         username = email.split('@')[0]
         token = issue_browser_session_token(app.config['SECRET_KEY'], username)

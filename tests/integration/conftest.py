@@ -114,6 +114,64 @@ def flask_app():
         db.drop_all()
 
 
+TEST_USER_ID = "user_1"
+
+
 @pytest.fixture
-def client(flask_app):
+def auth_headers(flask_app):
+    """A valid session Bearer token for TEST_USER_ID - the only identity
+    signal require_auth trusts (core/auth.py). Every agent route is
+    behind it, so tests that call one need this."""
+    from core.session_token import issue_browser_session_token
+
+    with flask_app.app_context():
+        token = issue_browser_session_token(flask_app.config["SECRET_KEY"], TEST_USER_ID)
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
+def anon_client(flask_app):
+    """No session token - for asserting that a route rejects anonymous calls."""
     return flask_app.test_client()
+
+
+@pytest.fixture
+def client(flask_app, auth_headers):
+    """Authenticated as TEST_USER_ID by default (a request that passes its
+    own Authorization header still overrides this)."""
+    test_client = flask_app.test_client()
+    test_client.environ_base["HTTP_AUTHORIZATION"] = auth_headers["Authorization"]
+    return test_client
+
+
+# ── The app.py monolith ──────────────────────────────────────────────────
+# /register, /login, /health and the /api/content-marketing routes are
+# defined in app.py, not in a blueprint, so the minimal app above (which
+# intentionally doesn't import app.py) can't serve them. Tests for those go
+# through the real app.
+
+@pytest.fixture(scope="session")
+def monolith_app(flask_app):
+    import app as app_module
+    from core.database import db
+
+    app_module.app.config["TESTING"] = True
+    with app_module.app.app_context():
+        db.create_all()
+    return app_module.app
+
+
+@pytest.fixture
+def monolith_anon_client(monolith_app):
+    return monolith_app.test_client()
+
+
+@pytest.fixture
+def monolith_client(monolith_app):
+    from core.session_token import issue_browser_session_token
+
+    with monolith_app.app_context():
+        token = issue_browser_session_token(monolith_app.config["SECRET_KEY"], TEST_USER_ID)
+    test_client = monolith_app.test_client()
+    test_client.environ_base["HTTP_AUTHORIZATION"] = f"Bearer {token}"
+    return test_client

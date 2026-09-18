@@ -1,8 +1,9 @@
 """
 Integration tests for ContextStore and agent registry dependency validation.
 
-ContextStore tests use an in-memory SQLite database (no Redis required).
-Redis is mocked out so these tests run locally without any external services.
+ContextStore tests run against the test Postgres database (the same one
+conftest.py points DATABASE_URI at - SQLite is no longer a supported backend,
+see core/database.py). Redis is mocked out so no Redis is required.
 """
 
 import json
@@ -10,22 +11,41 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 
+_APP = None
+
+
 def _make_app():
-    from flask import Flask
-    from core.database import db, init_db
-    import core.models  # noqa: F401
+    """One shared Flask app on the test Postgres DB (built once - each
+    init_db() opens its own connection pool)."""
+    global _APP
+    if _APP is None:
+        from flask import Flask
+        from core.database import db, init_db
+        import core.models  # noqa: F401
 
-    app = Flask(__name__)
-    app.config["TESTING"] = True
-    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///:memory:"
-    init_db(app)
-    with app.app_context():
-        db.create_all()
-    return app
+        _APP = Flask(__name__)
+        _APP.config["TESTING"] = True
+        _APP.config["SECRET_KEY"] = "test-secret-key"
+        init_db(_APP)
+        with _APP.app_context():
+            db.create_all()
+    return _APP
 
 
-class TestContextStoreMySQL(unittest.TestCase):
-    """Tests that use only the MySQL (SQLAlchemy) tier — no Redis needed."""
+def _cleanup():
+    """Clear what these tests wrote. Deliberately NOT db.drop_all(): that
+    database is shared with the rest of the session's tests."""
+    from core.database import db
+    from core.models import AgentContext
+
+    db.session.rollback()
+    AgentContext.query.delete()
+    db.session.commit()
+    db.session.remove()
+
+
+class TestContextStorePersistence(unittest.TestCase):
+    """Tests that use only the persistent (PostgreSQL) tier — no Redis needed."""
 
     def setUp(self):
         self.app = _make_app()
@@ -33,9 +53,7 @@ class TestContextStoreMySQL(unittest.TestCase):
         self._ctx.push()
 
     def tearDown(self):
-        from core.database import db
-        db.session.remove()
-        db.drop_all()
+        _cleanup()
         self._ctx.pop()
 
     def _store(self):
@@ -153,9 +171,7 @@ class TestContextStoreRedis(unittest.TestCase):
         self._ctx.push()
 
     def tearDown(self):
-        from core.database import db
-        db.session.remove()
-        db.drop_all()
+        _cleanup()
         self._ctx.pop()
 
     def _mock_redis(self):
@@ -166,7 +182,7 @@ class TestContextStoreRedis(unittest.TestCase):
         rc.keys.return_value = []
         return rc
 
-    def test_redis_hit_skips_mysql(self):
+    def test_redis_hit_skips_database(self):
         mock_rc = self._mock_redis()
         with patch("core.context._get_redis", return_value=mock_rc):
             from core.context import ContextStore
@@ -188,14 +204,22 @@ class TestRegistryDependencyValidation(unittest.TestCase):
     """Tests for registry startup validation of provides/consumes contracts."""
 
     def setUp(self):
+        from agents.registry import _registry
+
+        # These tests _registry.clear() and repopulate the process-wide
+        # registry; put it back so they don't change what every later test
+        # (and the app under test) sees.
+        self._registry_backup = dict(_registry)
         self.app = _make_app()
         self._ctx = self.app.app_context()
         self._ctx.push()
 
     def tearDown(self):
-        from core.database import db
-        db.session.remove()
-        db.drop_all()
+        from agents.registry import _registry
+
+        _registry.clear()
+        _registry.update(self._registry_backup)
+        _cleanup()
         self._ctx.pop()
 
     def test_no_warning_when_provider_exists(self):
@@ -272,7 +296,7 @@ class TestRegistryDependencyValidation(unittest.TestCase):
 
         app = Flask(__name__)
         app.config["TESTING"] = True
-        app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///:memory:"
+        app.config["SECRET_KEY"] = "test-secret-key"
         init_db(app)
         app.register_blueprint(registry_bp, url_prefix="/api/v1/agents")
 
@@ -294,8 +318,12 @@ class TestRegistryDependencyValidation(unittest.TestCase):
 
         with app.app_context():
             db.create_all()
+        from core.session_token import issue_browser_session_token
+
+        with app.app_context():
+            token = issue_browser_session_token(app.config["SECRET_KEY"], "user_1")
         client = app.test_client()
-        resp = client.get("/api/v1/agents/context-graph")
+        resp = client.get("/api/v1/agents/context-graph", headers={"Authorization": f"Bearer {token}"})
         self.assertEqual(resp.status_code, 200)
         data = resp.get_json()
         self.assertIn("nodes", data)

@@ -5,7 +5,7 @@ onto the design canvas's Approve/Edit/Skip pattern via `run_stage`:
 
   1. Build `proposed_input` - the arguments about to be passed to the
      stage's already-extracted `_core` function. No side effect yet.
-  2. In "suggest"/"co-pilot" autonomy_mode, call `interrupt(...)` with
+  2. In "co-pilot" autonomy_mode, call `interrupt(...)` with
      that proposal and pause (checkpointed) until a human resumes with
      `Command(resume={"action": "approve"|"edit"|"skip", "data": {...}})`.
      In "autopilot" mode, skip the interrupt and approve automatically -
@@ -173,7 +173,7 @@ def _autopilot_over_budget(state: WorkflowGraphState) -> bool:
 #                    taken back (sending real email). Autopilot never
 #                    auto-approves these: the point of autopilot is to skip
 #                    *routine* review, and "can't be undone" is exactly the
-#                    case review exists for. Suggest/co-pilot already pause
+#                    case review exists for. Co-pilot already pauses
 #                    on every node, so this only changes autopilot.
 SIDE_EFFECT_READ = "read"
 SIDE_EFFECT_IRREVERSIBLE = "irreversible"
@@ -284,16 +284,42 @@ def _max_email_recipients_per_stage() -> int:
         return 50
 
 
-def _send_ledger_key(state: WorkflowGraphState, stage_id: str, args: Dict[str, Any]) -> str:
-    """One ledger per (instance, stage, message content). Hashing the
-    content means editing the subject/body starts a fresh ledger (a
-    genuinely different email may go to the same people), while
-    re-approving an unchanged message after a partial failure - or a
-    replayed/retried task - continues the old one."""
-    digest = hashlib.sha1(
+def _send_content_hash(args: Dict[str, Any]) -> str:
+    """Identifies "the same message". Hashing the content means editing
+    the subject/body starts a fresh ledger (a genuinely different email
+    may go to the same people), while re-approving an unchanged message
+    after a partial failure - or a replayed/retried task - continues the
+    old one."""
+    return hashlib.sha1(
         f"{args.get('subject', '')}|{args.get('body', '')}|{bool(args.get('use_ai_personalization'))}".encode("utf-8")
     ).hexdigest()[:12]
-    return f"{state['instance_id']}:{stage_id}:{digest}"
+
+
+def _ledger_sent(instance_id: str, stage_id: str, content_hash: str) -> set:
+    from models.workflow import WorkflowSendLedger
+
+    rows = WorkflowSendLedger.query.filter_by(
+        instance_id=instance_id, stage_id=stage_id, content_hash=content_hash
+    ).all()
+    return {r.recipient_email.lower() for r in rows}
+
+
+def _ledger_record(instance_id: str, stage_id: str, content_hash: str, recipient: str) -> None:
+    """Record one delivered address. Deliberately raises on any failure
+    other than "already recorded" - if this write is lost, at-most-once is
+    lost, so the send loop must stop (see send_bulk_emails_core's on_sent)."""
+    from core.database import db
+    from models.workflow import WorkflowSendLedger
+    from sqlalchemy.exc import IntegrityError
+
+    db.session.add(WorkflowSendLedger(
+        instance_id=instance_id, stage_id=stage_id, content_hash=content_hash,
+        recipient_email=str(recipient).lower(),
+    ))
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()  # already recorded - harmless
 
 
 def _send_bulk_emails_or_skip(state: WorkflowGraphState, stage_id: str, args: Dict[str, Any]) -> Dict[str, Any]:
@@ -314,9 +340,10 @@ def _send_bulk_emails_or_skip(state: WorkflowGraphState, stage_id: str, args: Di
        and only records recipients in one commit at the end, and on any
        exception it returns an error after some emails have already gone
        out - so approving again used to email those people a second time.
-       A ContextStore ledger records each address the moment it's sent;
-       a retry (human re-approve, or a replayed task) only sends to
-       whoever is left.
+       A workflow_send_ledger row records each address the moment it's
+       sent; a retry (human re-approve, or a replayed task) only sends to
+       whoever is left. If a ledger write ever fails the loop stops
+       (rather than carrying on unrecorded).
     3. A per-stage recipient cap (WORKFLOW_MAX_EMAIL_RECIPIENTS, default
        50) so one approval can't fan out to an entire 200-row search
        result by accident.
@@ -333,12 +360,9 @@ def _send_bulk_emails_or_skip(state: WorkflowGraphState, stage_id: str, args: Di
             "sent": 0,
         }
 
-    from core.context import ContextStore
-
-    store = ContextStore()
-    ledger_key = _send_ledger_key(state, stage_id, args)
-    ledger = store.get(state["user_id"], "workflow_send_ledger", ledger_key, default=None) or {}
-    already_sent = {str(e).lower() for e in ledger.get("sent", [])}
+    instance_id = state["instance_id"]
+    content_hash = _send_content_hash(args)
+    already_sent = _ledger_sent(instance_id, stage_id, content_hash)
 
     remaining = [
         b for b in businesses
@@ -363,8 +387,8 @@ def _send_bulk_emails_or_skip(state: WorkflowGraphState, stage_id: str, args: Di
     sent_now = set(already_sent)
 
     def _record_sent(recipient: str) -> None:
+        _ledger_record(instance_id, stage_id, content_hash, recipient)
         sent_now.add(str(recipient).lower())
-        store.set(state["user_id"], "workflow_send_ledger", ledger_key, {"sent": sorted(sent_now)})
 
     result, error, status = send_bulk_emails_core(
         args["subject"], args["body"], remaining,

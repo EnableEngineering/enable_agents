@@ -1,16 +1,14 @@
-"""Integration tests — Health blueprint."""
+"""Integration tests — /health (defined in app.py, so via the monolith app)."""
 
 
-def test_health_returns_200(client):
-    res = client.get("/health")
-    assert res.status_code in (200, 503)
+def test_health_returns_200(monolith_anon_client):
+    res = monolith_anon_client.get("/health")
+    assert res.status_code == 200
     data = res.get_json()
-    assert "status" in data
+    assert data["status"] == "healthy"
     assert "timestamp" in data
 
 
-def test_health_has_db_check(client):
-    res = client.get("/health")
-    data = res.get_json()
-    assert "checks" in data
-    assert "db" in data["checks"]
+def test_health_needs_no_auth(monolith_anon_client):
+    """Docker/load-balancer probes carry no session token."""
+    assert monolith_anon_client.get("/health").status_code == 200

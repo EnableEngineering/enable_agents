@@ -2195,3 +2195,67 @@ column, "1 recipient" warning (cancelled - nothing sent), visible skips
 with reasons, project A vs B prerequisites, gate link keeps project.
 **Test-isolation note:** the send ledger outlives a test run (Redis+PG),
 so tests must use unique instance ids.
+
+---
+
+## Follow-ups closed out (2026-09-18, part 2) ✅
+
+Everything left open at the end of the section above, plus a security
+finding and a CI gap found on the way.
+
+- **Suggest + Co-pilot merged** into one mode ("Co-pilot"; Autopilot is the
+  other). They never differed. `"suggest"` is still accepted as a legacy
+  alias by `PATCH .../autonomy`, and pre-merge rows read as co-pilot
+  (`normalize_autonomy_mode`, `models/workflow.py`) - no data migration
+  needed. Explainer/hint copy and the 2-button selector updated.
+- **Send ledger is a real table.** `workflow_send_ledger` (migration
+  `s6h5i4j3k2l1`, unique on instance+stage+content-hash+recipient)
+  replaces the ContextStore ledger, which swallowed Postgres write
+  failures. `send_bulk_emails_core`'s `on_sent` callback now *stops the
+  loop* if the record can't be saved ("Emailed X but couldn't save the send
+  record; stopped so no one is emailed twice"). Residual window: a crash
+  between an email being handed to SMTP/Gmail and the ledger commit can
+  still allow one duplicate to that single recipient. Rows are deleted with
+  their workflow instance. Tested against the real send loop with a fake
+  SMTP server.
+- **Email lookup is an explicit, cost-visible action** (not a silent graph
+  step). Email-stage approval panel: "Find missing emails" shows how many
+  rows have a website but no email, the unit price ($0.20/email found) and
+  remaining monthly credits *before* any spend; the confirm dialog states
+  the batch's maximum cost; results merge into the editable rows for review.
+  Reuses the existing `/api/enrich-businesses-with-emails` (25 per call,
+  billed only for emails found). Tested with that endpoint mocked - nothing
+  billed. Note: `GET /api/email-extraction-usage` takes `username` from the
+  query string (should come from the session, like the enrich route).
+- **Deleted** the unused `require_dependencies` decorator (it trusted an
+  `X-User-Id` header for identity).
+- **Security: `dev123` login shortcut now fails closed.** `/login` accepted
+  password `dev123` for ANY email unless `FLASK_ENV == "production"` - a
+  different variable from the rest of the app's `ENVIRONMENT`, and open
+  whenever it was unset. Production was safe (`FLASK_ENV=production` is
+  set) but one config slip from an account-takeover. Now only
+  `ENVIRONMENT=development` enables it (`_dev_login_enabled`); test covers
+  production/test/unset all rejecting it.
+- **Test suite is green and now gated.** `tests/integration` went from
+  51 pass / 46 fail / 7 error to **101 pass**; `tests/sanity` 9/9.
+  Causes: (1) the shared `client` fixture sent no session token but every
+  route requires one -> `client` is now authenticated, `anon_client` for
+  401 tests; (2) `/register`, `/login`, `/health` and the content-marketing
+  routes live in `app.py`, which the minimal test app doesn't load -> new
+  `monolith_client`/`monolith_anon_client` fixtures, tests retargeted;
+  (3) `test_context_store.py` built its own SQLite engine (unsupported
+  since Postgres became mandatory) and ran `db.drop_all()` on the shared
+  DB -> now Postgres, row cleanup only, registry snapshot/restore;
+  (4) a stale "create project requires fields" test (the service defaults
+  to "Untitled Project" on purpose); (5) two repo-hygiene checks: the setup
+  scripts tell people to copy `.env.example`, which didn't exist (created),
+  and the shell-script rule scanned venv/node_modules/.repo-agent.
+- **CI could never fail.** `ci.yml`'s backend job ran `pytest tests/` from
+  `backend/` (which holds one file - the real suite is repo-root `tests/`)
+  and ended in `|| echo "No tests found yet"`. Now runs
+  `tests/sanity tests/integration` from the repo root and fails on failure.
+  New `backend-tests.yml` runs the same on pushes to `local-preview` (the
+  branch production deploys from; `ci.yml` deliberately skips it).
+  Unverified until it runs on GitHub.
+- **Known and left alone:** `/health` is liveness only (no DB check) - so
+  it can't back a readiness-gated rollout yet; that's the open deploy item.

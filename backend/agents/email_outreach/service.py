@@ -120,7 +120,9 @@ def send_bulk_emails_core(subject, body, businesses, user_email, user_id,
     single end-of-loop commit of recipient rows, which an exception midway
     never reaches. It exists so a caller (the workflow engine's send
     ledger) can durably record who has already been emailed and not
-    re-send to them if this call errors out after a partial send.
+    re-send to them if this call errors out after a partial send. An
+    exception from it stops the send loop (see below) - it must not fail
+    silently, or the at-most-once guarantee it exists for is gone.
 
     Returns (result_dict_or_None, error_message_or_None, http_status).
     """
@@ -284,9 +286,15 @@ def send_bulk_emails_core(subject, body, businesses, user_email, user_id,
                 try:
                     on_sent(recipient)
                 except Exception as ledger_error:
-                    # Never let bookkeeping abort a send loop that has
-                    # already delivered this email.
-                    print(f"[SEND_EMAILS] on_sent callback failed for {recipient}: {ledger_error}")
+                    # This email is already out but its record isn't
+                    # saved - continuing would email everyone after it
+                    # with no way to prevent duplicates on a retry, so
+                    # stop here (the outer handler turns this into the
+                    # returned error) rather than swallow it.
+                    raise RuntimeError(
+                        f"Emailed {recipient} but couldn't save the send record ({ledger_error}); "
+                        "stopped so no one is emailed twice."
+                    )
 
             recipient_record = EmailCampaignRecipient(
                 campaign_id=campaign_id,

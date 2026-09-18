@@ -30,7 +30,10 @@ class SupplierQualificationState(TypedDict):
     initial_inputs: Dict[str, Dict[str, Any]]
     # Namespaced per stage_id: {stage_id: {...that stage's result...}}
     stage_outputs: Dict[str, Dict[str, Any]]
-    # Suggest | co-pilot | autopilot. co-pilot and suggest both pause on
-    # interrupt() before a stage's side effect runs; autopilot never does.
+    # co-pilot | autopilot. co-pilot pauses on interrupt() before every
+    # stage runs. autopilot skips that for read-only stages but still
+    # pauses on irreversible ones (email), on errors, and once over the
+    # project's AI budget - see graph.py's run_stage. ("suggest" was a
+    # third mode that never differed from co-pilot; merged 2026-09-18.)
     autonomy_mode: str
     errors: List[Dict[str, Any]]

@@ -274,6 +274,23 @@ def test_set_autonomy_mode(client, flask_app, instance):
     assert res.status_code == 400
 
 
+def test_suggest_is_a_legacy_alias_for_copilot(client, flask_app, instance):
+    """Suggest and co-pilot were merged (they never behaved differently).
+    An old client still sending "suggest" gets co-pilot back, and a row
+    that already says "suggest" reads as co-pilot."""
+    headers = _bearer(flask_app, "user_routes")
+    res = client.patch(f"/api/workflows/instances/{instance}/autonomy", json={"mode": "suggest"}, headers=headers)
+    assert res.status_code == 200
+    assert res.get_json()["instance"]["autonomyMode"] == "co-pilot"
+
+    with flask_app.app_context():
+        row = WorkflowInstance.query.filter_by(instance_id=instance).first()
+        row.autonomy_mode = "suggest"  # a pre-merge row
+        db.session.commit()
+    res = client.get(f"/api/workflows/instances/{instance}", headers=headers)
+    assert res.get_json()["instance"]["autonomyMode"] == "co-pilot"
+
+
 def test_legacy_manual_routes_reject_graph_orchestrated_instance(client, flask_app, instance):
     """/start, /complete-stage, /stages/<id>/data must all reject a graph-
     orchestrated instance rather than silently writing stage_states/context

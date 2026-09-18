@@ -13,7 +13,7 @@ import json
 from pathlib import Path
 
 from core.database import db
-from models.workflow import WorkflowTemplate, WorkflowInstance, _utc_iso
+from models.workflow import WorkflowTemplate, WorkflowInstance, _utc_iso, normalize_autonomy_mode
 from core.models import WorkflowTask, Notification, Project, TeamMember
 
 workflows_bp = Blueprint('workflows', __name__)
@@ -546,7 +546,9 @@ def resume_instance(instance_id: str):
 @workflows_bp.route('/api/workflows/instances/<instance_id>/autonomy', methods=['PATCH'])
 @require_auth
 def set_autonomy_mode(instance_id: str):
-    """Set the instance's autonomy mode. Expects JSON: { mode: "suggest"|"co-pilot"|"autopilot" }"""
+    """Set the instance's autonomy mode. Expects JSON: { mode: "co-pilot"|"autopilot" }.
+    "suggest" is still accepted as a legacy alias for "co-pilot" (the two
+    were merged - they never behaved differently)."""
     user_id = get_user_id()
     if not user_id:
         return jsonify({"error": "Not authenticated"}), 401
@@ -557,9 +559,9 @@ def set_autonomy_mode(instance_id: str):
 
     mode = (request.get_json() or {}).get("mode")
     if mode not in ("suggest", "co-pilot", "autopilot"):
-        return jsonify({"error": "mode must be one of: suggest, co-pilot, autopilot"}), 400
+        return jsonify({"error": "mode must be one of: co-pilot, autopilot"}), 400
 
-    instance.autonomy_mode = mode
+    instance.autonomy_mode = normalize_autonomy_mode(mode)
     db.session.commit()
     return jsonify({"success": True, "instance": instance.to_dict()})
 
@@ -576,6 +578,9 @@ def delete_instance(instance_id: str):
     if not instance:
         return jsonify({"error": "Instance not found"}), 404
 
+    from models.workflow import WorkflowSendLedger
+
+    WorkflowSendLedger.query.filter_by(instance_id=instance.instance_id).delete()
     db.session.delete(instance)
     db.session.commit()
     return jsonify({"success": True, "message": "Instance deleted"})

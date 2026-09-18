@@ -13,9 +13,9 @@ from agents.workflow_orchestration.graph import _send_bulk_emails_or_skip
 
 
 def _state(label="x"):
-    # Unique per call: the send ledger lives in ContextStore (Redis + PG),
-    # which outlives a test run, so a fixed instance id would see the
-    # previous run's "already emailed" entries.
+    # Unique per call: the send ledger table (workflow_send_ledger) can
+    # outlive a test run on a reused database, so a fixed instance id could
+    # see a previous run's "already emailed" rows.
     return {"instance_id": f"wf-safety-{label}-{uuid.uuid4().hex[:8]}", "user_id": "safety@test.com"}
 
 
@@ -100,3 +100,90 @@ def test_recipient_cap_blocks_an_oversized_send(fake_core, monkeypatch):
         _send_bulk_emails_or_skip(_state("cap"), "outreach", _args(_biz("a@x.co", "b@x.co", "c@x.co")))
     assert "over the per-stage limit of 2" in str(exc.value)
     assert fake_core["batches"] == []
+
+
+def test_sent_addresses_are_persisted_in_the_ledger_table(fake_core):
+    from models.workflow import WorkflowSendLedger
+
+    state = _state("table")
+    _send_bulk_emails_or_skip(state, "sequence", _args(_biz("A@x.co", "b@x.co")))
+    rows = WorkflowSendLedger.query.filter_by(instance_id=state["instance_id"], stage_id="sequence").all()
+    assert sorted(r.recipient_email for r in rows) == ["a@x.co", "b@x.co"]  # normalized lowercase
+
+
+def test_a_failed_ledger_write_stops_the_send_loudly(fake_core, monkeypatch):
+    """If the send record can't be saved, the loop must stop - not carry on
+    emailing people it can no longer protect from a duplicate on retry."""
+    import agents.workflow_orchestration.graph as graph
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError("ledger database unavailable")
+
+    monkeypatch.setattr(graph, "_ledger_record", _boom)
+    with pytest.raises(RuntimeError, match="ledger database unavailable"):
+        graph._send_bulk_emails_or_skip(_state("boom"), "sequence", _args(_biz("a@x.co", "b@x.co")))
+    assert len(fake_core["batches"]) == 1  # attempted once; nothing quietly retried
+
+
+# ── The REAL send loop (send_bulk_emails_core), against a fake SMTP server ──
+# Everything above replaces send_bulk_emails_core; these two run the actual
+# function so the on_sent contract is proven, not assumed. smtplib.SMTP is
+# swapped for a recorder - no network, no real mail.
+
+class _FakeSMTP:
+    sent_to = []
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def starttls(self):
+        pass
+
+    def login(self, *args):
+        pass
+
+    def send_message(self, msg):
+        _FakeSMTP.sent_to.append(msg["To"])
+
+    def quit(self):
+        pass
+
+
+@pytest.fixture
+def real_core_with_fake_smtp(flask_app, monkeypatch):
+    import smtplib
+    import app as _app_module  # noqa: F401  (send_bulk_emails_core imports helpers from app.py)
+
+    _FakeSMTP.sent_to = []
+    monkeypatch.setattr(smtplib, "SMTP", _FakeSMTP)
+    monkeypatch.setenv("EMAIL_USER", "sender@example.com")
+    monkeypatch.setenv("EMAIL_PASS", "not-a-real-password")
+    with flask_app.app_context():
+        yield email_service.send_bulk_emails_core
+
+
+def _call_real(core, businesses, on_sent):
+    return core("Hi", "Body", businesses, "sender@example.com", "sender@example.com",
+                campaign_name="Real loop test", on_sent=on_sent)
+
+
+def test_real_loop_reports_each_recipient_as_it_is_sent(real_core_with_fake_smtp):
+    recorded = []
+    result, error, status = _call_real(real_core_with_fake_smtp, _biz("a@x.co", "b@x.co", "c@x.co"), recorded.append)
+    assert error is None and result["count"] == 3
+    assert recorded == ["a@x.co", "b@x.co", "c@x.co"]
+    assert _FakeSMTP.sent_to == ["a@x.co", "b@x.co", "c@x.co"]
+
+
+def test_real_loop_stops_when_the_send_record_cannot_be_saved(real_core_with_fake_smtp):
+    """The 2nd email goes out but its record fails: the loop must stop
+    before emailing the 3rd, and say so - not carry on unprotected."""
+    def _on_sent(recipient):
+        if recipient == "b@x.co":
+            raise RuntimeError("ledger database unavailable")
+
+    result, error, status = _call_real(real_core_with_fake_smtp, _biz("a@x.co", "b@x.co", "c@x.co"), _on_sent)
+    assert result is None and status == 500
+    assert "Emailed b@x.co but couldn't save the send record" in error
+    assert "ledger database unavailable" in error
+    assert _FakeSMTP.sent_to == ["a@x.co", "b@x.co"]  # c@ was never emailed

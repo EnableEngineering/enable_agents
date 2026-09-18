@@ -5,6 +5,7 @@ import { API_CONFIG } from '../config/apiConfig';
 import { authJsonHeaders } from '../core/authHeaders';
 import { showToast } from '../core/toast';
 import { confirmSendEmail } from '../core/emailActionWarnings';
+import { showConfirm } from '../components/ConfirmDialog';
 import './WorkflowRunner.css';
 
 // Templates whose instances run through the LangGraph orchestration engine
@@ -74,6 +75,15 @@ const hasValidEmail = (business) => {
   return typeof email === 'string' && email !== 'N/A' && email.includes('@');
 };
 const countRecipients = (businesses) => (Array.isArray(businesses) ? businesses.filter(hasValidEmail).length : 0);
+
+// The email-lookup endpoint (scrap.io) is paid and slow, and caps how many
+// businesses it processes per call - see enrich_businesses_with_emails in
+// app.py. Rows it can act on: no usable email yet, but a website to check.
+const ENRICH_BATCH_SIZE = 25;
+const enrichCandidates = (businesses) => (Array.isArray(businesses) ? businesses : [])
+  .map((business, index) => ({ business, index }))
+  .filter(({ business }) => !hasValidEmail(business) && business.website)
+  .slice(0, ENRICH_BATCH_SIZE);
 
 // Builds the per-field edit state for a pending-approval card's
 // proposed_input - never raw JSON for the common cases:
@@ -268,6 +278,8 @@ function WorkflowRunner() {
   const [editedStageId, setEditedStageId] = useState(null);
   const [settingAutonomy, setSettingAutonomy] = useState(false);
   const [showAutonomyInfo, setShowAutonomyInfo] = useState(false);
+  const [enrichUsage, setEnrichUsage] = useState(null);
+  const [enriching, setEnriching] = useState(false);
 
   const fetchInstance = useCallback(async () => {
     try {
@@ -410,6 +422,78 @@ function WorkflowRunner() {
       showToast('Error running workflow', 'error');
     } finally {
       setRunningGraph(false);
+    }
+  };
+
+  // Remaining email-lookup credits, fetched (read-only, free) when an
+  // email stage's panel opens so the cost is on screen *before* anyone
+  // decides to spend it.
+  const emailStagePending = !!pendingApproval?.pending && pendingApproval.interrupt?.side_effect === 'irreversible';
+  useEffect(() => {
+    if (!emailStagePending) return;
+    const username = localStorage.getItem('userEmail') || '';
+    fetch(`${API_CONFIG.EMAIL_EXTRACTION_USAGE}?username=${encodeURIComponent(username)}`, { headers: authJsonHeaders() })
+      .then((res) => res.json())
+      .then((data) => { if (data.success) setEnrichUsage(data.usageSummary); })
+      .catch(() => {});
+  }, [emailStagePending, pendingApproval?.interrupt?.stage_id]);
+
+  const handleFindEmails = async () => {
+    const field = editFields.businesses;
+    if (!field) return;
+    const candidates = enrichCandidates(field.value);
+    if (candidates.length === 0) return;
+
+    const unit = enrichUsage?.unitCost ?? 0.2;
+    const confirmed = await showConfirm({
+      title: `Look up emails for ${candidates.length} business${candidates.length === 1 ? '' : 'es'}?`,
+      message: `This checks each business's website for a contact email and can take up to ~20 seconds per business. `
+        + `You're charged $${unit.toFixed(2)} for each email actually found - at most $${(candidates.length * unit).toFixed(2)} for this batch`
+        + `${enrichUsage ? ` (${enrichUsage.remainingCount} lookups left this month)` : ''}. Nothing is sent to anyone.`,
+      confirmLabel: 'Find emails',
+      cancelLabel: 'Cancel',
+      variant: 'warning',
+    });
+    if (!confirmed) return;
+
+    setEnriching(true);
+    try {
+      const res = await fetch(API_CONFIG.ENRICH_BUSINESSES_WITH_EMAILS, {
+        method: 'POST',
+        headers: authJsonHeaders(),
+        body: JSON.stringify({ businesses: candidates.map((c) => c.business) }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        showToast(data.error || 'Email lookup failed', 'error');
+        if (data.usageSummary) setEnrichUsage(data.usageSummary);
+        return;
+      }
+      // The endpoint returns the batch in the order sent - merge any
+      // address it found back into the matching editable row.
+      let found = 0;
+      setEditFields((prev) => {
+        const rows = prev.businesses.value.map((row) => ({ ...row }));
+        (data.businesses || []).forEach((result, k) => {
+          if (hasValidEmail(result)) {
+            rows[candidates[k].index].email = result.email;
+            found += 1;
+          }
+        });
+        return { ...prev, businesses: { ...prev.businesses, value: rows } };
+      });
+      if (data.usageSummary) setEnrichUsage(data.usageSummary);
+      const charged = Number(data.costThisRequest || 0).toFixed(2);
+      showToast(
+        found > 0
+          ? `Found ${found} email${found === 1 ? '' : 's'} (charged $${charged}). Review them below before approving.`
+          : 'No emails found for those websites (nothing charged).',
+        found > 0 ? 'success' : 'info',
+      );
+    } catch (err) {
+      showToast('Email lookup failed', 'error');
+    } finally {
+      setEnriching(false);
     }
   };
 
@@ -784,10 +868,7 @@ function WorkflowRunner() {
                     {showAutonomyInfo && (
                       <div className="wf-autonomy-info-popover" role="note">
                         <div>
-                          <strong>Suggest</strong> - every stage pauses and shows you what it's about to do. Nothing runs until you approve, edit, or skip it.
-                        </div>
-                        <div>
-                          <strong>Co-pilot</strong> - behaves the same as Suggest today: every stage pauses for your review.
+                          <strong>Co-pilot</strong> - every stage pauses and shows you what it's about to do. Nothing runs until you approve, edit, or skip it.
                         </div>
                         <div>
                           <strong>Autopilot</strong> - stages run on their own with no pause, except: stages that send email always wait for you (a sent email can't be taken back), a stage that fails stops for correction, and once the project's monthly AI budget is over its cap the next stage stops too.
@@ -795,7 +876,7 @@ function WorkflowRunner() {
                       </div>
                     )}
                     <div className="wf-autonomy-options">
-                      {['suggest', 'co-pilot', 'autopilot'].map((mode) => (
+                      {['co-pilot', 'autopilot'].map((mode) => (
                         <button
                           key={mode}
                           className={`wf-autonomy-option ${instance.autonomyMode === mode ? 'active' : ''}`}
@@ -867,6 +948,25 @@ function WorkflowRunner() {
                       <div className="wf-stage-notice" role="note">
                         <strong>No email addresses yet:</strong> none of these businesses has an email, so approving as-is will skip sending.
                         Type addresses into the Email column below and use Save Edit &amp; Approve, or skip this stage.
+                      </div>
+                    )}
+
+                    {pendingApproval.interrupt.side_effect === 'irreversible' && editFields.businesses
+                      && enrichCandidates(editFields.businesses.value).length > 0 && (
+                      <div className="wf-enrich-box">
+                        <div>
+                          <strong>Find missing emails</strong>
+                          <p>
+                            {enrichCandidates(editFields.businesses.value).length} of these businesses have a website but no email.
+                            {enrichUsage
+                              ? ` Lookups cost $${Number(enrichUsage.unitCost).toFixed(2)} per email found; ${enrichUsage.remainingCount} left this month.`
+                              : ''}
+                            {' '}You'll confirm the cost first, and can review every address before anything is sent.
+                          </p>
+                        </div>
+                        <button type="button" className="wf-btn wf-btn-secondary" onClick={handleFindEmails} disabled={enriching || !!resumingAction}>
+                          {enriching ? 'Looking up…' : 'Find emails'}
+                        </button>
                       </div>
                     )}
 

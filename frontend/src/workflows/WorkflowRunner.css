@@ -1559,3 +1559,23 @@ a.wf-btn {
   font-size: var(--text-caption);
   color: var(--color-text-muted);
 }
+
+/* Explicit, cost-visible "find missing emails" action on email stages. */
+.wf-enrich-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+  font-size: var(--text-caption);
+}
+
+.wf-enrich-box p {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+  line-height: 1.45;
+}
