@@ -224,9 +224,32 @@ def _request_project(user_id: Optional[str]) -> Optional[str]:
         return None
 
 
-def enforce_budget_for_call(user_id: Optional[str], project_id: Optional[str] = None) -> None:
+# Used to guess a request's cost before it is made, so a budget set to "block"
+# refuses the call that WOULD cross it instead of the one after. Deliberately
+# pessimistic on the output side: without a max_tokens the reply could be long.
+_CHARS_PER_TOKEN = 4
+_DEFAULT_COMPLETION_TOKENS_GUESS = 1000
+
+
+def estimate_request_cost_usd(model: str, messages: Any = None, max_tokens: Optional[int] = None,
+                              input_text: Any = None) -> float:
+    """Upper-ish estimate of what one chat/embedding request will cost."""
+    try:
+        if input_text is not None:
+            chars = sum(len(str(t)) for t in input_text) if isinstance(input_text, (list, tuple)) else len(str(input_text))
+            return estimate_cost_usd(model, max(chars // _CHARS_PER_TOKEN, 1), 0)
+        chars = sum(len(str(m.get("content", ""))) for m in (messages or []) if isinstance(m, dict))
+        completion = int(max_tokens) if max_tokens else _DEFAULT_COMPLETION_TOKENS_GUESS
+        return estimate_cost_usd(model, max(chars // _CHARS_PER_TOKEN, 1), completion)
+    except Exception:
+        return 0.0
+
+
+def enforce_budget_for_call(user_id: Optional[str], project_id: Optional[str] = None,
+                            estimated_cost_usd: float = 0.0) -> None:
     """Refuse a paid call (BudgetExceeded) if a budget set to "block" that
-    covers it is used up. The project is resolved exactly as
+    covers it is used up - or would be exceeded by this call's estimated cost
+    (0 when the caller can't estimate). The project is resolved exactly as
     _write_usage_row will attribute the spend, so what is blocked is what
     would have been charged. Public: call sites that reach a provider without
     going through the functions below (see app.py) call it themselves."""
@@ -234,7 +257,7 @@ def enforce_budget_for_call(user_id: Optional[str], project_id: Optional[str] = 
     from core.usage_context import current_scope
 
     project_id = project_id or current_scope().get("project_id") or _request_project(user_id)
-    enforce_budget(user_id, project_id)
+    enforce_budget(user_id, project_id, estimated_cost_usd)
 
 
 def log_ai_usage(
@@ -409,13 +432,17 @@ def ai_chat_completion(
     (functions/response_format) or an explicit `provider` is passed.
     """
     user_id = _current_user_id(user_id)
-    enforce_budget_for_call(user_id, project_id)
 
     if provider is not None:
         resolved_model, resolved_provider = model, provider
     else:
         allow_preferred = not any(k in kwargs for k in _OPENAI_ONLY_KWARGS)
         resolved_model, resolved_provider = resolve_model_and_provider(user_id, project_id, model, allow_preferred)
+
+    enforce_budget_for_call(
+        user_id, project_id,
+        estimate_request_cost_usd(resolved_model, messages=messages, max_tokens=kwargs.get("max_tokens") or kwargs.get("max_completion_tokens")),
+    )
 
     api_key, key_source = resolve_api_key(user_id, project_id, resolved_provider)
     if not api_key:
@@ -462,7 +489,7 @@ def ai_embeddings(
     import openai
 
     user_id = _current_user_id(user_id)
-    enforce_budget_for_call(user_id, project_id)
+    enforce_budget_for_call(user_id, project_id, estimate_request_cost_usd(model, input_text=input))
     api_key, key_source = resolve_api_key(user_id, project_id, "openai")
     if not api_key:
         raise NoApiKeyConfigured(

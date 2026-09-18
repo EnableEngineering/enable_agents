@@ -42,7 +42,7 @@ def generate_password_hash(password):
     return _gen_pw_hash(password, method='pbkdf2:sha256')
 from werkzeug.utils import secure_filename
 import openpyxl
-from urllib.parse import urlencode, urlparse
+from urllib.parse import urlencode, urlparse, quote as _url_quote
 import logging
 
 from core.database import db
@@ -245,21 +245,47 @@ for _o in _cors_origins:
     if _o not in _seen_cors:
         _seen_cors.add(_o)
         CORS_ORIGINS.append(_o)
-CORS(app, origins=CORS_ORIGINS, supports_credentials=False)
+CORS(app, origins=CORS_ORIGINS, supports_credentials=False,
+     expose_headers=['X-Budget-Blocked', 'X-Budget-Blocked-Scope'])
+
+
+def _strings_in(value):
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        for item in value.values():
+            yield from _strings_in(item)
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            yield from _strings_in(item)
 
 
 @app.after_request
-def _budget_exceeded_as_402(response):
-    """A blocked AI call (core.budget.BudgetExceeded) is a 402 with a
-    message naming the budget - even when the route caught the exception
-    itself and answered with a generic 4xx/5xx. Registered after CORS, so
-    flask-cors still decorates the replacement response."""
+def _surface_budget_block(response):
+    """When a budget set to "block" refused an AI call during this request
+    (core.budget.BudgetExceeded), say so on the response, whatever else the
+    route did with it:
+      * X-Budget-Blocked (percent-encoded message) goes on EVERY such
+        response - including 200s where the route caught the error and
+        carried on with a degraded result - and the frontend toasts it, so a
+        block is never invisible.
+      * If the route surfaced the message in an error body (`{'error':
+        str(e)}` is the common pattern), the status becomes 402. A route that
+        hit the block but then failed for some unrelated reason keeps its own
+        status and body.
+    Registered after CORS, so flask-cors still decorates the response."""
     exc = getattr(g, "budget_exceeded", None)
-    if exc is not None and response.status_code >= 400 and response.status_code != 402:
-        replacement = jsonify(exc.to_dict())
-        replacement.status_code = 402
-        return replacement
-    return response
+    if exc is None:
+        return response
+    target = response
+    if response.status_code >= 400 and response.status_code != 402 and response.is_json:
+        body = response.get_json(silent=True)
+        if any(str(exc) in text for text in _strings_in(body)):
+            target = jsonify(exc.to_dict())
+            target.status_code = 402
+    target.headers["X-Budget-Blocked"] = _url_quote(str(exc), safe="")
+    target.headers["X-Budget-Blocked-Scope"] = exc.scope
+    return target
 
 
 @app.errorhandler(BudgetExceeded)

@@ -18,6 +18,7 @@ from uuid import uuid4
 
 from werkzeug.utils import secure_filename
 
+from core.budget import BudgetExceeded
 from core.context import ContextStore
 
 logger = logging.getLogger(__name__)
@@ -644,6 +645,8 @@ Answer based on the context above:"""
 
             answer = response.choices[0].message.content
 
+        except BudgetExceeded:
+            raise
         except Exception as e:
             logger.error(f"Chat completion failed: {e}")
             return {
@@ -761,6 +764,8 @@ Answer based on the context above:"""
                 response_format={"type": "json_object"},
             )
             parsed = json_lib.loads(response.choices[0].message.content)
+        except BudgetExceeded:
+            raise
         except Exception as e:
             logger.error(f"Insight generation failed: {e}")
             parsed = {}

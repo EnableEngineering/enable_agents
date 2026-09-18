@@ -153,8 +153,13 @@ def remove_member(member_id):
     if to_remove.user_id == user_email:
         return jsonify({'error': 'Cannot remove yourself'}), 400
 
+    removed_user = to_remove.user_id
     db.session.delete(to_remove)
     db.session.commit()
+    # A cap the team put on them shouldn't outlive their membership with no
+    # one able to change it: hand the budget back to the (former) member.
+    from core.budget import release_user_budget_lock
+    release_user_budget_lock(removed_user)
     return jsonify({'message': 'Member removed'})
 
 

@@ -2408,14 +2408,49 @@ built (migration `t7i6j5k4l3m2`, additive):
   `get_langchain_llm` anyway; `core/key_testing.py` (the "Test key" button)
   and the dead `init_llm()` are deliberately not enforced. The block message
   for a team budget now points to Usage -> Team (it said "Team page").
-- **Known limits:** LangChain `OpenAIEmbeddings` calls are not usage-logged
-  (cheap) though their entry points are enforced; a personal budget is
-  self-service (you can lift your own cap; only project/team caps are set by
-  someone else); a `$0` budget blocks but sends no alert emails (alerts key
-  off a truthy limit); the 402 rewrite applies to any 4xx/5xx a request
-  returns after a block was hit, so a route that survived a block and then
-  failed for an unrelated reason would show the budget message; code that wraps AI calls in
-  its own `except Exception` and degrades (e.g. the optional LLM refinement in
-  `score_leads_core`) will quietly degrade instead of failing when blocked; a
-  block is checked before each call, so one in-flight call can overshoot the
-  limit by its own cost.
+- **Known limits (after the fixes below):** LangChain `OpenAIEmbeddings` calls
+  are not usage-logged (cheap) though their entry points are enforced; the
+  pre-call estimate is a guess (chars/4 for input, `max_tokens` or 1000 for
+  output), so a real call can still land slightly over or under it; several
+  requests in flight at the same moment can each pass the check before any of
+  them is logged, so a burst can overshoot by roughly (parallel calls x one
+  call's cost) - closing that needs a reservation row per call, not built.
+
+## Limits closed out (2026-09-19, follow-up)
+
+- **Owner/admin-set member budgets.** `UserBudget.managed_by` (migration
+  `v9k8l7m6n5o4`, additive). `PUT /api/team/members/<member_id>/budget` (owner or
+  admin) sets a member's cap and locks it: the member's own
+  `PUT /api/usage/me/budget` is 403 with who set it. Only the owner can cap an
+  admin; nobody can cap the owner or themselves this way; a budget the member
+  set for themselves can't be deleted by a manager (they can overwrite it with a
+  locked one). `GET /api/team/members/budgets` lists every member's spend, cap
+  and lock. Alerts for a locked cap go to the member AND the manager. Removing
+  a member hands their budget back. UI: Usage -> Team -> "Member budgets";
+  the member's My usage shows "Set by ..., only they can change it".
+- **$0 budgets** are used up from the start (state `over`, percent 100), block
+  and pause Autopilot consistently, and send alert emails (alerts used to key
+  off a truthy limit).
+- **A block is never invisible, and never mislabels an unrelated failure.**
+  The response hook now puts `X-Budget-Blocked` (percent-encoded message; also
+  exposed via CORS) on ANY response of a request during which a block
+  happened - including 200s where a route swallowed the error - and the global
+  fetch/axios wrapper toasts it. The status is rewritten to 402 only when the
+  error body itself carries the budget message; a route that hit a block and
+  then failed for another reason keeps its own status and body. The two
+  places that quietly degraded (lead-scoring's LLM refinement, document
+  insights/chat) now re-raise `BudgetExceeded` instead.
+- **No overshoot by the call that crosses the cap.** `enforce_budget` takes a
+  cost estimate (`estimate_request_cost_usd`: input chars/4, `max_tokens` or
+  1000 output tokens, at the model's rate). A `block` budget refuses a request
+  when spend + estimate would exceed it, with a message that says how much is
+  left and that it isn't enough (fractions of a cent shown as $0.0004, not
+  $0.00). Embeddings and chat completions estimate; the LangChain paths can't
+  and check spend only.
+- 18 new tests (member budgets, $0, estimates, response hook, lead-scoring
+  re-raise); suite 165 integration + 9 sanity. Mutation-checked (17 mutations,
+  each fails a test - one survived at first: "an admin can't cap another admin"
+  had no real test, now does).
+- **Still true by design:** a personal budget you set yourself is yours to
+  lift (only a cap a manager set is locked); an unblocked-by-design alert-only
+  budget never refuses anything.

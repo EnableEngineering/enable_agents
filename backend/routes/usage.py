@@ -227,9 +227,15 @@ def my_budget():
     PUT { monthlyBudgetUsd?: number | null, enforcement?: "alert" | "block" }
     sets either or both; a null budget removes it. "block" makes AI requests
     fail once the budget is used up (core/budget.py)."""
-    from core.budget import get_user_budget, set_user_budget, user_budget_status, validate_enforcement
+    from core.budget import (
+        get_user_budget, get_user_budget_lock, set_user_budget, user_budget_status, validate_enforcement,
+    )
 
     if request.method == 'PUT':
+        locked_by = get_user_budget_lock(g.user_id)
+        if locked_by:
+            return jsonify({'error': f'Your budget was set by {locked_by} (a team owner or admin) '
+                                     'and only they can change it.'}), 403
         data = request.get_json(silent=True) or {}
         try:
             enforcement = validate_enforcement(data['enforcement']) if 'enforcement' in data else None
@@ -290,3 +296,83 @@ def team_budget():
         'canEdit': member.role in ('owner', 'admin'),
         'budget': team_budget_status(team.team_id),
     })
+
+
+def _team_manager():
+    """(membership, error_response) for the caller as a team owner/admin."""
+    member = TeamMember.query.filter_by(user_id=g.user_id).first()
+    if not member:
+        return None, (jsonify({'error': 'No team found for this user'}), 404)
+    if member.role not in ('owner', 'admin'):
+        return None, (jsonify({'error': 'Only the team owner or an admin can manage member budgets'}), 403)
+    return member, None
+
+
+@usage_bp.route('/api/team/members/budgets', methods=['GET'])
+@require_auth
+def team_member_budgets():
+    """Every team member with this month's spend and their personal budget -
+    including which ones an owner/admin has locked. Owner/admin only."""
+    from core.budget import user_budget_status
+
+    manager, error = _team_manager()
+    if error:
+        return error
+    members = TeamMember.query.filter_by(team_id=manager.team_id).order_by(TeamMember.id).all()
+    return jsonify({
+        'success': True,
+        'members': [
+            {'memberId': m.member_id, 'userId': m.user_id, 'name': m.name, 'role': m.role,
+             'budget': user_budget_status(m.user_id)}
+            for m in members
+        ],
+    })
+
+
+@usage_bp.route('/api/team/members/<member_id>/budget', methods=['PUT'])
+@require_auth
+def set_member_budget(member_id):
+    """A team owner/admin sets a member's personal monthly AI budget. The
+    member can then no longer change or remove it themselves.
+    PUT { monthlyBudgetUsd?: number | null, enforcement?: "alert" | "block" };
+    null removes a cap this endpoint put there (a budget the member set for
+    themselves is theirs to remove). Only the owner can cap an admin, and
+    nobody can cap the owner."""
+    from core.budget import (
+        get_user_budget, get_user_budget_lock, set_user_budget, user_budget_status, validate_enforcement,
+    )
+
+    manager, error = _team_manager()
+    if error:
+        return error
+    target = TeamMember.query.filter_by(member_id=member_id, team_id=manager.team_id).first()
+    if not target:
+        return jsonify({'error': 'Member not found'}), 404
+    if target.user_id == g.user_id:
+        return jsonify({'error': 'Use your own budget setting on the My usage tab'}), 400
+    if target.role == 'owner':
+        return jsonify({'error': "The team owner's budget can't be set by anyone else"}), 403
+    if target.role == 'admin' and manager.role != 'owner':
+        return jsonify({'error': "Only the team owner can set an admin's budget"}), 403
+
+    data = request.get_json(silent=True) or {}
+    try:
+        enforcement = validate_enforcement(data['enforcement']) if 'enforcement' in data else None
+        if 'monthlyBudgetUsd' in data:
+            raw = data.get('monthlyBudgetUsd')
+            if raw in (None, ''):
+                if get_user_budget(target.user_id) is not None and not get_user_budget_lock(target.user_id):
+                    return jsonify({'error': 'That budget was set by the member; they can remove it themselves.'}), 400
+                set_user_budget(target.user_id, None)
+            else:
+                set_user_budget(target.user_id, float(raw), enforcement, managed_by=g.user_id)
+        elif enforcement is not None:
+            current = get_user_budget(target.user_id)
+            if current is None:
+                return jsonify({'error': 'Set a monthly budget before choosing what happens when it runs out'}), 400
+            set_user_budget(target.user_id, current, enforcement, managed_by=g.user_id)
+    except (TypeError, ValueError) as e:
+        return jsonify({'error': str(e) if 'nforcement' in str(e) else
+                        'monthlyBudgetUsd must be a number of zero or more, or null'}), 400
+
+    return jsonify({'success': True, 'budget': user_budget_status(target.user_id)})

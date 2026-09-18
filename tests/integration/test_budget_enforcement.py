@@ -454,3 +454,267 @@ def test_run_usage_lists_each_stages_calls(monolith_client, flask_app):
     assert calls[("qualify", "test.agent")]["requestCount"] == 2
     assert calls[("qualify", "test.agent")]["costUsd"] == pytest.approx(0.5)
     assert calls[("outreach", "test.agent")]["model"] == "test-model"
+
+
+# ── $0 budgets ───────────────────────────────────────────────────────────
+
+def test_a_zero_dollar_budget_is_used_up_alerts_and_pauses_autopilot(flask_app, emails):
+    from agents.workflow_orchestration.graph import _autopilot_over_budget
+    from core.budget import set_user_budget, user_budget_status
+
+    user = _uid()
+    set_user_budget(user, 0.0)
+    assert user_budget_status(user)["state"] == "over"
+    assert _autopilot_over_budget({"user_id": user, "project_id": None}) is True
+    assert emails == []                                   # nothing has happened yet
+    _log(user, 0.0001)
+    assert len(emails) == 1 and emails[0]["to"] == user and "crossed" in emails[0]["subject"]
+    _log(user, 0.0001)
+    assert len(emails) == 1                               # still once a month
+
+
+def test_a_zero_dollar_project_budget_alerts_its_owner(flask_app, emails):
+    owner = _uid("owner")
+    pid = _make_project(owner)
+    from core.models import Project
+
+    Project.query.filter_by(project_id=pid).first().monthly_budget_usd = 0.0
+    db.session.commit()
+    _log(_uid("someone"), 0.01, project_id=pid)
+    assert [e["to"] for e in emails] == [owner]
+
+
+# ── estimating a request so a cap isn't overshot ─────────────────────────
+
+def test_request_cost_estimates_scale_with_the_request(flask_app):
+    from core.ai_client import estimate_request_cost_usd
+
+    tiny = estimate_request_cost_usd("gpt-4o-mini", messages=[{"role": "user", "content": "hi"}], max_tokens=10)
+    big = estimate_request_cost_usd("gpt-4", messages=[{"role": "user", "content": "x" * 4000}], max_tokens=1000)
+    assert 0 < tiny < 0.001 and big > 0.05
+    assert estimate_request_cost_usd("text-embedding-ada-002", input_text=["y" * 4000]) > 0
+    assert estimate_request_cost_usd("gpt-4", messages="not a list of dicts") >= 0   # never raises
+
+
+def test_a_call_that_would_cross_the_cap_is_refused_but_one_that_fits_is_not(flask_app, emails):
+    from core.ai_client import enforce_budget_for_call
+    from core.budget import BudgetExceeded, set_user_budget
+
+    user = _uid()
+    set_user_budget(user, 1.00, "block")
+    _log(user, 0.99)                                      # $0.01 left, not yet used up
+    enforce_budget_for_call(user, None, 0.005)            # fits
+    enforce_budget_for_call(user, None, 0.01)             # exactly fits
+    with pytest.raises(BudgetExceeded) as caught:
+        enforce_budget_for_call(user, None, 0.05)
+    assert "$0.01 left" in str(caught.value) and "not enough" in str(caught.value)
+
+
+def test_the_chat_chokepoint_refuses_an_expensive_request_near_the_cap(flask_app, emails, provider_tripwire):
+    from core.ai_client import ai_chat_completion
+    from core.budget import BudgetExceeded, set_user_budget
+
+    user = _uid()
+    set_user_budget(user, 1.00, "block")
+    _log(user, 0.99)
+    with pytest.raises(BudgetExceeded):
+        ai_chat_completion(user, None, "t.chat", "gpt-4", [{"role": "user", "content": "x" * 4000}], max_tokens=1000)
+
+
+# ── a block is never invisible ───────────────────────────────────────────
+
+def _blocked_exc(scope="user"):
+    from core.budget import BudgetExceeded, budget_state
+
+    return BudgetExceeded(scope, "Your account", {**budget_state(5, 5), "enforcement": "block", "blocking": True})
+
+
+def _process(monolith_app, body, status, exc=None):
+    from flask import g
+
+    with monolith_app.test_request_context("/x"):
+        if exc is not None:
+            g.budget_exceeded = exc
+        return monolith_app.process_response(monolith_app.make_response((body, status)))
+
+
+def test_a_swallowed_block_that_still_returned_200_is_flagged_in_a_header(monolith_app):
+    from urllib.parse import unquote
+
+    exc = _blocked_exc()
+    out = _process(monolith_app, {"results": [], "note": "fell back"}, 200, exc)
+    assert out.status_code == 200 and out.get_json() == {"results": [], "note": "fell back"}
+    assert unquote(out.headers["X-Budget-Blocked"]) == str(exc)
+    assert out.headers["X-Budget-Blocked-Scope"] == "user"
+
+
+def test_an_error_body_carrying_the_message_becomes_402(monolith_app):
+    exc = _blocked_exc()
+    out = _process(monolith_app, {"success": False, "error": f"Failed: {exc}"}, 500, exc)
+    assert out.status_code == 402 and out.get_json()["code"] == "budget_exceeded"
+    assert "X-Budget-Blocked" in out.headers
+
+
+def test_an_unrelated_failure_after_a_block_keeps_its_own_status_and_body(monolith_app):
+    exc = _blocked_exc()
+    out = _process(monolith_app, {"success": False, "error": "Document not found"}, 404, exc)
+    assert out.status_code == 404 and out.get_json() == {"success": False, "error": "Document not found"}
+    assert "X-Budget-Blocked" in out.headers              # the block is still surfaced, just not as the cause
+
+
+def test_no_block_no_header(monolith_app):
+    out = _process(monolith_app, {"error": "nope"}, 500)
+    assert out.status_code == 500 and "X-Budget-Blocked" not in out.headers
+
+
+def test_lead_scoring_does_not_swallow_a_block_in_its_refinement_step(monolith_app, monkeypatch):
+    """This step used to be `except Exception: skip refinement`, so a blocked
+    budget just produced lower-quality results with no explanation."""
+    from agents.sales_helper_core import score_leads_core
+
+    monkeypatch.setattr("app.get_embeddings_batch", lambda texts: [[1.0, 0.0]] * len(texts))
+
+    def blocked(*args, **kwargs):
+        raise _blocked_exc()
+
+    monkeypatch.setattr("core.ai_client.ai_chat_completion", blocked)
+    results, error, status = score_leads_core("fasteners", [{"name": "Acme", "description": "bolts"}], _uid())
+    assert results is None and status == 500 and "monthly AI budget" in error
+
+
+# ── owner/admin-set member budgets ───────────────────────────────────────
+
+def _client_as(app, user):
+    from core.session_token import issue_browser_session_token
+
+    with app.app_context():
+        token = issue_browser_session_token(app.config["SECRET_KEY"], user)
+    client = app.test_client()
+    client.environ_base["HTTP_AUTHORIZATION"] = f"Bearer {token}"
+    return client
+
+
+def _member_id(user):
+    from core.models import TeamMember
+
+    return TeamMember.query.filter_by(user_id=user).first().member_id
+
+
+@pytest.fixture
+def team_of_user_1(monolith_app, flask_app, clean_user_1):
+    """user_1 owns a team with a plain member and an admin."""
+    from core.models import TeamMember
+
+    with flask_app.app_context():
+        member, admin, admin2 = _uid("mem"), _uid("adm"), _uid("adm")
+        tid = _make_team("user_1", [member, admin, admin2])
+        for who in (admin, admin2):
+            TeamMember.query.filter_by(user_id=who, team_id=tid).first().role = "admin"
+        db.session.commit()
+        ids = {"member": member, "admin": admin, "admin2": admin2, "member_id": _member_id(member),
+               "admin_id": _member_id(admin), "admin2_id": _member_id(admin2), "owner_id": _member_id("user_1")}
+    return ids
+
+
+def test_an_owner_can_cap_a_member_and_the_member_cannot_lift_it(monolith_app, monolith_client, flask_app, team_of_user_1):
+    t = team_of_user_1
+    res = monolith_client.put(f"/api/team/members/{t['member_id']}/budget", json={"monthlyBudgetUsd": 5, "enforcement": "block"})
+    body = res.get_json()
+    assert res.status_code == 200 and body["budget"]["limitUsd"] == 5.0
+    assert body["budget"]["enforcement"] == "block" and body["budget"]["managedBy"] == "user_1"
+
+    member = _client_as(monolith_app, t["member"])
+    mine = member.get("/api/usage/me/budget").get_json()
+    assert mine["budget"]["managedBy"] == "user_1"
+    assert member.put("/api/usage/me/budget", json={"monthlyBudgetUsd": 999}).status_code == 403
+    assert member.put("/api/usage/me/budget", json={"enforcement": "alert"}).status_code == 403
+    assert member.put("/api/usage/me/budget", json={"monthlyBudgetUsd": None}).status_code == 403
+    assert member.get("/api/usage/me/budget").get_json()["monthlyBudgetUsd"] == 5.0
+
+    with flask_app.app_context():
+        from core.budget import BudgetExceeded, enforce_budget
+
+        _log(t["member"], 5.0)
+        with pytest.raises(BudgetExceeded):
+            enforce_budget(t["member"], None)              # the cap really applies to them
+
+    res = monolith_client.put(f"/api/team/members/{t['member_id']}/budget", json={"monthlyBudgetUsd": None})
+    assert res.status_code == 200 and res.get_json()["budget"]["state"] == "none"
+    assert member.put("/api/usage/me/budget", json={"monthlyBudgetUsd": 20}).status_code == 200   # theirs again
+
+
+def test_who_may_set_whose_budget(monolith_app, monolith_client, team_of_user_1):
+    t = team_of_user_1
+    admin, member = _client_as(monolith_app, t["admin"]), _client_as(monolith_app, t["member"])
+
+    assert member.get("/api/team/members/budgets").status_code == 403
+    assert member.put(f"/api/team/members/{t['member_id']}/budget", json={"monthlyBudgetUsd": 1}).status_code == 403
+
+    assert admin.put(f"/api/team/members/{t['member_id']}/budget", json={"monthlyBudgetUsd": 7}).status_code == 200
+    assert admin.put(f"/api/team/members/{t['owner_id']}/budget", json={"monthlyBudgetUsd": 1}).status_code == 403   # never the owner
+    assert admin.put(f"/api/team/members/{t['admin_id']}/budget", json={"monthlyBudgetUsd": 1}).status_code == 400   # not yourself here
+    assert admin.put(f"/api/team/members/{t['admin2_id']}/budget", json={"monthlyBudgetUsd": 1}).status_code == 403  # an admin can't cap another admin
+    assert monolith_client.put(f"/api/team/members/{t['admin2_id']}/budget", json={"monthlyBudgetUsd": 30}).status_code == 200  # the owner may
+    assert monolith_client.put("/api/team/members/no-such-member/budget", json={"monthlyBudgetUsd": 1}).status_code == 404
+
+
+def test_a_manager_cannot_delete_a_budget_the_member_set_for_themselves(monolith_app, monolith_client, team_of_user_1):
+    t = team_of_user_1
+    member = _client_as(monolith_app, t["member"])
+    assert member.put("/api/usage/me/budget", json={"monthlyBudgetUsd": 12}).status_code == 200
+
+    res = monolith_client.put(f"/api/team/members/{t['member_id']}/budget", json={"monthlyBudgetUsd": None})
+    assert res.status_code == 400
+    assert member.get("/api/usage/me/budget").get_json()["monthlyBudgetUsd"] == 12.0
+
+    # ...but the owner may replace it with a locked cap of their own
+    assert monolith_client.put(f"/api/team/members/{t['member_id']}/budget", json={"monthlyBudgetUsd": 8}).status_code == 200
+    assert member.put("/api/usage/me/budget", json={"monthlyBudgetUsd": 50}).status_code == 403
+
+
+def test_member_budget_validation(monolith_client, team_of_user_1):
+    t = team_of_user_1
+    url = f"/api/team/members/{t['member_id']}/budget"
+    assert monolith_client.put(url, json={"enforcement": "block"}).status_code == 400        # no budget yet
+    assert monolith_client.put(url, json={"monthlyBudgetUsd": -1}).status_code == 400
+    assert monolith_client.put(url, json={"monthlyBudgetUsd": "lots"}).status_code == 400
+    assert monolith_client.put(url, json={"monthlyBudgetUsd": 3, "enforcement": "maybe"}).status_code == 400
+    assert monolith_client.put(url, json={"monthlyBudgetUsd": 3}).status_code == 200
+    res = monolith_client.put(url, json={"enforcement": "block"})                            # amount kept, mode changed
+    assert res.status_code == 200 and res.get_json()["budget"]["limitUsd"] == 3.0 and res.get_json()["budget"]["enforcement"] == "block"
+
+
+def test_member_budget_list_shows_spend_and_locks(monolith_client, flask_app, team_of_user_1):
+    t = team_of_user_1
+    with flask_app.app_context():
+        _log(t["member"], 1.5)
+    monolith_client.put(f"/api/team/members/{t['member_id']}/budget", json={"monthlyBudgetUsd": 10})
+    rows = {r["userId"]: r for r in monolith_client.get("/api/team/members/budgets").get_json()["members"]}
+    assert set(rows) == {"user_1", t["member"], t["admin"], t["admin2"]}
+    assert rows[t["member"]]["budget"]["spendUsd"] == pytest.approx(1.5)
+    assert rows[t["member"]]["budget"]["managedBy"] == "user_1"
+    assert rows["user_1"]["budget"]["state"] == "none" and rows["user_1"]["role"] == "owner"
+
+
+def test_removing_a_member_hands_their_budget_back(monolith_client, flask_app, team_of_user_1):
+    from core.budget import get_user_budget_lock
+
+    t = team_of_user_1
+    monolith_client.put(f"/api/team/members/{t['member_id']}/budget", json={"monthlyBudgetUsd": 10})
+    assert monolith_client.delete(f"/api/team/members/{t['member_id']}").status_code == 200
+    with flask_app.app_context():
+        assert get_user_budget_lock(t["member"]) is None
+
+
+def test_the_manager_hears_about_a_members_capped_budget_too(flask_app, emails):
+    from core.budget import set_user_budget
+
+    member, boss = _uid("mem"), _uid("boss")
+    set_user_budget(member, 2.0, "block", managed_by=boss)
+    _log(member, 1.7)
+    assert sorted(e["to"] for e in emails) == sorted([member, boss])
+
+
+def test_member_budget_routes_require_a_session(monolith_anon_client):
+    assert monolith_anon_client.get("/api/team/members/budgets").status_code == 401
+    assert monolith_anon_client.put("/api/team/members/x/budget", json={}).status_code == 401

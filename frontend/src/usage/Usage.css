@@ -361,3 +361,94 @@
     text-align: left;
   }
 }
+
+.usage-budget-locked {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+/* Member budgets (Team tab) */
+.usage-member-table-wrap {
+  overflow-x: auto;
+}
+
+.usage-member-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-caption);
+  font-variant-numeric: tabular-nums;
+}
+
+.usage-member-table th,
+.usage-member-table td {
+  padding: 10px 8px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.usage-member-table th {
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.usage-member-table strong {
+  display: block;
+  font-size: var(--text-body);
+}
+
+.usage-member-sub {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--text-caption);
+  color: var(--color-text-muted);
+}
+
+.usage-member-spend .status-badge {
+  margin-left: 8px;
+}
+
+.usage-member-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* App.css gives every input width:100% and padding - undo it inside the table. */
+.usage-member-table .usage-member-controls input[type="number"] {
+  width: 96px;
+  margin: 0;
+  padding: 6px 8px;
+}
+
+.usage-member-table .usage-member-controls .usage-budget-save {
+  padding: 6px 12px;
+}
+
+.usage-member-block {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.usage-member-table .usage-member-block input {
+  width: auto;
+  margin: 0;
+  padding: 0;
+}
+
+.usage-member-remove {
+  padding: 6px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.usage-member-remove:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

@@ -159,6 +159,7 @@ def score_leads_core(requirement, businesses, user_id):
 
         from app import get_embeddings_batch
         from core.ai_client import ai_chat_completion
+        from core.budget import BudgetExceeded
 
         lead_objects = [_coerce_lead(lead, index) for index, lead in enumerate(businesses)]
         lead_texts = [_extract_lead_text(lead_obj) for lead_obj in lead_objects]
@@ -237,6 +238,8 @@ def score_leads_core(requirement, businesses, user_id):
                         # Blend embedding ranking with LLM refinement for better buyer/seller intent handling.
                         result['match_score'] = int(round((result['match_score'] * 0.45) + (llm_score * 0.55)))
                         result['short_summary'] = _safe_llm_summary(result['lead_obj'], item.get('short_summary') or '')
+            except BudgetExceeded:
+                raise  # a blocked budget is not "refinement unavailable": the caller must see it
             except Exception as llm_error:
                 print(f"[score-leads] LLM refinement skipped: {llm_error}")
 

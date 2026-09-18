@@ -98,6 +98,8 @@ function BudgetCard({ title, budget, onSave, onSetEnforcement, saving, editHint 
   }, [budget?.limitUsd]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!budget || (budget.state === 'none' && !onSave)) return null;
+  // A cap a team owner/admin put on this person: visible, but not theirs to change.
+  const locked = Boolean(onSave && budget.managedBy);
   const badge = budget.blocking ? BLOCKING_NOW_BADGE : BUDGET_BADGES[budget.state];
   const pct = budget.percentUsed == null ? 0 : Math.min(100, budget.percentUsed);
 
@@ -122,7 +124,7 @@ function BudgetCard({ title, budget, onSave, onSetEnforcement, saving, editHint 
       ) : (
         <p className="usage-empty">No monthly budget set. {formatCost(budget.spendUsd)} spent this month.</p>
       )}
-      {onSave && (
+      {onSave && !locked && (
         <div className="usage-budget-edit">
           <label htmlFor="usage-budget-input">Monthly budget (USD)</label>
           <div className="usage-budget-edit-row">
@@ -159,7 +161,12 @@ function BudgetCard({ title, budget, onSave, onSetEnforcement, saving, editHint 
           )}
         </div>
       )}
-      {!onSave && budget.limitUsd != null && (
+      {locked && (
+        <p className="usage-budget-hint usage-budget-locked">
+          Set by {budget.managedBy} (a team owner or admin), so only they can change it.
+        </p>
+      )}
+      {(!onSave || locked) && budget.limitUsd != null && (
         <p className="usage-budget-hint">
           {budget.enforcement === 'block'
             ? 'This budget blocks AI requests once it is used up.'
@@ -170,7 +177,111 @@ function BudgetCard({ title, budget, onSave, onSetEnforcement, saving, editHint 
   );
 }
 
-function UsageDetail({ usage, showByUser, budgetTitle, budget, onSaveBudget, onSetEnforcement, savingBudget, budgetHint }) {
+function MemberBudgetRow({ member, canEdit, busy, onSave }) {
+  const b = member.budget;
+  const [input, setInput] = useState(b.limitUsd != null ? String(b.limitUsd) : '');
+  useEffect(() => {
+    setInput(b.limitUsd != null ? String(b.limitUsd) : '');
+  }, [b.limitUsd]);
+  const badge = b.blocking ? BLOCKING_NOW_BADGE : BUDGET_BADGES[b.state];
+  const idBase = `member-budget-${member.memberId}`;
+
+  return (
+    <tr>
+      <td>
+        <strong>{member.name || member.userId}</strong>
+        <span className="usage-member-sub">{member.userId} · {member.role}</span>
+      </td>
+      <td className="usage-member-spend">
+        {formatCost(b.spendUsd)}{b.limitUsd != null && <> of {formatCost(b.limitUsd)}</>}
+        {badge && <span className={`status-badge ${badge.className}`}>{badge.label}</span>}
+        {b.limitUsd != null && (
+          <span className="usage-member-sub">{b.managedBy ? `Set by ${b.managedBy}` : 'Set by the member'}</span>
+        )}
+      </td>
+      <td>
+        {canEdit ? (
+          <div className="usage-member-controls">
+            <input
+              id={idBase}
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="No cap"
+              aria-label={`Monthly budget for ${member.userId}`}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+            />
+            <button
+              type="button"
+              className="usage-budget-save"
+              disabled={busy || input.trim() === ''}
+              onClick={() => onSave(member, { monthlyBudgetUsd: Number(input) }, 'Member budget saved')}
+            >
+              Set cap
+            </button>
+            {b.limitUsd != null && (
+              <label className="usage-member-block" htmlFor={`${idBase}-block`}>
+                <input
+                  id={`${idBase}-block`}
+                  type="checkbox"
+                  checked={b.enforcement === 'block'}
+                  disabled={busy}
+                  onChange={(e) => onSave(member, { enforcement: e.target.checked ? 'block' : 'alert' },
+                    e.target.checked ? 'Their AI requests will be blocked once the cap is used up' : 'Cap is now alert-only')}
+                />
+                Block
+              </label>
+            )}
+            {b.managedBy && (
+              <button
+                type="button"
+                className="usage-member-remove"
+                disabled={busy}
+                onClick={() => onSave(member, { monthlyBudgetUsd: null }, 'Cap removed')}
+              >
+                Remove cap
+              </button>
+            )}
+          </div>
+        ) : (
+          <span className="usage-member-sub">{member.role === 'owner' ? 'The owner sets their own' : 'Only the owner can cap an admin'}</span>
+        )}
+      </td>
+    </tr>
+  );
+}
+
+/* Team tab: cap what each member can spend. A cap set here is locked - the
+   member sees it on their own My usage tab but can't change it. */
+function MemberBudgets({ members, myEmail, busy, onSave }) {
+  if (!members || members.length === 0) return null;
+  const myRole = members.find((m) => m.userId === myEmail)?.role;
+  const canEditRow = (m) => m.role !== 'owner' && m.userId !== myEmail && (m.role !== 'admin' || myRole === 'owner');
+  return (
+    <section className="usage-card-section">
+      <h3>Member budgets</h3>
+      <p className="usage-budget-hint">
+        Cap what an individual can spend each month. A cap you set here is locked: they can see it, but only you can change it.
+        Their own My usage budget still applies as well.
+      </p>
+      <div className="usage-member-table-wrap">
+        <table className="usage-member-table">
+          <thead>
+            <tr><th>Member</th><th>This month</th><th>Monthly cap (USD)</th></tr>
+          </thead>
+          <tbody>
+            {members.map((m) => (
+              <MemberBudgetRow key={m.memberId} member={m} canEdit={canEditRow(m)} busy={busy} onSave={onSave} />
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function UsageDetail({ usage, showByUser, budgetTitle, budget, onSaveBudget, onSetEnforcement, savingBudget, budgetHint, memberBudgets }) {
   return (
     <>
       <SummaryCards usage={usage} />
@@ -182,6 +293,7 @@ function UsageDetail({ usage, showByUser, budgetTitle, budget, onSaveBudget, onS
         saving={savingBudget}
         editHint={budgetHint}
       />
+      {memberBudgets}
       <div className="usage-breakdown-grid">
         <BreakdownTable title="By agent" rows={usage.byAgent} keyField="agent" />
         <BreakdownTable title="By model" rows={usage.byModel} keyField="model" />
@@ -217,6 +329,7 @@ function Usage() {
   const [loadedKey, setLoadedKey] = useState('');
   const [budget, setBudget] = useState(null);
   const [savingBudget, setSavingBudget] = useState(false);
+  const [memberBudgets, setMemberBudgets] = useState([]);
 
   const [projects, setProjects] = useState([]);
   const [selectedProjectId, setSelectedProjectId] = useState('');
@@ -255,6 +368,11 @@ function Usage() {
       const res = await fetch(url, { headers: authOptionalHeaders() });
       const data = await res.json();
       if (res.ok && data.success) {
+        if (tab === 'team') {
+          const mres = await fetch(`${API_CONFIG.BASE_URL}/api/team/members/budgets`, { headers: authOptionalHeaders() });
+          const mdata = await mres.json().catch(() => ({}));
+          setMemberBudgets(mres.ok && mdata.success ? mdata.members : []);
+        }
         setUsage(data.usage);
         setBudget(data.budget || null);
       } else {
@@ -297,6 +415,27 @@ function Usage() {
       }
     } catch (err) {
       showToast('Failed to save budget', 'error');
+    } finally {
+      setSavingBudget(false);
+    }
+  };
+  const saveMemberBudget = async (member, patch, successMessage) => {
+    setSavingBudget(true);
+    try {
+      const res = await fetch(`${API_CONFIG.BASE_URL}/api/team/members/${member.memberId}/budget`, {
+        method: 'PUT',
+        headers: authJsonHeaders(),
+        body: JSON.stringify(patch),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setMemberBudgets((rows) => rows.map((r) => (r.memberId === member.memberId ? { ...r, budget: data.budget } : r)));
+        showToast(successMessage, 'success');
+      } else {
+        showToast(data.error || 'Failed to save the member budget', 'error');
+      }
+    } catch (err) {
+      showToast('Failed to save the member budget', 'error');
     } finally {
       setSavingBudget(false);
     }
@@ -368,6 +507,14 @@ function Usage() {
             onSaveBudget={tab === 'project' ? null : saveAmount}
             onSetEnforcement={tab === 'project' ? null : saveEnforcement}
             savingBudget={savingBudget}
+            memberBudgets={tab === 'team' ? (
+              <MemberBudgets
+                members={memberBudgets}
+                myEmail={localStorage.getItem('userEmail')}
+                busy={savingBudget}
+                onSave={saveMemberBudget}
+              />
+            ) : null}
             budgetHint={tab === 'team'
               ? "Counts everyone on the team across every project. The team owner gets an email at 80% and again if it's exceeded; Autopilot workflows pause for everyone once it's used up."
               : "Counts everything you spend across all projects. You'll get an email at 80% and again if you go over; Autopilot workflows pause once it's used up."}

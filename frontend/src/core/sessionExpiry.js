@@ -24,17 +24,34 @@ const NETWORK_ERROR_TOAST_COOLDOWN_MS = 8000; // several requests failing togeth
 let lastBudgetToast = { message: '', at: 0 };
 const BUDGET_TOAST_COOLDOWN_MS = 6000;
 
-// The backend answers a blocked AI call with 402 { code: 'budget_exceeded',
-// error: '<which budget, and how to lift it>' } (backend/core/budget.py). Most
-// call sites just show "failed", which would leave the person guessing, so the
-// reason is surfaced once here, app-wide, without touching the caller's own
-// handling of the response.
-function notifyBudgetExceeded(body) {
-  if (body?.code !== 'budget_exceeded' || !body.error) return;
+// A blocked AI call (backend/core/budget.py) is reported two ways, and both end
+// up here so the reason is shown once, app-wide, without touching any caller's
+// own handling of the response:
+//   * HTTP 402 { code: 'budget_exceeded', error: '<which budget, how to lift it>' }
+//   * an X-Budget-Blocked header (percent-encoded) on ANY response of a request
+//     during which a block happened - including 200s where the route caught
+//     the error and carried on with a degraded result. Without it that
+//     degradation would be silent.
+function notifyBudgetMessage(message) {
+  if (!message) return;
   const now = Date.now();
-  if (lastBudgetToast.message === body.error && now - lastBudgetToast.at < BUDGET_TOAST_COOLDOWN_MS) return;
-  lastBudgetToast = { message: body.error, at: now };
-  showToast(body.error, 'warning', 9000);
+  if (lastBudgetToast.message === message && now - lastBudgetToast.at < BUDGET_TOAST_COOLDOWN_MS) return;
+  lastBudgetToast = { message, at: now };
+  showToast(message, 'warning', 9000);
+}
+
+function notifyBudgetExceeded(body) {
+  if (body?.code === 'budget_exceeded') notifyBudgetMessage(body.error);
+}
+
+function notifyBudgetHeader(getHeader) {
+  const raw = getHeader('x-budget-blocked');
+  if (!raw) return;
+  try {
+    notifyBudgetMessage(decodeURIComponent(raw));
+  } catch (e) {
+    // malformed encoding: nothing useful to show
+  }
 }
 
 function isAuthEndpoint(url) {
@@ -83,12 +100,17 @@ export function installSessionExpiryHandler() {
     } else if (response.status === 402) {
       response.clone().json().then(notifyBudgetExceeded).catch(() => {});
     }
+    notifyBudgetHeader((name) => response.headers.get(name));
     return response;
   };
 
   axios.interceptors.response.use(
-    (response) => response,
+    (response) => {
+      notifyBudgetHeader((name) => response.headers?.[name]);
+      return response;
+    },
     (error) => {
+      if (error?.response) notifyBudgetHeader((name) => error.response.headers?.[name]);
       if (error?.response?.status === 401 && !isAuthEndpoint(error.config?.url)) {
         handleExpiredSession();
       } else if (error?.response?.status === 402) {

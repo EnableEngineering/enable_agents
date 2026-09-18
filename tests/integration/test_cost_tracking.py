@@ -49,8 +49,8 @@ def test_budget_state_thresholds():
     assert budget_state(10.0, 10)["state"] == "over"
     over = budget_state(12.5, 10)
     assert over["state"] == "over" and over["percentUsed"] == 125.0 and over["remainingUsd"] == 0.0
-    # a $0 budget means "spend nothing": any spend is over, no spend is fine
-    assert budget_state(0, 0)["state"] == "ok"
+    # a $0 budget means "spend nothing": it is used up from the start
+    assert budget_state(0, 0)["state"] == "over" and budget_state(0, 0)["percentUsed"] == 100.0
     assert budget_state(0.01, 0)["state"] == "over"
 
 

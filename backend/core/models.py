@@ -442,6 +442,9 @@ class UserBudget(db.Model):
     monthly_budget_usd = db.Column(db.Float, nullable=True)
     # "YYYY-MM" of the last month each alert was sent (once per month each).
     enforcement = db.Column(db.String(10), nullable=True)  # "alert" | "block"
+    # Set when a team owner/admin (their user id) put this cap on the member:
+    # the member can then no longer change or remove it themselves.
+    managed_by = db.Column(db.String(255), nullable=True)
     warn_month = db.Column(db.String(7), nullable=True)
     over_month = db.Column(db.String(7), nullable=True)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
