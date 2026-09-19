@@ -328,7 +328,7 @@ services:
       dockerfile: Dockerfile
     container_name: enable_agents_backend_remote
     command: >
-      gunicorn "app:app" --bind 0.0.0.0:8000 --workers 4 --timeout 120 --graceful-timeout 70
+      gunicorn "app:app" --bind 0.0.0.0:8000 --workers ${BACKEND_WORKERS:-2} --timeout 120 --graceful-timeout 70
       --preload -c /app/gunicorn_conf.py
       --access-logfile - --error-logfile - --log-level info --capture-output
     env_file:

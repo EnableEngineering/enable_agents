@@ -118,7 +118,9 @@ the previous config is restored if it's rejected).
 #### Rolling restart (no gap)
 
 Two backend containers run side by side: `backend-remote` on host port 8000
-(4 gunicorn workers) and `backend-remote-b` on 8001 (2 workers, `BACKEND_B_WORKERS`).
+(`BACKEND_WORKERS`, default 2) and `backend-remote-b` on 8001 (`BACKEND_B_WORKERS`, default 2):
+4 workers in total, the same as the single backend had, because the VM's RAM only has room for
+each container's preload footprint plus those workers.
 Host nginx load-balances across both (`upstream enable_agents_backend` in
 `deploy/nginx/host-agents.enableyou.co.conf`). To restart one, the script:
 
