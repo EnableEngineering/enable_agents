@@ -2509,7 +2509,17 @@ Everything from "Still open" except frontend CI and the old checklists:
   a backend that is starting behind Docker's port proxy accepts and resets, which
   nginx can't retry for a POST - hence draining; and `fail_timeout=10s` left
   nothing in rotation when the survivor failed right after the other recovered,
-  so it is 3s.) **Not yet proven on the VM** until the first rolling deploy runs.
+  so it is 3s.) **Proven on the VM (2026-09-19):** with the drain/restart/restore
+  procedure run on both prod backends under live probe traffic against the public
+  URL, 175 requests (GET + POST) lost 0. Prod runs 2 + 2 gunicorn workers (the same
+  total as before) because the VM is tight: ~1.2GB available and ~2.5GB of the 4GB
+  swap in use after the deploy (2.9GB before it).
+- **Found on prod: no platform email account is configured** ("No email account
+  connected. Connect Google in Settings, or ask an admin to configure SMTP"), so
+  budget alert emails - and every other platform email - cannot be delivered
+  there. Alerts now visibly queue -> retry twice -> fail in the celery log instead
+  of failing silently inline. Needs someone to set `EMAIL_USER`/`EMAIL_PASS` (SMTP)
+  or connect the platform Google account.
 
 ## Still open (as of 2026-09-19)
 

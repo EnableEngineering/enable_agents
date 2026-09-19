@@ -23,8 +23,8 @@ traffic is flowing.
 - **Never email anyone but `@enableyou.co`.** Every account the suite creates is
   `e2e_<label>_<time>@enableyou.co` (`lib.js` enforces the domain), and no suite
   approves an email-sending stage: they skip it.
-- Accounts, projects and workflow runs are deleted at the end of each suite
-  (also when it fails); on dev the seeded usage rows are removed too.
+- Accounts, projects, workflow runs and their usage-log rows are deleted at the end
+  of each suite (also when it fails).
 - `smoke`, `alerts` and `concurrency` make a few real (cheap) AI calls: well under a
   cent, under a cent, and about two cents respectively. Everything that is *supposed to be blocked*
   is refused before any provider is reached.

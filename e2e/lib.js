@@ -69,7 +69,8 @@ async function newSuite(name) {
   ctx.finish = async () => {
     for (const fn of cleanups.reverse()) { try { await fn(); } catch (e) { /* best effort */ } }
     for (const u of users) { try { await ctx.request('DELETE', '/api/account', u.token); } catch (e) { /* best effort */ } }
-    if (TARGET === 'dev') for (const u of users) { try { db(`DELETE FROM ai_usage_log WHERE user_id='${u.email}'`); } catch (e) { /* best effort */ } }
+    // Deleting an account leaves its usage-log rows behind, on both targets.
+    for (const u of users) { try { db(`DELETE FROM ai_usage_log WHERE user_id='${u.email}'`); } catch (e) { /* best effort */ } }
     await browser.close();
     return failures;
   };
