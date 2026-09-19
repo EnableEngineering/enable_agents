@@ -213,4 +213,10 @@ class WorkflowSendLedger(db.Model):
     stage_id = db.Column(db.String(100), nullable=False)
     content_hash = db.Column(db.String(16), nullable=False)
     recipient_email = db.Column(db.String(320), nullable=False)
+    # "claimed": written BEFORE the email is handed to Gmail/SMTP, so a crash
+    # between the send and the record can never lead to a second email - a
+    # retry treats a claim as "already handled". "sent": confirmed delivered
+    # to the provider. A claim that never became "sent" means the send was
+    # interrupted and its outcome is unknown ("unconfirmed").
+    status = db.Column(db.String(10), nullable=False, default="sent", server_default="sent")
     sent_at = db.Column(db.DateTime, default=datetime.utcnow)

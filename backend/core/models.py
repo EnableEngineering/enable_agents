@@ -413,6 +413,15 @@ class AIUsageLog(db.Model):
     workflow_stage_id = db.Column(db.String(100), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
 
+    # Every budget check sums "this scope, this month" on each usage write, and
+    # every usage dashboard filters the same way: these make that a range scan
+    # instead of a scan of the scope's whole history.
+    __table_args__ = (
+        db.Index("ix_ai_usage_log_user_created", "user_id", "created_at"),
+        db.Index("ix_ai_usage_log_project_created", "project_id", "created_at"),
+        db.Index("ix_ai_usage_log_team_created", "team_id", "created_at"),
+    )
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "userId": self.user_id,

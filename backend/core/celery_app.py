@@ -14,10 +14,39 @@ when the module is imported by a worker (which triggers app import).
 import os
 from typing import Optional
 from celery import Celery
+from celery.schedules import crontab
 from flask import Flask
 
 celery: Optional[Celery] = None
 _flask_app: Optional[Flask] = None
+
+_TASK_MODULES = [
+    "agents.document_intelligence.tasks",
+    "agents.content_marketing.tasks",
+    "agents.workflow_orchestration.tasks",
+    "core.maintenance_tasks",
+]
+
+# Scheduled by `celery beat`. Times are UTC (enable_utc + timezone below).
+_BEAT_SCHEDULE = {
+    "purge-old-usage": {
+        "task": "maintenance.purge_old_usage",
+        "schedule": crontab(hour=3, minute=15),
+    },
+}
+
+
+def _common_conf() -> dict:
+    return dict(
+        task_serializer="json",
+        result_serializer="json",
+        accept_content=["json"],
+        timezone="UTC",
+        enable_utc=True,
+        task_track_started=True,
+        imports=list(_TASK_MODULES),
+        beat_schedule=_BEAT_SCHEDULE,
+    )
 
 
 def get_flask_app() -> Flask:
@@ -52,19 +81,7 @@ def _create_standalone_celery() -> Celery:
         broker=broker,
         backend=backend,
     )
-    c.conf.update(
-        task_serializer="json",
-        result_serializer="json",
-        accept_content=["json"],
-        timezone="UTC",
-        enable_utc=True,
-        task_track_started=True,
-        imports=[
-            "agents.document_intelligence.tasks",
-            "agents.content_marketing.tasks",
-            "agents.workflow_orchestration.tasks",
-        ],
-    )
+    c.conf.update(**_common_conf())
     return c
 
 
@@ -78,20 +95,7 @@ def make_celery(app) -> Celery:
         broker=broker,
         backend=backend,
     )
-    celery.conf.update(
-        task_serializer="json",
-        result_serializer="json",
-        accept_content=["json"],
-        timezone="UTC",
-        enable_utc=True,
-        task_track_started=True,
-        # Auto-discover tasks from agents
-        imports=[
-            "agents.document_intelligence.tasks",
-            "agents.content_marketing.tasks",
-            "agents.workflow_orchestration.tasks",
-        ],
-    )
+    celery.conf.update(**_common_conf())
 
     class ContextTask(celery.Task):
         def __call__(self, *args, **kwargs):

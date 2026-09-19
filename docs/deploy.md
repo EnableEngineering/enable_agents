@@ -106,25 +106,53 @@ git push origin local-preview     # the VM deploys origin/local-preview
 ```
 
 It fast-forwards the VM, tags the running images `:previous`, stops celery
-(RAM), builds all four images, runs `flask db upgrade` against the new image,
-starts the new backend + celery and **waits for `/ready`** - database reachable
-AND schema at this build's alembic head. If it isn't ready in
-`DEPLOY_READY_TIMEOUT` (default 300s) it re-tags `:previous`, restarts the old
-build and exits 1. Only after the gate passes does it swap the frontend static
-files and sync the tracked host nginx config (`nginx -t` first; the previous
-config is restored if it's rejected).
+(RAM), builds the images, runs `flask db upgrade` against the new image, then
+restarts the two backends **one at a time** (see "Rolling restart" below) and
+**waits for `/ready`** after each - database reachable AND schema at this
+build's alembic head. If one isn't ready in `DEPLOY_READY_TIMEOUT` (default
+300s) it puts nginx back to normal, re-tags `:previous`, restarts what it had
+replaced and exits 1. Only after the gate passes does it start celery, swap the
+frontend static files and sync the tracked host nginx config (`nginx -t` first;
+the previous config is restored if it's rejected).
+
+#### Rolling restart (no gap)
+
+Two backend containers run side by side: `backend-remote` on host port 8000
+(4 gunicorn workers) and `backend-remote-b` on 8001 (2 workers, `BACKEND_B_WORKERS`).
+Host nginx load-balances across both (`upstream enable_agents_backend` in
+`deploy/nginx/host-agents.enableyou.co.conf`). To restart one, the script:
+
+1. **drains** it - adds `down` to its `server` line
+   (`scripts/nginx_backend_state.sh`) and reloads nginx gracefully - so nothing
+   is sent to a backend that is about to stop or is still starting (nginx can't
+   safely retry a POST that was already sent, so failover alone would lose the
+   odd one);
+2. waits 5s for its in-flight requests, recreates it (Docker gives gunicorn up
+   to 75s to finish requests: `stop_grace_period` / `--graceful-timeout`);
+3. waits for `/ready`, then puts it back in rotation.
+
+`backend-remote-b` goes first, then `backend-remote`; one is always serving.
+`./scripts/test_nginx_failover.sh` proves this against the real nginx config
+(needs docker): continuous GET + POST traffic lost 0 of ~3,600 requests while each
+backend was drained, restarted and restored. An *unplanned* crash still relies on
+nginx's failover (`proxy_next_upstream`, `max_fails`) and can lose the requests in
+flight on the dying backend - that is the part a deploy no longer risks.
+
+It needs RAM for the second backend (~0.6GB): if `backend-remote-b` isn't running
+yet and less than `DEPLOY_MIN_FREE_MB` (default 900) is available - or
+`DEPLOY_ROLLING=0` - it falls back to the old single restart and says so.
+Keep each `server` line in the nginx upstream in its current shape: the drain
+script edits it with sed (a test in `tests/sanity/test_deploy_config.py` checks).
 
 - **Migrations must be additive/backward compatible.** They run *before* the
   cut-over, so if the new build is rolled back the old code has to keep working
   against the already-migrated database. (Adding tables/nullable columns is
   fine; dropping or renaming something the old code reads is not - do that in
   two deploys.)
-- **What it can't do:** there is one backend container on one 4GB VM, so the
-  seconds while the new one starts are still a gap. `--preload` (see
-  `backend/gunicorn_conf.py`; the workers share one import instead of four
-  parallel ones) roughly halves steady-state backend memory (measured
-  1.15GiB -> 0.49GiB) and shortens that gap. The gate makes a *bad* build safe;
-  true zero-downtime needs a second backend instance, i.e. a bigger VM.
+- `--preload` (see `backend/gunicorn_conf.py`; the workers share one import
+  instead of four parallel ones) roughly halves each backend's memory (measured
+  1.15GiB -> 0.49GiB), which is what makes room for the second one on this VM.
+- After a deploy, run `TARGET=prod ./scripts/e2e.sh` (see `e2e/README.md`).
 - `/health` = process is alive (cheap, what load balancers poll). `/ready` =
   can actually serve (DB + migrated schema; Redis reported but not fatal).
   The production container healthchecks use `/ready`.
@@ -290,6 +318,7 @@ gcloud compute ssh instance-20260419-210128 --zone=us-east1-b --command="sudo do
 | Service | Container | Port |
 |---------|-----------|------|
 | Backend API | enable_agents_backend_remote | 8000 |
+| Backend API (second instance) | enable_agents_backend_remote_b | 8001 |
 | Frontend | enable_agents_frontend_remote | 80 (internal) |
 | Nginx | enable_agents_nginx | 80, 443 |
 | Celery Worker | enable_agents_celery_remote | - |

@@ -1635,17 +1635,6 @@ def load_embeddings(file_hash):
     print("Embeddings loaded successfully.")
     return index, phrase_embeddings, page_chunks
 
-def init_llm():
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-    return llm
-
-def init_embeddings():
-    embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
-    return embeddings
-
-def init_vector_store(embeddings):
-    return None
-
 def pdf_loader(file_path):
     pdf_document = fitz.open(file_path)
     pdf_text ={}
@@ -5849,6 +5838,22 @@ def chunk_text(text, chunk_size=1000, overlap=200):
         start = end - overlap
     return chunks
 
+def _log_langchain_embedding_usage(texts, user_id, project_id, agent, model="text-embedding-ada-002"):
+    """LangChain's OpenAIEmbeddings goes straight to OpenAI (bypassing
+    core.ai_client) and reports no token counts, so its cost never reached the
+    usage log or any budget. Record an estimate (about 4 characters a token) so
+    it is attributed like every other call. Never raises."""
+    if not user_id:
+        return
+    try:
+        from core.ai_client import log_ai_usage
+
+        tokens = max(sum(len(str(t)) for t in texts) // 4, 1)
+        log_ai_usage(user_id, project_id, agent, "openai", model, tokens, 0, "platform")
+    except Exception as e:
+        print(f"[usage] could not log LangChain embedding usage: {e}")
+
+
 def create_embeddings(chunks):
     """Generate OpenAI embeddings for text chunks"""
     embeddings_model = OpenAIEmbeddings()
@@ -5946,6 +5951,7 @@ def process_documents_with_kg_rag(documents, nodes, edges, query, include_contex
         chunks = chunk_text(all_text)
         embeddings_model = OpenAIEmbeddings()
         embeddings = create_embeddings(chunks)
+        _log_langchain_embedding_usage(chunks, user_id, project_id, "document_intelligence.kg_rag_embed_documents")
         
         # Build FAISS index
         faiss_index = build_faiss_index(embeddings)
@@ -5957,6 +5963,7 @@ def process_documents_with_kg_rag(documents, nodes, edges, query, include_contex
     
     # Retrieve relevant chunks (this is query-specific, not cached)
     relevant_chunks = retrieve_relevant_chunks(query, faiss_index, chunks, embeddings_model)
+    _log_langchain_embedding_usage([query], user_id, project_id, "document_intelligence.kg_rag_embed_query")
     
     # Query knowledge graph for additional context
     kg_context = {

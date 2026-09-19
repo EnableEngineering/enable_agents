@@ -28,6 +28,8 @@ os.environ.setdefault("GOOGLE_CLIENT_ID", "test-client-id")
 os.environ.setdefault("GOOGLE_CLIENT_SECRET", "test-client-secret")
 os.environ.setdefault("OPENAI_API_KEY", "test-openai-key")
 os.environ.setdefault("ENVIRONMENT", "test")
+# Budget alert emails are queued to Celery in production; tests send (and intercept) them inline.
+os.environ.setdefault("BUDGET_ALERTS_INLINE", "1")
 os.environ.setdefault("CELERY_BROKER_URL", "memory://")
 os.environ.setdefault("CELERY_RESULT_BACKEND", "cache+memory://")
 

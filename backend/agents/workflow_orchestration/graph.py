@@ -296,31 +296,87 @@ def _send_content_hash(args: Dict[str, Any]) -> str:
     ).hexdigest()[:12]
 
 
-def _ledger_sent(instance_id: str, stage_id: str, content_hash: str) -> set:
+def _ledger_state(instance_id: str, stage_id: str, content_hash: str):
+    """(confirmed, unconfirmed) recipient sets for this message. Both count
+    as "already handled" - a retry never emails either again - but only the
+    first is known to have been delivered."""
     from models.workflow import WorkflowSendLedger
 
     rows = WorkflowSendLedger.query.filter_by(
         instance_id=instance_id, stage_id=stage_id, content_hash=content_hash
     ).all()
-    return {r.recipient_email.lower() for r in rows}
+    confirmed = {r.recipient_email.lower() for r in rows if (r.status or "sent") == "sent"}
+    unconfirmed = {r.recipient_email.lower() for r in rows if (r.status or "sent") != "sent"}
+    return confirmed, unconfirmed
 
 
-def _ledger_record(instance_id: str, stage_id: str, content_hash: str, recipient: str) -> None:
-    """Record one delivered address. Deliberately raises on any failure
-    other than "already recorded" - if this write is lost, at-most-once is
-    lost, so the send loop must stop (see send_bulk_emails_core's on_sent)."""
+def _ledger_claim(instance_id: str, stage_id: str, content_hash: str, recipient: str) -> bool:
+    """Durably claim an address BEFORE emailing it. Returns False if it was
+    already claimed/sent (someone else handled it - skip, don't email), True if
+    the claim is ours. Raises on any other failure: an unrecorded send would
+    give up at-most-once, so the caller must not send."""
     from core.database import db
     from models.workflow import WorkflowSendLedger
     from sqlalchemy.exc import IntegrityError
 
     db.session.add(WorkflowSendLedger(
         instance_id=instance_id, stage_id=stage_id, content_hash=content_hash,
-        recipient_email=str(recipient).lower(),
+        recipient_email=str(recipient).lower(), status="claimed",
     ))
     try:
         db.session.commit()
+        return True
     except IntegrityError:
-        db.session.rollback()  # already recorded - harmless
+        db.session.rollback()
+        return False
+
+
+def _ledger_confirm(instance_id: str, stage_id: str, content_hash: str, recipient: str) -> None:
+    """The email was handed to the provider: upgrade the claim to "sent"."""
+    from core.database import db
+    from models.workflow import WorkflowSendLedger
+
+    updated = WorkflowSendLedger.query.filter_by(
+        instance_id=instance_id, stage_id=stage_id, content_hash=content_hash,
+        recipient_email=str(recipient).lower(),
+    ).update({"status": "sent"})
+    if not updated:  # no claim on record (shouldn't happen) - still record the send
+        db.session.add(WorkflowSendLedger(
+            instance_id=instance_id, stage_id=stage_id, content_hash=content_hash,
+            recipient_email=str(recipient).lower(), status="sent",
+        ))
+    db.session.commit()
+
+
+def _ledger_release(instance_id: str, stage_id: str, content_hash: str, recipient: str) -> None:
+    """Drop a claim whose email definitely did not go out, so a retry may try
+    that recipient again."""
+    from core.database import db
+    from models.workflow import WorkflowSendLedger
+
+    WorkflowSendLedger.query.filter_by(
+        instance_id=instance_id, stage_id=stage_id, content_hash=content_hash,
+        recipient_email=str(recipient).lower(), status="claimed",
+    ).delete()
+    db.session.commit()
+
+
+def _definitely_not_sent(exc: Exception) -> bool:
+    """True only when the failure proves the provider REFUSED the message
+    (rejected credentials/recipient/sender/content, or an HTTP 4xx). Timeouts,
+    dropped connections and anything unrecognised are ambiguous - the email
+    may have gone out - so those keep the claim."""
+    import smtplib
+
+    refused = (
+        smtplib.SMTPAuthenticationError, smtplib.SMTPConnectError, smtplib.SMTPHeloError,
+        smtplib.SMTPRecipientsRefused, smtplib.SMTPSenderRefused, smtplib.SMTPDataError,
+        smtplib.SMTPNotSupportedError,
+    )
+    if isinstance(exc, refused):
+        return True
+    status = getattr(getattr(exc, "resp", None), "status", None)  # googleapiclient.errors.HttpError
+    return isinstance(status, int) and 400 <= status < 500
 
 
 def _send_bulk_emails_or_skip(state: WorkflowGraphState, stage_id: str, args: Dict[str, Any]) -> Dict[str, Any]:
@@ -341,10 +397,16 @@ def _send_bulk_emails_or_skip(state: WorkflowGraphState, stage_id: str, args: Di
        and only records recipients in one commit at the end, and on any
        exception it returns an error after some emails have already gone
        out - so approving again used to email those people a second time.
-       A workflow_send_ledger row records each address the moment it's
-       sent; a retry (human re-approve, or a replayed task) only sends to
-       whoever is left. If a ledger write ever fails the loop stops
-       (rather than carrying on unrecorded).
+       A workflow_send_ledger row is CLAIMED for each address before its
+       email is handed over, and confirmed afterwards; a retry (human
+       re-approve, or a replayed task) only sends to whoever is left. If a
+       claim can't be written nothing is sent for that address and the loop
+       stops. A crash between the send and its confirmation leaves the claim
+       in place, so the address is never emailed a second time - at the price
+       that an address whose send was interrupted before it went out is also
+       skipped, which is reported as "unconfirmed" (check the Sent folder)
+       instead of silently retried. A claim is released only when the
+       provider definitely refused the message.
     3. A per-stage recipient cap (WORKFLOW_MAX_EMAIL_RECIPIENTS, default
        50) so one approval can't fan out to an entire 200-row search
        result by accident.
@@ -363,16 +425,21 @@ def _send_bulk_emails_or_skip(state: WorkflowGraphState, stage_id: str, args: Di
 
     instance_id = state["instance_id"]
     content_hash = _send_content_hash(args)
-    already_sent = _ledger_sent(instance_id, stage_id, content_hash)
+    confirmed, unconfirmed = _ledger_state(instance_id, stage_id, content_hash)
+    already_sent = confirmed | unconfirmed
 
     remaining = [
         b for b in businesses
         if b.get("email") in valid and str(b.get("email")).lower() not in already_sent
     ]
     if not remaining:
+        note = (
+            f" ({len(unconfirmed)} of them unconfirmed - an earlier attempt was interrupted; "
+            "check your Sent folder. They are not re-sent automatically.)" if unconfirmed else ""
+        )
         return {
             "skipped": True,
-            "reason": f"all {len(already_sent)} recipients were already emailed by this stage",
+            "reason": f"all {len(already_sent)} recipients were already emailed by this stage{note}",
             "sent": 0,
         }
 
@@ -386,21 +453,42 @@ def _send_bulk_emails_or_skip(state: WorkflowGraphState, stage_id: str, args: Di
     from agents.email_outreach.service import send_bulk_emails_core
 
     sent_now = set(already_sent)
+    interrupted = set()
 
-    def _record_sent(recipient: str) -> None:
-        _ledger_record(instance_id, stage_id, content_hash, recipient)
+    def _claim(recipient: str) -> bool:
+        if not _ledger_claim(instance_id, stage_id, content_hash, recipient):
+            return False  # already handled by someone else: skip, don't email
+        interrupted.add(str(recipient).lower())
+        return True
+
+    def _confirm(recipient: str) -> None:
+        _ledger_confirm(instance_id, stage_id, content_hash, recipient)
+        interrupted.discard(str(recipient).lower())
         sent_now.add(str(recipient).lower())
+
+    def _send_failed(recipient: str, exc: Exception) -> None:
+        if _definitely_not_sent(exc):
+            _ledger_release(instance_id, stage_id, content_hash, recipient)
+            interrupted.discard(str(recipient).lower())
 
     result, error, status = send_bulk_emails_core(
         args["subject"], args["body"], remaining,
         state["user_id"], state["user_id"],
         campaign_name=args["campaign_name"],
         use_ai_personalization=args["use_ai_personalization"],
-        on_sent=_record_sent,
+        on_sent=_confirm, before_send=_claim, on_send_failed=_send_failed,
     )
     if error:
-        already = f" ({len(sent_now - already_sent)} were sent before it failed and won't be re-sent)" if sent_now - already_sent else ""
-        raise RuntimeError(f"{error}{already}")
+        notes = []
+        delivered = len(sent_now - already_sent)
+        if delivered:
+            notes.append(f"{delivered} were sent before it failed and won't be re-sent")
+        if interrupted:
+            notes.append(
+                f"{len(interrupted)} more were mid-send when it failed, so it isn't known whether they went out "
+                f"({', '.join(sorted(interrupted))}) - check your Sent folder; they won't be re-sent automatically"
+            )
+        raise RuntimeError(f"{error} ({'; '.join(notes)})" if notes else error)
     return result
 
 

@@ -31,6 +31,7 @@ What a budget does:
 from __future__ import annotations
 
 import logging
+import os
 from datetime import datetime
 from typing import Any, Dict, Optional
 
@@ -548,6 +549,21 @@ def is_over_budget(user_id: Optional[str], project_id: Optional[str]) -> bool:
 # ── Alerts ───────────────────────────────────────────────────────────────
 
 def _send_alert(recipient: str, subject: str, body: str) -> None:
+    """Hand the email to Celery so the AI call that crossed the threshold
+    doesn't wait on SMTP. Falls back to sending inline if it can't be queued
+    (broker down), and BUDGET_ALERTS_INLINE=1 skips the queue entirely - for
+    tests and setups with no worker."""
+    if not os.getenv("BUDGET_ALERTS_INLINE"):
+        try:
+            from core.maintenance_tasks import send_budget_alert_email
+
+            send_budget_alert_email.apply_async(
+                args=[recipient, subject, body], expires=6 * 3600,
+                retry=True, retry_policy={"max_retries": 2, "interval_start": 0, "interval_step": 0.2, "interval_max": 0.5},
+            )
+            return
+        except Exception as e:
+            logger.warning(f"Could not queue budget alert to {recipient} ({e}); sending inline")
     try:
         from core.email_sender import send_platform_email
 

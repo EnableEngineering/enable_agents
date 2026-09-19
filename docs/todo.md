@@ -2469,28 +2469,54 @@ built (migration `t7i6j5k4l3m2`, additive):
   Tested with 8 simultaneous threads x 6 rounds against Postgres (exactly 3 of 8
   allowed each time); 9 mutations of the mechanism each fail a test.
 
+## Open items closed out (2026-09-19, later)
+
+Everything from "Still open" except frontend CI and the old checklists:
+- **Decisions, made by default (nobody objected):** spend on a project's / user's
+  own API key keeps counting against budgets ("per key source" budgets not
+  built); a manager-set member cap follows the person onto every project.
+- **Committed e2e suite** (`e2e/`, `./scripts/e2e.sh`, `e2e/README.md`): smoke,
+  member_limits, concurrency, alerts (dev + prod) and budget_caps (dev). Found a
+  real bug while being written against the real worker (below).
+- **`ai_usage_log` indexes** `(user_id|project_id|team_id, created_at)` (migration
+  `x1m0n9o8p7q6`) and **retention**: a daily Celery beat task
+  (`maintenance.purge_old_usage`, 03:15 UTC; first scheduled task in the repo)
+  deletes usage rows older than `USAGE_LOG_RETENTION_DAYS` (default 400, min 30;
+  dashboards look back 365) in batches, plus expired budget reservations.
+- **Budget alert emails go through Celery** (`budget.send_alert_email`) instead of
+  running on the AI call that crossed the threshold; falls back to inline if the
+  broker is down; `BUDGET_ALERTS_INLINE=1` (tests) skips the queue. Running it
+  against the real worker found that the task needed the backend on `sys.path`
+  and an app context (`send_platform_email` late-imports `app`) - fixed, tested.
+- **LangChain embeddings are usage-logged** (estimated at ~4 chars/token) in the
+  KG-RAG pipeline, so their cost shows up in usage, run cost and budgets.
+- **Email crash-window closed - claim before send.** A ledger row (status
+  `claimed`, migration `y2n1o0p9q8r7`) is written BEFORE each email is handed to
+  Gmail/SMTP and confirmed (`sent`) after; a crash between the two can no longer
+  cause a second email. A claim is released only when the provider definitely
+  refused the message (auth/recipient/sender/data errors, HTTP 4xx); a timeout or
+  crash keeps it, and the stage says "N unconfirmed - check your Sent folder"
+  instead of retrying. The trade-off is deliberate (never email twice): an
+  address whose send was interrupted BEFORE it went out is skipped too.
+- **Dead code removed:** `RAGContentGenerator`, `init_llm/init_embeddings/
+  init_vector_store`, and the content-marketing service's placeholder
+  `generate_content`/`chat`.
+- **Deploy gap closed - rolling restart across two backends** with drain-before-
+  restart (see docs/deploy.md). Measured with the real nginx config: 0 of ~10,800
+  requests lost over three runs while each backend was drained, restarted and
+  restored under continuous GET + POST traffic. (Building the harness taught
+  three things: a stopped container reached by IP *hangs* instead of refusing;
+  a backend that is starting behind Docker's port proxy accepts and resets, which
+  nginx can't retry for a POST - hence draining; and `fail_timeout=10s` left
+  nothing in rotation when the survivor failed right after the other recovered,
+  so it is 3s.) **Not yet proven on the VM** until the first rolling deploy runs.
+
 ## Still open (as of 2026-09-19)
 
-Needs a product decision:
-- Should spend on a project's / user's OWN API key count against budgets?
-  Today it does (spend is spend); "per key source" budgets aren't built.
-- Should a manager-set member cap also cap that member's spend on *other*
-  teams' projects? Today the cap follows the person, everywhere.
-
-Engineering, not yet done:
-- The browser verification scripts (Playwright) live outside the repo; turning
-  them into a committed e2e suite that CI runs against a throwaway stack is the
-  biggest testing gap. Frontend CI (`ci.yml`) only triggers on main/develop, not
-  `local-preview`, and a `CI=true` build fails on ~a dozen old lint warnings.
-- LangChain embeddings aren't usage-logged; a callback would fix it.
-- `ai_usage_log` has single-column indexes only; every usage write with a
-  budget set sums the month per user/project/team. Add `(user_id, created_at)`
-  (and project/team) indexes before volume grows. No retention/purge either.
-- Budget alert emails are sent inline on the AI call that crosses a threshold
-  (once a month per budget); moving them to Celery removes that latency.
-- One backend container on a 4GB VM: each deploy still has a few seconds' gap.
-- An email that leaves and then crashes before its ledger row commits could be
-  re-sent once (the ledger is at-most-once only across a clean failure).
-- `docs/todo.md` still carries old unchecked checklists (lines ~1390-1800) that
-  need triage against what actually shipped.
-- Dead code: `RAGContentGenerator`, `init_llm()`.
+- Frontend CI (`ci.yml` only triggers on main/develop, not `local-preview`; a
+  `CI=true` build fails on ~a dozen old lint warnings) - excluded by request.
+- The old unchecked checklists in this file (~lines 1390-1800) need triage against
+  what shipped - excluded by request.
+- An unplanned backend crash can still lose the requests in flight on it (a POST
+  already sent to the dying backend can't be retried safely).
+- Per-key-source budgets, if ever wanted.

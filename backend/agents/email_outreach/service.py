@@ -101,7 +101,7 @@ def generate_email():
 
 def send_bulk_emails_core(subject, body, businesses, user_email, user_id,
                            campaign_name="Untitled Campaign", use_ai_personalization=False,
-                           on_sent=None):
+                           on_sent=None, before_send=None, on_send_failed=None):
     """Plain-argument core of app.py's send_bulk_emails - callable from a
     LangGraph node (or anywhere else outside a Flask request) with no
     request/g dependency. `user_email` and `user_id` are the same value at
@@ -123,6 +123,15 @@ def send_bulk_emails_core(subject, body, businesses, user_email, user_id,
     re-send to them if this call errors out after a partial send. An
     exception from it stops the send loop (see below) - it must not fail
     silently, or the at-most-once guarantee it exists for is gone.
+
+    `before_send(recipient_email)` is called right BEFORE each email is handed
+    over. It returns False to skip that recipient (someone already handled
+    them) and raises to stop the whole send - nothing has gone out for that
+    recipient yet, so a caller can durably "claim" the address first and a
+    crash between the send and `on_sent` can never cause a second email.
+    `on_send_failed(recipient_email, exception)` is called when the hand-over
+    itself raised, so the claim can be released if the failure means the
+    email definitely did not go out.
 
     Returns (result_dict_or_None, error_message_or_None, http_status).
     """
@@ -248,38 +257,62 @@ def send_bulk_emails_core(subject, body, businesses, user_email, user_id,
                     del message["Reply-To"]
                 message["Reply-To"] = reply_to_value
 
-            thread_id = None
-            msg_id = None
-            generated_message_id = f"<{uuid4().hex}@enable-agents.local>"
-            _set_from_header(msg, user_email or smtp_sender_email or recipient)
-            _set_reply_to_header(msg, smtp_sender_email or user_email or recipient)
-            msg["Message-ID"] = generated_message_id
-            if service:
+            if before_send:
                 try:
-                    encoded_message = base64.urlsafe_b64encode(msg.as_bytes()).decode()
-                    create_message = {"raw": encoded_message}
-                    sent_msg = service.users().messages().send(userId="me", body=create_message).execute()
-                    thread_id = sent_msg.get("threadId")
-                    msg_id = sent_msg.get("id")
-                except Exception as send_error:
-                    # Any Gmail API failure (expired/invalid creds, API not
-                    # enabled on the project, quota, etc.) should fall back to
-                    # SMTP rather than only specific credential error strings -
-                    # narrowly matching text meant only one failure mode ever
-                    # got a second chance.
-                    print(f"[SEND_EMAILS] Gmail API failed, falling back to SMTP: {send_error}")
-                    gmail_error_summary = str(send_error).split(".", 1)[0][:200]
-                    service = None
-                    server, smtp_sender_email, smtp_err = _connect_smtp_server()
-                    if smtp_err:
-                        return None, f"Gmail send failed ({gmail_error_summary}) and SMTP fallback is unavailable: {smtp_err}", 500
+                    proceed = before_send(recipient)
+                except Exception as claim_error:
+                    raise RuntimeError(
+                        f"Couldn't record the send to {recipient} ({claim_error}); "
+                        "not sending, so no one is emailed twice."
+                    )
+                if proceed is False:
+                    continue
+
+            try:
+                thread_id = None
+                msg_id = None
+                generated_message_id = f"<{uuid4().hex}@enable-agents.local>"
+                _set_from_header(msg, user_email or smtp_sender_email or recipient)
+                _set_reply_to_header(msg, smtp_sender_email or user_email or recipient)
+                msg["Message-ID"] = generated_message_id
+                if service:
+                    try:
+                        encoded_message = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+                        create_message = {"raw": encoded_message}
+                        sent_msg = service.users().messages().send(userId="me", body=create_message).execute()
+                        thread_id = sent_msg.get("threadId")
+                        msg_id = sent_msg.get("id")
+                    except Exception as send_error:
+                        # Any Gmail API failure (expired/invalid creds, API not
+                        # enabled on the project, quota, etc.) should fall back to
+                        # SMTP rather than only specific credential error strings -
+                        # narrowly matching text meant only one failure mode ever
+                        # got a second chance.
+                        print(f"[SEND_EMAILS] Gmail API failed, falling back to SMTP: {send_error}")
+                        gmail_error_summary = str(send_error).split(".", 1)[0][:200]
+                        service = None
+                        server, smtp_sender_email, smtp_err = _connect_smtp_server()
+                        if smtp_err:
+                            if on_send_failed:
+                                try:
+                                    on_send_failed(recipient, RuntimeError(smtp_err))
+                                except Exception:
+                                    pass
+                            return None, f"Gmail send failed ({gmail_error_summary}) and SMTP fallback is unavailable: {smtp_err}", 500
+                        _set_from_header(msg, user_email or smtp_sender_email or recipient)
+                        _set_reply_to_header(msg, smtp_sender_email or user_email or recipient)
+                        server.send_message(msg)
+                else:
                     _set_from_header(msg, user_email or smtp_sender_email or recipient)
                     _set_reply_to_header(msg, smtp_sender_email or user_email or recipient)
                     server.send_message(msg)
-            else:
-                _set_from_header(msg, user_email or smtp_sender_email or recipient)
-                _set_reply_to_header(msg, smtp_sender_email or user_email or recipient)
-                server.send_message(msg)
+            except Exception as handover_error:
+                if on_send_failed:
+                    try:
+                        on_send_failed(recipient, handover_error)
+                    except Exception:
+                        pass
+                raise
 
             sent_count += 1
             if on_sent:

@@ -318,14 +318,17 @@ services:
 
   # --- Remote profile (nginx reverse proxy for GCP/AWS/etc.)
 
-  backend-remote:
+  backend-remote: &backend_remote
     profiles: ["remote"]
+    # A restart (deploy) lets gunicorn finish in-flight requests - AI calls can
+    # take a minute - before Docker kills it (default grace is only 10s).
+    stop_grace_period: 75s
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: enable_agents_backend_remote
     command: >
-      gunicorn "app:app" --bind 0.0.0.0:8000 --workers 4 --timeout 120
+      gunicorn "app:app" --bind 0.0.0.0:8000 --workers 4 --timeout 120 --graceful-timeout 70
       --preload -c /app/gunicorn_conf.py
       --access-logfile - --error-logfile - --log-level info --capture-output
     env_file:
@@ -371,6 +374,25 @@ services:
       timeout: 20s
       retries: 5
       start_period: 180s
+
+  # Second copy of the backend, on host port 8001. Host nginx load-balances
+  # across 8000 and 8001 (deploy/nginx/host-agents.enableyou.co.conf), and
+  # scripts/deploy_remote.sh restarts them one at a time - so a deploy never
+  # leaves nothing serving. It shares everything with backend-remote except
+  # the container name, host port, network alias and worker count.
+  backend-remote-b:
+    <<: *backend_remote
+    container_name: enable_agents_backend_remote_b
+    command: >
+      gunicorn "app:app" --bind 0.0.0.0:8000 --workers ${BACKEND_B_WORKERS:-2} --timeout 120 --graceful-timeout 70
+      --preload -c /app/gunicorn_conf.py
+      --access-logfile - --error-logfile - --log-level info --capture-output
+    ports:
+      - "8001:8000"
+    networks:
+      enable-network:
+        aliases:
+          - backend-b
 
   celery-worker-remote:
     profiles: ["remote"]
