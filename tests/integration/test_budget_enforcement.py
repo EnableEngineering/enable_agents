@@ -718,3 +718,201 @@ def test_the_manager_hears_about_a_members_capped_budget_too(flask_app, emails):
 def test_member_budget_routes_require_a_session(monolith_anon_client):
     assert monolith_anon_client.get("/api/team/members/budgets").status_code == 401
     assert monolith_anon_client.put("/api/team/members/x/budget", json={}).status_code == 401
+
+
+# ── reservations: concurrent calls can't all spend the same balance ──────
+
+def _reservations(scope, scope_id):
+    from core.models import BudgetReservation
+
+    return BudgetReservation.query.filter_by(scope=scope, scope_id=scope_id).count()
+
+
+def test_an_in_flight_call_counts_against_the_next_one_until_it_finishes(flask_app, emails):
+    from core.budget import BudgetExceeded, release_reservations, reserve_budget, set_user_budget
+
+    user = _uid()
+    set_user_budget(user, 1.00, "block")
+    first = reserve_budget(user, None, 0.60)
+    assert len(first) == 1 and _reservations("user", user) == 1
+    with pytest.raises(BudgetExceeded) as caught:
+        reserve_budget(user, None, 0.60)             # would have passed on spend alone ($0 spent)
+    assert "still running" in str(caught.value) and "$0.40 left" in str(caught.value)
+    assert _reservations("user", user) == 1          # the refused call left nothing behind
+
+    release_reservations(first)
+    assert _reservations("user", user) == 0
+    release_reservations(reserve_budget(user, None, 0.60))   # room again
+
+
+def test_the_check_only_path_also_sees_reservations(flask_app, emails):
+    """LangChain and other paths that can't bracket a call still respect calls in flight."""
+    from core.budget import BudgetExceeded, enforce_budget, release_reservations, reserve_budget, set_user_budget
+
+    user = _uid()
+    set_user_budget(user, 1.00, "block")
+    held = reserve_budget(user, None, 0.90)
+    with pytest.raises(BudgetExceeded):
+        enforce_budget(user, None, 0.20)
+    enforce_budget(user, None, 0.05)
+    assert _reservations("user", user) == 1          # check-only never reserves
+    release_reservations(held)
+
+
+def test_calls_in_flight_that_fill_the_budget_stop_a_check_that_has_no_estimate(flask_app, emails):
+    from core.budget import BudgetExceeded, enforce_budget, release_reservations, reserve_budget, set_user_budget
+
+    user = _uid()
+    set_user_budget(user, 1.00, "block")
+    held = reserve_budget(user, None, 1.00)          # exactly fits: $0 spent + $1.00 reserved
+    with pytest.raises(BudgetExceeded) as caught:
+        enforce_budget(user, None)                   # e.g. a LangChain call: no estimate, just "is there room?"
+    assert "still running" in str(caught.value)
+    release_reservations(held)
+    enforce_budget(user, None)
+
+
+def test_only_block_budgets_reserve_anything(flask_app, emails):
+    from core.budget import reserve_budget, set_user_budget
+
+    alert_only, no_budget = _uid(), _uid()
+    set_user_budget(alert_only, 1.00)
+    assert reserve_budget(alert_only, None, 0.50) == [] and _reservations("user", alert_only) == 0
+    assert reserve_budget(no_budget, None, 0.50) == []
+    assert reserve_budget(None, None, 0.50) == []
+
+
+def test_expired_reservations_are_ignored_and_purged(flask_app, emails):
+    from datetime import datetime, timedelta
+
+    from core.budget import release_reservations, reserve_budget, set_user_budget
+    from core.models import BudgetReservation
+
+    user = _uid()
+    set_user_budget(user, 1.00, "block")
+    db.session.add(BudgetReservation(reservation_id=uuid.uuid4().hex[:36], scope="user", scope_id=user,
+                                     amount_usd=0.95, expires_at=datetime.utcnow() - timedelta(seconds=1)))
+    db.session.commit()
+    held = reserve_budget(user, None, 0.60)          # the dead process's $0.95 doesn't count
+    assert len(held) == 1 and _reservations("user", user) == 1   # ...and was cleaned up
+    release_reservations(held)
+
+
+def test_a_failed_second_budget_releases_the_first_reservation(flask_app, emails):
+    from core.budget import BudgetExceeded, reserve_budget, set_team_budget, set_user_budget
+
+    owner = _uid("own")
+    tid = _make_team(owner)
+    set_user_budget(owner, 10.00, "block")
+    set_team_budget(tid, 0.50, "block")
+    with pytest.raises(BudgetExceeded) as caught:
+        reserve_budget(owner, None, 0.80)            # the user budget (checked first) has room, the team's doesn't
+    assert caught.value.scope == "team"
+    assert _reservations("user", owner) == 0 and _reservations("team", tid) == 0
+
+
+def test_a_reservation_problem_never_stops_the_ai_call(flask_app, emails, monkeypatch):
+    import core.budget as budget
+
+    user = _uid()
+    budget.set_user_budget(user, 1.00, "block")
+    monkeypatch.setattr(budget, "_lock_budget", lambda *a: (_ for _ in ()).throw(RuntimeError("lock unavailable")))
+    assert budget.reserve_budget(user, None, 0.10) == []     # fails open
+    budget.release_reservations(["does-not-exist"])          # never raises
+
+
+def test_simultaneous_calls_cannot_all_spend_the_same_balance(flask_app, emails):
+    """8 calls at once, each estimated at $0.30, against a $1.00 budget: exactly
+    3 may proceed. Without the lock + reservation all 8 pass the check. A race
+    only shows up some of the time, so it is repeated with fresh users."""
+    import threading
+
+    from core.budget import BudgetExceeded, release_reservations, reserve_budget, set_user_budget
+
+    for _round in range(6):
+        user = _uid("burst")
+        set_user_budget(user, 1.00, "block")
+        outcomes, barrier = [], threading.Barrier(8)
+
+        def call():
+            with flask_app.app_context():
+                barrier.wait()
+                try:
+                    outcomes.append(("ok", reserve_budget(user, None, 0.30)))
+                except BudgetExceeded:
+                    outcomes.append(("blocked", []))
+
+        threads = [threading.Thread(target=call) for _ in range(8)]
+        [t.start() for t in threads]
+        [t.join() for t in threads]
+
+        granted = [ids for kind, ids in outcomes if kind == "ok"]
+        assert len(outcomes) == 8 and len(granted) == 3, f"round {_round}: {len(granted)} of 8 were let through"
+        assert _reservations("user", user) == 3
+        release_reservations([i for ids in granted for i in ids])
+        assert _reservations("user", user) == 0
+
+
+@pytest.fixture
+def fake_openai(monkeypatch):
+    """A stand-in provider client that records what the reservation looked like
+    while the 'network call' was in progress."""
+    from types import SimpleNamespace
+
+    import openai
+
+    seen = {"during": None, "fail": False, "user": None}
+
+    class _Client:
+        def __init__(self, api_key=None):
+            usage = SimpleNamespace(prompt_tokens=100, completion_tokens=50)
+
+            def _create(**kwargs):
+                seen["during"] = _reservations("user", seen["user"])
+                if seen["fail"]:
+                    raise RuntimeError("provider down")
+                return SimpleNamespace(usage=usage, choices=[SimpleNamespace(message=SimpleNamespace(content="hi"))],
+                                       data=[SimpleNamespace(embedding=[0.1])])
+
+            self.chat = SimpleNamespace(completions=SimpleNamespace(create=_create))
+            self.embeddings = SimpleNamespace(create=_create)
+
+    monkeypatch.setattr(openai, "OpenAI", _Client)
+    return seen
+
+
+def test_chat_completion_holds_a_reservation_only_while_the_call_runs(flask_app, emails, fake_openai):
+    from core.ai_client import ai_chat_completion
+    from core.budget import set_user_budget
+    from core.models import AIUsageLog
+
+    user = _uid()
+    fake_openai["user"] = user
+    set_user_budget(user, 100.00, "block")
+    ai_chat_completion(user, None, "t.chat", "gpt-4o-mini", [{"role": "user", "content": "hello"}], max_tokens=50)
+    assert fake_openai["during"] == 1                # set aside while the provider call ran
+    assert _reservations("user", user) == 0          # gone afterwards
+    assert AIUsageLog.query.filter_by(user_id=user).count() == 1   # the real cost is what remains
+
+
+def test_a_failed_provider_call_still_releases_its_reservation(flask_app, emails, fake_openai):
+    from core.ai_client import ai_chat_completion
+    from core.budget import set_user_budget
+
+    user = _uid()
+    fake_openai.update(user=user, fail=True)
+    set_user_budget(user, 100.00, "block")
+    with pytest.raises(RuntimeError):
+        ai_chat_completion(user, None, "t.chat", "gpt-4o-mini", [{"role": "user", "content": "hello"}])
+    assert fake_openai["during"] == 1 and _reservations("user", user) == 0
+
+
+def test_embeddings_reserve_and_release_too(flask_app, emails, fake_openai):
+    from core.ai_client import ai_embeddings
+    from core.budget import set_user_budget
+
+    user = _uid()
+    fake_openai["user"] = user
+    set_user_budget(user, 100.00, "block")
+    ai_embeddings(user, None, "t.embed", "text-embedding-ada-002", ["some text"])
+    assert fake_openai["during"] == 1 and _reservations("user", user) == 0

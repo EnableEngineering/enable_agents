@@ -432,6 +432,27 @@ class AIUsageLog(db.Model):
         }
 
 
+class BudgetReservation(db.Model):
+    """Money set aside for an AI call that has started but whose real cost
+    isn't logged yet (core/budget.py reserve_budget). It exists so several
+    calls in flight at the same moment can't each pass the budget check on
+    the same remaining balance. Rows live for the length of one call and are
+    deleted when it finishes; expires_at is only the safety net for a process
+    that died mid-call - expired rows are ignored and purged."""
+    __tablename__ = "budget_reservations"
+
+    reservation_id = db.Column(db.String(36), primary_key=True)
+    scope = db.Column(db.String(10), nullable=False)        # "user" | "project" | "team"
+    scope_id = db.Column(db.String(255), nullable=False)
+    amount_usd = db.Column(db.Float, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    expires_at = db.Column(db.DateTime, nullable=False)
+
+    __table_args__ = (
+        db.Index("ix_budget_reservations_scope", "scope", "scope_id", "expires_at"),
+    )
+
+
 class UserBudget(db.Model):
     """A user's own monthly spend limit across every project and agent -
     the per-user counterpart of Project.monthly_budget_usd (core/budget.py

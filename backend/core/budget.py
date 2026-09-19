@@ -52,11 +52,13 @@ class BudgetExceeded(Exception):
     """A budget set to "block" is used up. str(e) is written for the person
     who hits it: which budget, and what to do about it."""
 
-    def __init__(self, scope: str, label: str, status: Dict[str, Any], estimated_usd: float = 0.0):
+    def __init__(self, scope: str, label: str, status: Dict[str, Any], estimated_usd: float = 0.0,
+                 reserved_usd: float = 0.0):
         self.scope = scope  # "user" | "project" | "team"
         self.label = label
         self.status = status
         self.estimated_usd = estimated_usd
+        self.reserved_usd = reserved_usd  # set aside for other calls still in flight
         limit = status.get("limitUsd") or 0.0
         spent = status.get("spendUsd") or 0.0
         fix = {
@@ -64,13 +66,18 @@ class BudgetExceeded(Exception):
             "project": "Raise the project's budget or switch it to alert-only in the project's AI settings (Projects page)",
             "team": "Ask a team owner or admin to raise the team budget (Usage page, Team tab)",
         }.get(scope, "Raise the budget")
+        in_flight = f", with {_usd(reserved_usd)} more in requests still running" if reserved_usd > 0 else ""
         if spent >= limit:
             head = (f"{label} has used its {_usd(limit)} monthly AI budget ({_usd(spent)} spent) and is set to "
                     f"block further AI requests.")
+        elif estimated_usd <= 0:
+            head = (f"{label} has used its {_usd(limit)} monthly AI budget ({_usd(spent)} spent{in_flight}) and is "
+                    f"set to block further AI requests.")
         else:
-            head = (f"{label} has only {_usd(max(limit - spent, 0.0))} left of its {_usd(limit)} monthly AI budget, "
-                    f"not enough for this request (about {_usd(estimated_usd)}), and is set to block AI requests "
-                    f"that would exceed it.")
+            head = (f"{label} has only {_usd(max(limit - spent - reserved_usd, 0.0))} left of its {_usd(limit)} "
+                    f"monthly AI budget{' after requests still running' if reserved_usd > 0 else ''}, not enough for "
+                    f"this request (about {_usd(estimated_usd)}), and is set to block AI requests that would "
+                    f"exceed it.")
         super().__init__(f"{head} {fix}, or wait for the new month.")
 
     def to_dict(self) -> Dict[str, Any]:
@@ -351,7 +358,7 @@ def budget_overview(user_id: str, project_id: Optional[str] = None) -> Dict[str,
 
 
 def _applicable_budgets(user_id: Optional[str], project_id: Optional[str]):
-    """(scope, label, enforcement, limit, spend_fn) for every budget with a
+    """(scope, scope_id, label, enforcement, limit, spend_fn) for every budget with a
     limit that covers this call. Cheap: reads only the budget rows; spend is
     computed lazily by the caller, and only for budgets it cares about."""
     from core.models import Project, Team, UserBudget
@@ -361,21 +368,21 @@ def _applicable_budgets(user_id: Optional[str], project_id: Optional[str]):
         project = Project.query.filter_by(project_id=project_id).first()
         if project and project.monthly_budget_usd is not None:
             budgets.append((
-                "project", f'The project "{project.name}"', project.budget_enforcement,
+                "project", project_id, f'The project "{project.name}"', project.budget_enforcement,
                 project.monthly_budget_usd, lambda pid=project_id: _current_month_spend_usd(pid),
             ))
     if user_id:
         row = UserBudget.query.filter_by(user_id=user_id).first()
         if row and row.monthly_budget_usd is not None:
             budgets.append((
-                "user", "Your account", row.enforcement,
+                "user", user_id, "Your account", row.enforcement,
                 row.monthly_budget_usd, lambda uid=user_id: current_month_user_spend_usd(uid),
             ))
     for tid in applicable_team_ids(user_id, project_id):
         team = Team.query.filter_by(team_id=tid).first()
         if team and team.monthly_budget_usd is not None:
             budgets.append((
-                "team", f'Your team "{team.name or "Team"}"', team.budget_enforcement,
+                "team", tid, f'Your team "{team.name or "Team"}"', team.budget_enforcement,
                 team.monthly_budget_usd, lambda t=tid: current_month_team_spend_usd(t),
             ))
     return budgets
@@ -394,27 +401,109 @@ def _remember_for_response(exc: "BudgetExceeded") -> None:
         pass
 
 
-def enforce_budget(user_id: Optional[str], project_id: Optional[str] = None, estimated_cost_usd: float = 0.0) -> None:
-    """Raise BudgetExceeded if a budget set to "block" that covers this call
-    is used up - or, when the caller can estimate what this request will cost,
-    would be exceeded by it (so a cap is not overshot by the call that crosses
-    it). Call before every paid AI request. A no-op (no spend query at all)
-    unless a covering budget is set to block, and it fails open: only
-    BudgetExceeded ever escapes."""
-    if not user_id:
+# ── Reservations ─────────────────────────────────────────────────────────
+#
+# Checking "is there room?" and then making the call are two steps, so N calls
+# in flight at once could each see the same remaining balance and together
+# overshoot a cap by up to N x their cost. reserve_budget() closes that: under
+# a per-budget Postgres advisory lock it checks spend + what other in-flight
+# calls have reserved + this call's estimate, and records its own reservation
+# before the call starts. The reservation is deleted when the call finishes
+# (its real cost is in the usage log by then). Only budgets set to "block" are
+# ever locked or reserved against - alert-only usage pays nothing for this.
+
+RESERVATION_TTL_SECONDS = 600  # safety net for a process that died mid-call
+
+
+def _active_reserved_usd(scope: str, scope_id: str) -> float:
+    from sqlalchemy import func
+    from core.database import db
+    from core.models import BudgetReservation
+
+    total = (
+        db.session.query(func.coalesce(func.sum(BudgetReservation.amount_usd), 0.0))
+        .filter(
+            BudgetReservation.scope == scope,
+            BudgetReservation.scope_id == scope_id,
+            BudgetReservation.expires_at > datetime.utcnow(),
+        )
+        .scalar()
+    )
+    return float(total or 0.0)
+
+
+def _lock_budget(scope: str, scope_id: str) -> None:
+    """Serialize check-and-reserve for one budget across every worker
+    process. Held until the current transaction commits."""
+    from sqlalchemy import text
+    from core.database import db
+
+    db.session.execute(text("SELECT pg_advisory_xact_lock(hashtext(:k))"), {"k": f"budget:{scope}:{scope_id}"})
+
+
+def release_reservations(reservation_ids) -> None:
+    """Drop reservations made by reserve_budget. Never raises: it runs in a
+    `finally` after a paid call, and a leftover row simply expires."""
+    if not reservation_ids:
         return
     try:
-        for scope, label, enforcement, limit, spend_fn in _applicable_budgets(user_id, project_id):
+        from core.database import db
+        from core.models import BudgetReservation
+
+        BudgetReservation.query.filter(BudgetReservation.reservation_id.in_(list(reservation_ids))).delete(
+            synchronize_session=False)
+        db.session.commit()
+    except Exception as e:
+        logger.warning(f"Could not release budget reservations (they will expire): {e}")
+        try:
+            from core.database import db
+            db.session.rollback()
+        except Exception:
+            pass
+
+
+def _check_budgets(user_id: Optional[str], project_id: Optional[str], estimated_cost_usd: float, reserve: bool) -> list:
+    """Shared by enforce_budget (check only) and reserve_budget (check, then
+    reserve). Returns the reservation ids made. Fails open on any error other
+    than BudgetExceeded."""
+    if not user_id:
+        return []
+    made: list = []
+    try:
+        import uuid
+        from datetime import timedelta
+        from core.database import db
+        from core.models import BudgetReservation
+
+        estimate = max(float(estimated_cost_usd or 0.0), 0.0)
+        for scope, scope_id, label, enforcement, limit, spend_fn in _applicable_budgets(user_id, project_id):
             if _clean_enforcement(enforcement) != "block":
                 continue
+            locked = reserve and estimate > 0
+            if locked:
+                _lock_budget(scope, scope_id)
             spend = spend_fn()
-            estimate = max(float(estimated_cost_usd or 0.0), 0.0)
-            if spend >= float(limit) or (estimate > 0 and spend + estimate > float(limit)):
+            reserved = _active_reserved_usd(scope, scope_id)
+            if spend + reserved >= float(limit) or (estimate > 0 and spend + reserved + estimate > float(limit)):
+                if locked:
+                    db.session.commit()  # end the transaction: releases the advisory lock
                 status = _with_enforcement(budget_state(spend, limit), enforcement)
-                exc = BudgetExceeded(scope, label, status, estimate)
+                exc = BudgetExceeded(scope, label, status, estimate, reserved)
                 _remember_for_response(exc)
                 raise exc
+            if locked:
+                reservation_id = str(uuid.uuid4())
+                BudgetReservation.query.filter(BudgetReservation.expires_at < datetime.utcnow()).delete(
+                    synchronize_session=False)  # leftovers of processes that died mid-call
+                db.session.add(BudgetReservation(
+                    reservation_id=reservation_id, scope=scope, scope_id=scope_id, amount_usd=estimate,
+                    expires_at=datetime.utcnow() + timedelta(seconds=RESERVATION_TTL_SECONDS),
+                ))
+                db.session.commit()  # visible to the next caller; releases the lock
+                made.append(reservation_id)
+        return made
     except BudgetExceeded:
+        release_reservations(made)
         raise
     except Exception as e:
         logger.warning(f"Budget enforcement check failed - allowing the call: {e}")
@@ -423,6 +512,27 @@ def enforce_budget(user_id: Optional[str], project_id: Optional[str] = None, est
             db.session.rollback()
         except Exception:
             pass
+        release_reservations(made)
+        return []
+
+
+def enforce_budget(user_id: Optional[str], project_id: Optional[str] = None, estimated_cost_usd: float = 0.0) -> None:
+    """Raise BudgetExceeded if a budget set to "block" that covers this call
+    is used up - or, when the caller can estimate what this request will cost,
+    would be exceeded by it - counting what other in-flight calls have already
+    reserved. Check only: nothing is reserved, so it is for paths that can't
+    bracket the call (LangChain, side doors). A no-op (no spend query at all)
+    unless a covering budget is set to block, and it fails open: only
+    BudgetExceeded ever escapes."""
+    _check_budgets(user_id, project_id, estimated_cost_usd, reserve=False)
+
+
+def reserve_budget(user_id: Optional[str], project_id: Optional[str], estimated_cost_usd: float) -> list:
+    """enforce_budget, plus: set the estimated cost aside for the duration of
+    the call so concurrent calls see it. Returns reservation ids to hand to
+    release_reservations() in a `finally` once the call is done. Raises
+    BudgetExceeded exactly like enforce_budget."""
+    return _check_budgets(user_id, project_id, estimated_cost_usd, reserve=True)
 
 
 def is_over_budget(user_id: Optional[str], project_id: Optional[str]) -> bool:

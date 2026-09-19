@@ -245,6 +245,19 @@ def estimate_request_cost_usd(model: str, messages: Any = None, max_tokens: Opti
         return 0.0
 
 
+from core.budget import release_reservations  # noqa: E402  (re-exported for the chokepoints below)
+
+
+def reserve_budget_for_call(user_id: Optional[str], project_id: Optional[str], estimated_cost_usd: float) -> list:
+    """enforce_budget_for_call that also reserves the estimate for the length
+    of the call (see core/budget.py); release with release_reservations()."""
+    from core.budget import reserve_budget
+    from core.usage_context import current_scope
+
+    project_id = project_id or current_scope().get("project_id") or _request_project(user_id)
+    return reserve_budget(user_id, project_id, estimated_cost_usd)
+
+
 def enforce_budget_for_call(user_id: Optional[str], project_id: Optional[str] = None,
                             estimated_cost_usd: float = 0.0) -> None:
     """Refuse a paid call (BudgetExceeded) if a budget set to "block" that
@@ -439,40 +452,44 @@ def ai_chat_completion(
         allow_preferred = not any(k in kwargs for k in _OPENAI_ONLY_KWARGS)
         resolved_model, resolved_provider = resolve_model_and_provider(user_id, project_id, model, allow_preferred)
 
-    enforce_budget_for_call(
+    # Set the estimated cost aside for the length of the call, so calls in
+    # flight at the same moment can't all spend the same remaining budget.
+    reservation = reserve_budget_for_call(
         user_id, project_id,
         estimate_request_cost_usd(resolved_model, messages=messages, max_tokens=kwargs.get("max_tokens") or kwargs.get("max_completion_tokens")),
     )
+    try:
+        api_key, key_source = resolve_api_key(user_id, project_id, resolved_provider)
+        if not api_key:
+            raise NoApiKeyConfigured(
+                f"No {resolved_provider} API key configured for this project or user, and no platform default is set."
+            )
 
-    api_key, key_source = resolve_api_key(user_id, project_id, resolved_provider)
-    if not api_key:
-        raise NoApiKeyConfigured(
-            f"No {resolved_provider} API key configured for this project or user, and no platform default is set."
+        if resolved_provider == "anthropic":
+            response = _anthropic_chat_completion(api_key, resolved_model, messages, **kwargs)
+            prompt_tokens = response.usage.prompt_tokens
+            completion_tokens = response.usage.completion_tokens
+        else:
+            import openai
+            client = openai.OpenAI(api_key=api_key)
+            response = client.chat.completions.create(model=resolved_model, messages=messages, **kwargs)
+            usage = getattr(response, "usage", None)
+            prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
+            completion_tokens = getattr(usage, "completion_tokens", 0) or 0
+
+        log_ai_usage(
+            user_id=user_id,
+            project_id=project_id,
+            agent=agent,
+            provider=resolved_provider,
+            model=resolved_model,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            key_source=key_source,
         )
-
-    if resolved_provider == "anthropic":
-        response = _anthropic_chat_completion(api_key, resolved_model, messages, **kwargs)
-        prompt_tokens = response.usage.prompt_tokens
-        completion_tokens = response.usage.completion_tokens
-    else:
-        import openai
-        client = openai.OpenAI(api_key=api_key)
-        response = client.chat.completions.create(model=resolved_model, messages=messages, **kwargs)
-        usage = getattr(response, "usage", None)
-        prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
-        completion_tokens = getattr(usage, "completion_tokens", 0) or 0
-
-    log_ai_usage(
-        user_id=user_id,
-        project_id=project_id,
-        agent=agent,
-        provider=resolved_provider,
-        model=resolved_model,
-        prompt_tokens=prompt_tokens,
-        completion_tokens=completion_tokens,
-        key_source=key_source,
-    )
-    return response
+        return response
+    finally:
+        release_reservations(reservation)
 
 
 def ai_embeddings(
@@ -489,28 +506,31 @@ def ai_embeddings(
     import openai
 
     user_id = _current_user_id(user_id)
-    enforce_budget_for_call(user_id, project_id, estimate_request_cost_usd(model, input_text=input))
-    api_key, key_source = resolve_api_key(user_id, project_id, "openai")
-    if not api_key:
-        raise NoApiKeyConfigured(
-            "No OpenAI API key configured for this project or user, and no platform default is set."
+    reservation = reserve_budget_for_call(user_id, project_id, estimate_request_cost_usd(model, input_text=input))
+    try:
+        api_key, key_source = resolve_api_key(user_id, project_id, "openai")
+        if not api_key:
+            raise NoApiKeyConfigured(
+                "No OpenAI API key configured for this project or user, and no platform default is set."
+            )
+
+        client = openai.OpenAI(api_key=api_key)
+        response = client.embeddings.create(model=model, input=input, **kwargs)
+
+        usage = getattr(response, "usage", None)
+        log_ai_usage(
+            user_id=user_id,
+            project_id=project_id,
+            agent=agent,
+            provider="openai",
+            model=model,
+            prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+            completion_tokens=0,
+            key_source=key_source,
         )
-
-    client = openai.OpenAI(api_key=api_key)
-    response = client.embeddings.create(model=model, input=input, **kwargs)
-
-    usage = getattr(response, "usage", None)
-    log_ai_usage(
-        user_id=user_id,
-        project_id=project_id,
-        agent=agent,
-        provider="openai",
-        model=model,
-        prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
-        completion_tokens=0,
-        key_source=key_source,
-    )
-    return response
+        return response
+    finally:
+        release_reservations(reservation)
 
 
 def get_langchain_llm(

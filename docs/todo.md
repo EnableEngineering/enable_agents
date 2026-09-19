@@ -2411,10 +2411,9 @@ built (migration `t7i6j5k4l3m2`, additive):
 - **Known limits (after the fixes below):** LangChain `OpenAIEmbeddings` calls
   are not usage-logged (cheap) though their entry points are enforced; the
   pre-call estimate is a guess (chars/4 for input, `max_tokens` or 1000 for
-  output), so a real call can still land slightly over or under it; several
-  requests in flight at the same moment can each pass the check before any of
-  them is logged, so a burst can overshoot by roughly (parallel calls x one
-  call's cost) - closing that needs a reservation row per call, not built.
+  output), so a real call can still land slightly over or under it. (The
+  burst-overshoot limit that used to be listed here is closed - see
+  "Reservations" below.)
 
 ## Limits closed out (2026-09-19, follow-up)
 
@@ -2454,3 +2453,44 @@ built (migration `t7i6j5k4l3m2`, additive):
 - **Still true by design:** a personal budget you set yourself is yours to
   lift (only a cap a manager set is locked); an unblocked-by-design alert-only
   budget never refuses anything.
+- **Reservations (closes the burst overshoot).** `reserve_budget()` /
+  `release_reservations()` in `core/budget.py`, table `budget_reservations`
+  (migration `w0l9m8n7o6p5`, additive). Under a per-budget Postgres advisory
+  lock (`pg_advisory_xact_lock`), a call checks `spend + what other in-flight
+  calls reserved + its own estimate` against each covering `block` budget and
+  records its reservation before it starts; `ai_chat_completion` and
+  `ai_embeddings` release it in a `finally` (the real cost is in the usage log
+  by then). Only `block` budgets are ever locked or reserved against, so
+  alert-only usage pays nothing. Expired rows (10 min, for a process that died
+  mid-call) are ignored and purged; every failure mode fails open. Paths that
+  can't bracket a call (LangChain, the KG-RAG side door) use the check-only
+  `enforce_budget`, which still counts reservations held by others. A refused
+  message says "...after requests still running" when in-flight calls are why.
+  Tested with 8 simultaneous threads x 6 rounds against Postgres (exactly 3 of 8
+  allowed each time); 9 mutations of the mechanism each fail a test.
+
+## Still open (as of 2026-09-19)
+
+Needs a product decision:
+- Should spend on a project's / user's OWN API key count against budgets?
+  Today it does (spend is spend); "per key source" budgets aren't built.
+- Should a manager-set member cap also cap that member's spend on *other*
+  teams' projects? Today the cap follows the person, everywhere.
+
+Engineering, not yet done:
+- The browser verification scripts (Playwright) live outside the repo; turning
+  them into a committed e2e suite that CI runs against a throwaway stack is the
+  biggest testing gap. Frontend CI (`ci.yml`) only triggers on main/develop, not
+  `local-preview`, and a `CI=true` build fails on ~a dozen old lint warnings.
+- LangChain embeddings aren't usage-logged; a callback would fix it.
+- `ai_usage_log` has single-column indexes only; every usage write with a
+  budget set sums the month per user/project/team. Add `(user_id, created_at)`
+  (and project/team) indexes before volume grows. No retention/purge either.
+- Budget alert emails are sent inline on the AI call that crosses a threshold
+  (once a month per budget); moving them to Celery removes that latency.
+- One backend container on a 4GB VM: each deploy still has a few seconds' gap.
+- An email that leaves and then crashes before its ledger row commits could be
+  re-sent once (the ledger is at-most-once only across a clean failure).
+- `docs/todo.md` still carries old unchecked checklists (lines ~1390-1800) that
+  need triage against what actually shipped.
+- Dead code: `RAGContentGenerator`, `init_llm()`.
