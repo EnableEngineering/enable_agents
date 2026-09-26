@@ -620,6 +620,39 @@ def ai_embeddings(
         release_reservations(reservation)
 
 
+def safe_parse_json(text: str) -> Any:
+    """Safely parse JSON from LLM responses, stripping markdown code fences
+    (e.g. ```json ... ```) and leading/trailing whitespace if present.
+    Returns an empty dict if text is falsy.
+    """
+    import json
+    import re
+
+    if not text:
+        return {}
+    cleaned = text.strip()
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        if "```" in cleaned:
+            match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", cleaned)
+            if match:
+                inner = match.group(1).strip()
+                try:
+                    return json.loads(inner)
+                except json.JSONDecodeError:
+                    cleaned = inner
+            else:
+                lines = cleaned.splitlines()
+                if lines and lines[0].startswith("```"):
+                    lines = lines[1:]
+                if lines and lines[-1].strip() == "```":
+                    lines = lines[:-1]
+                cleaned = "\n".join(lines).strip()
+        return json.loads(cleaned)
+
+
+
 def get_langchain_llm(
     user_id: Optional[str],
     project_id: Optional[str],

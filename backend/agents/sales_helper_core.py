@@ -224,9 +224,8 @@ def score_leads_core(requirement, businesses, user_id):
                     temperature=0.0,
                     max_tokens=1200,
                 )
-                response_text = (llm_response.choices[0].message.content or '').strip()
-                response_text = response_text.replace('```json', '').replace('```', '').strip()
-                parsed = json.loads(response_text)
+                from core.ai_client import safe_parse_json
+                parsed = safe_parse_json(llm_response.choices[0].message.content or '')
                 if isinstance(parsed, list):
                     parsed_map = {int(item.get('index')): item for item in parsed if isinstance(item, dict) and str(item.get('index', '')).isdigit()}
                     for result in base_results:

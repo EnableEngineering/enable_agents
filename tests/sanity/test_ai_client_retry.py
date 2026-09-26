@@ -187,5 +187,102 @@ class AIClientRetryTests(unittest.TestCase):
             mock_release.assert_called_once_with(["res-embed"])
 
 
+class SafeParseJsonAndUserIdentityTests(unittest.TestCase):
+    def test_safe_parse_json_valid_dict(self):
+        result = ai_client.safe_parse_json('{"key": "value", "number": 42}')
+        self.assertEqual(result, {"key": "value", "number": 42})
+
+    def test_safe_parse_json_valid_array(self):
+        result = ai_client.safe_parse_json('[{"index": 1}, {"index": 2}]')
+        self.assertEqual(result, [{"index": 1}, {"index": 2}])
+
+    def test_safe_parse_json_markdown_fenced(self):
+        payload = "```json\n{\"subject\": \"Quick idea\", \"body\": \"Hello\"}\n```"
+        result = ai_client.safe_parse_json(payload)
+        self.assertEqual(result, {"subject": "Quick idea", "body": "Hello"})
+
+    def test_safe_parse_json_markdown_fenced_plain(self):
+        payload = "```\n{\"subject\": \"Plain fence\", \"body\": \"Hello\"}\n```"
+        result = ai_client.safe_parse_json(payload)
+        self.assertEqual(result, {"subject": "Plain fence", "body": "Hello"})
+
+    def test_safe_parse_json_surrounded_by_commentary(self):
+        payload = "Here is the JSON you requested:\n```json\n{\"answer\": 42}\n```\nLet me know if you need more!"
+        result = ai_client.safe_parse_json(payload)
+        self.assertEqual(result, {"answer": 42})
+
+    def test_safe_parse_json_empty_and_none(self):
+        self.assertEqual(ai_client.safe_parse_json(""), {})
+        self.assertEqual(ai_client.safe_parse_json(None), {})
+
+    def test_safe_parse_json_invalid_raises_decode_error(self):
+        import json
+        with self.assertRaises(json.JSONDecodeError):
+            ai_client.safe_parse_json("not valid json at all")
+
+    def test_current_user_id_fallback(self):
+        mock_flask = MagicMock()
+        mock_flask.has_request_context.return_value = True
+        mock_flask.g.user_id = "user_abc"
+        with patch.dict("sys.modules", {"flask": mock_flask}):
+            # Explicit user_id is preferred
+            self.assertEqual(ai_client._current_user_id("user_explicit"), "user_explicit")
+            # If None, falls back to g.user_id
+            self.assertEqual(ai_client._current_user_id(None), "user_abc")
+
+    def test_app_endpoints_preserve_user_id_and_project_id_ast(self):
+        import ast
+        app_file = BACKEND_DIR / "app.py"
+        source = app_file.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+
+        functions = {
+            node.name: node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)
+        }
+
+        # generate_email_content must accept user_id and project_id
+        self.assertIn("generate_email_content", functions)
+        gen_email_args = [arg.arg for arg in functions["generate_email_content"].args.args]
+        self.assertIn("user_id", gen_email_args)
+        self.assertIn("project_id", gen_email_args)
+
+        # get_company_skills_from_openai must accept user_id and project_id
+        self.assertIn("get_company_skills_from_openai", functions)
+        skills_args = [arg.arg for arg in functions["get_company_skills_from_openai"].args.args]
+        self.assertIn("user_id", skills_args)
+        self.assertIn("project_id", skills_args)
+
+        # enrich_json_with_openai must accept user_id and project_id
+        self.assertIn("enrich_json_with_openai", functions)
+        enrich_args = [arg.arg for arg in functions["enrich_json_with_openai"].args.args]
+        self.assertIn("user_id", enrich_args)
+        self.assertIn("project_id", enrich_args)
+
+        # parse_simple_query_enhanced must accept user_id and project_id
+        self.assertIn("parse_simple_query_enhanced", functions)
+        parse_args = [arg.arg for arg in functions["parse_simple_query_enhanced"].args.args]
+        self.assertIn("user_id", parse_args)
+        self.assertIn("project_id", parse_args)
+
+        # generate must accept user_id and project_id
+        self.assertIn("generate", functions)
+        gen_args = [arg.arg for arg in functions["generate"].args.args]
+        self.assertIn("user_id", gen_args)
+        self.assertIn("project_id", gen_args)
+
+        # Check calls to ai_chat_completion inside generate_email_content
+        for node in ast.walk(functions["generate_email_content"]):
+            if isinstance(node, ast.Call) and getattr(node.func, "id", None) == "ai_chat_completion":
+                kw_names = {kw.arg: kw.value for kw in node.keywords}
+                self.assertIn("user_id", kw_names)
+                self.assertIn("project_id", kw_names)
+                # Verify user_id is passed as variable user_id, not None literal
+                self.assertIsInstance(kw_names["user_id"], ast.Name)
+                self.assertEqual(kw_names["user_id"].id, "user_id")
+                self.assertIsInstance(kw_names["project_id"], ast.Name)
+                self.assertEqual(kw_names["project_id"].id, "project_id")
+
+
 if __name__ == "__main__":
     unittest.main()
+
