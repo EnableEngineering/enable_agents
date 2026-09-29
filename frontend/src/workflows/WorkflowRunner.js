@@ -258,7 +258,7 @@ const getContextIcon = (key) => {
 // Agent icon mapping
 const AGENT_ICONS = {
   requirements_gathering: '/assets/icons/checklist.png',
-  market_research: '/assets/icons/data-discovery.png',
+  market_research: '/assets/icons/search-analysis.png',
   data_insights: '/assets/icons/data-discovery.png',
   email_outreach: '/assets/icons/mail.png',
   sales_helper: '/assets/icons/bar-chart.png',
@@ -276,8 +276,8 @@ const getAgentIcon = (agentId) => AGENT_ICONS[agentId] || AGENT_ICONS.default;
 // Format: agentId: { route, label, type: 'agent'|'placeholder'|'form' }
 const AGENT_CONFIG = {
   requirements_gathering: { route: '/market-research', label: 'Market Research', type: 'agent' },
+  market_research: { route: '/market-research', label: 'Market Research', type: 'agent' },
   data_insights: { route: '/data-insights', label: 'Data Insights', type: 'agent' },
-  market_research: { route: '/data-insights', label: 'Data Insights', type: 'agent' }, // Legacy - maps old ID to new route
   content_marketing: { route: '/content-marketing', label: 'Content Marketing', type: 'agent' },
   sales_helper: { route: '/sales-helper', label: 'Sales Helper', type: 'agent' },
   executive_assistant: { route: '/executive-assistant', label: 'Executive Assistant', type: 'agent' },

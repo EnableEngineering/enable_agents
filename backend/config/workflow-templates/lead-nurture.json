@@ -8,7 +8,7 @@
     {
       "stage_id": "qualify",
       "name": "Lead Qualification",
-      "agent": "market_research",
+      "agent": "sales_helper",
       "description": "Research and qualify leads based on fit criteria.",
       "required_inputs": ["lead_list"],
       "outputs": ["qualified_leads"],
