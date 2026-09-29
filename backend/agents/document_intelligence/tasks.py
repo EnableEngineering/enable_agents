@@ -114,6 +114,11 @@ def reprocess_document_task(document_id: str):
         # Delete existing chunks and entities
         vector_store = VectorStore()
         vector_store.delete_document_chunks(document_id)
+        try:
+            from agents.document_intelligence.retrieval import invalidate_retrieval_cache
+            invalidate_retrieval_cache(document_id)
+        except Exception:
+            pass
 
         DocumentEntity.query.filter_by(document_id=document_id).delete()
         db.session.commit()

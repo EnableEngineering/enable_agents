@@ -334,6 +334,13 @@ class DocumentService:
             # Share document context with other agents via ContextStore
             self._update_context(doc, chunks, entities)
 
+            # Invalidate cached retrieval queries so new chunks are instantly searchable
+            try:
+                from agents.document_intelligence.retrieval import invalidate_retrieval_cache
+                invalidate_retrieval_cache(document_id)
+            except Exception as cache_err:
+                logger.warning(f"Could not invalidate retrieval cache for {document_id}: {cache_err}")
+
             return {
                 "document_id": document_id,
                 "status": "completed",
@@ -550,6 +557,13 @@ class DocumentService:
         # Delete document (cascades to chunks and entities)
         db.session.delete(doc)
         db.session.commit()
+
+        # Invalidate cached retrieval results
+        try:
+            from agents.document_intelligence.retrieval import invalidate_retrieval_cache
+            invalidate_retrieval_cache(document_id)
+        except Exception as cache_err:
+            logger.warning(f"Could not invalidate retrieval cache for {document_id}: {cache_err}")
 
         logger.info(f"Document deleted: {document_id} from project {project_id}")
         return True

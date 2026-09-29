@@ -7,12 +7,131 @@ Provides:
 - Context assembly for LLM
 """
 
+from collections import OrderedDict
+import hashlib
 import logging
-from typing import Any, Dict, List, Optional
+import threading
+import time
+from typing import Any, Dict, List, Optional, Tuple
 
 from core.vector_store import VectorStore
 
 logger = logging.getLogger(__name__)
+
+
+class RetrievalCache:
+    """Thread-safe in-memory LRU cache with TTL for document retrieval queries.
+
+    Avoids redundant embeddings API calls and database vector distance searches
+    when users ask identical or repeated questions across sessions.
+    """
+
+    def __init__(self, max_size: int = 256, ttl_seconds: int = 600):
+        self.max_size = max_size
+        self.ttl_seconds = ttl_seconds
+        # _cache: key -> (timestamp, doc_ids_set, results)
+        self._cache: OrderedDict[str, Tuple[float, set, List[Dict[str, Any]]]] = OrderedDict()
+        self._lock = threading.Lock()
+        self._hits = 0
+        self._misses = 0
+
+    def _generate_key(
+        self,
+        query: str,
+        user_id: str,
+        document_ids: Optional[List[str]],
+        top_k: int,
+        min_score: float,
+    ) -> str:
+        norm_query = query.strip().lower()
+        query_hash = hashlib.sha256(norm_query.encode("utf-8")).hexdigest()
+        doc_key = ",".join(sorted(document_ids)) if document_ids else "all"
+        return f"{user_id}:{doc_key}:{top_k}:{min_score:.2f}:{query_hash}"
+
+    def get(
+        self,
+        query: str,
+        user_id: str,
+        document_ids: Optional[List[str]],
+        top_k: int,
+        min_score: float,
+    ) -> Optional[List[Dict[str, Any]]]:
+        key = self._generate_key(query, user_id, document_ids, top_k, min_score)
+        now = time.time()
+
+        with self._lock:
+            if key in self._cache:
+                timestamp, _, results = self._cache[key]
+                if now - timestamp < self.ttl_seconds:
+                    self._cache.move_to_end(key)
+                    self._hits += 1
+                    logger.debug("Retrieval cache hit for query key: %s", key)
+                    return [dict(r) for r in results]
+                else:
+                    del self._cache[key]
+
+            self._misses += 1
+            return None
+
+    def set(
+        self,
+        query: str,
+        user_id: str,
+        document_ids: Optional[List[str]],
+        top_k: int,
+        min_score: float,
+        results: List[Dict[str, Any]],
+    ) -> None:
+        key = self._generate_key(query, user_id, document_ids, top_k, min_score)
+        now = time.time()
+        doc_set = set(document_ids or [])
+
+        with self._lock:
+            while len(self._cache) >= self.max_size:
+                self._cache.popitem(last=False)
+            self._cache[key] = (now, doc_set, [dict(r) for r in results])
+            self._cache.move_to_end(key)
+
+    def invalidate(self, document_id: Optional[str] = None) -> None:
+        """Invalidate cache entries for a specific document or all documents."""
+        with self._lock:
+            if document_id is None:
+                self._cache.clear()
+                logger.info("Retrieval cache cleared completely.")
+                return
+
+            keys_to_remove = [
+                k
+                for k, (_, doc_set, _) in self._cache.items()
+                if not doc_set or document_id in doc_set
+            ]
+            for k in keys_to_remove:
+                del self._cache[k]
+            if keys_to_remove:
+                logger.info(
+                    "Invalidated %d cache entries for document %s",
+                    len(keys_to_remove),
+                    document_id,
+                )
+
+    def stats(self) -> Dict[str, Any]:
+        with self._lock:
+            return {
+                "hits": self._hits,
+                "misses": self._misses,
+                "size": len(self._cache),
+                "max_size": self.max_size,
+                "ttl_seconds": self.ttl_seconds,
+            }
+
+
+# Global retrieval cache instance
+_global_retrieval_cache = RetrievalCache()
+
+
+def invalidate_retrieval_cache(document_id: Optional[str] = None) -> None:
+    """Invalidate cached retrieval results for a document or globally."""
+    _global_retrieval_cache.invalidate(document_id)
 
 
 class DocumentRetriever:
@@ -28,6 +147,7 @@ class DocumentRetriever:
         document_ids: Optional[List[str]] = None,
         top_k: int = 5,
         min_score: float = 0.0,
+        bypass_cache: bool = False,
     ) -> List[Dict[str, Any]]:
         """
         Search for relevant document chunks.
@@ -42,6 +162,18 @@ class DocumentRetriever:
         Returns:
             List of relevant chunks with scores
         """
+        # Check retrieval cache first to avoid re-embedding and pgvector distance queries
+        if not bypass_cache:
+            cached_results = _global_retrieval_cache.get(
+                query=query,
+                user_id=user_id,
+                document_ids=document_ids,
+                top_k=top_k,
+                min_score=min_score,
+            )
+            if cached_results is not None:
+                return cached_results
+
         # Perform vector search
         results = self.vector_store.search(
             query=query,
@@ -50,6 +182,17 @@ class DocumentRetriever:
             user_id=user_id,
             threshold=min_score,
         )
+
+        # Cache non-empty successful searches
+        if not bypass_cache and results:
+            _global_retrieval_cache.set(
+                query=query,
+                user_id=user_id,
+                document_ids=document_ids,
+                top_k=top_k,
+                min_score=min_score,
+                results=results,
+            )
 
         return results
 
