@@ -149,7 +149,7 @@ function getContainer() {
  * is never exposed directly in UI toasts. Full technical errors are logged
  * to console for developer inspection.
  */
-function sanitizeToastMessage(message, type) {
+export function sanitizeToastMessage(message, type) {
   if (!message) return type === 'error' ? 'An unexpected error occurred. Please try again.' : '';
   const raw = typeof message === 'object' && message.message ? message.message : String(message);
 
@@ -249,6 +249,11 @@ export function showToast(message, type = 'info', duration = 3000) {
   container.appendChild(toast);
   const timer = setTimeout(dismiss, duration);
   close.addEventListener('click', () => clearTimeout(timer));
+}
+
+if (typeof window !== 'undefined') {
+  window.showToast = showToast;
+  window.sanitizeToastMessage = sanitizeToastMessage;
 }
 
 export default showToast;
