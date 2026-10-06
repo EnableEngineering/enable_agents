@@ -68,14 +68,21 @@ class RAGContentGenerator:
         if not self._chunks:
             return
 
-        response = ai_embeddings(
-            user_id=self.user_id,
-            project_id=self.project_id,
-            agent="content_marketing.rag_embeddings",
-            model="text-embedding-ada-002",
-            input=[chunk["content"] for chunk in self._chunks],
-        )
-        vectors = np.asarray([item.embedding for item in response.data], dtype="float32")
+        batch_size = 500
+        all_embeddings = []
+        for batch_start in range(0, len(self._chunks), batch_size):
+            batch_end = min(batch_start + batch_size, len(self._chunks))
+            batch_chunks = self._chunks[batch_start:batch_end]
+            response = ai_embeddings(
+                user_id=self.user_id,
+                project_id=self.project_id,
+                agent="content_marketing.rag_embeddings",
+                model="text-embedding-ada-002",
+                input=[chunk["content"] for chunk in batch_chunks],
+            )
+            all_embeddings.extend([item.embedding for item in response.data])
+
+        vectors = np.asarray(all_embeddings, dtype="float32")
         if vectors.ndim != 2 or len(vectors) != len(self._chunks):
             raise ValueError("Embedding response did not match the source document chunks")
         faiss.normalize_L2(vectors)
