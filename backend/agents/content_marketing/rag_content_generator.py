@@ -3,10 +3,13 @@
 import json
 from typing import Any, Dict, List, Optional
 
-import faiss
-import numpy as np
-
 from core.ai_client import ai_embeddings, get_langchain_llm, log_langchain_usage
+from core.rag_utils import (
+    build_faiss_index,
+    create_embeddings,
+    retrieve_relevant_chunks,
+    split_documents,
+)
 
 
 class RAGContentGenerator:
@@ -42,67 +45,41 @@ class RAGContentGenerator:
             )
         return self._llm
 
-    @staticmethod
-    def _split_documents(documents: List[str]) -> List[Dict[str, Any]]:
-        chunks = []
-        for document_index, text in enumerate(documents):
-            text = (text or "").strip()
-            start = 0
-            while start < len(text):
-                end = min(start + 1200, len(text))
-                if end < len(text):
-                    boundary = text.rfind(" ", start + 800, end)
-                    if boundary > start:
-                        end = boundary
-                chunk = text[start:end].strip()
-                if chunk:
-                    chunks.append({"content": chunk, "document_index": document_index})
-                if end >= len(text):
-                    break
-                start = max(end - 160, start + 1)
-        return chunks
-
     def _setup_rag(self, documents: List[str]) -> None:
-        self._chunks = self._split_documents(documents)
+        self._chunks = split_documents(documents, chunk_size=1200, overlap=160, track_source=True)
         self._index = None
         if not self._chunks:
             return
 
-        batch_size = 500
-        all_embeddings = []
-        for batch_start in range(0, len(self._chunks), batch_size):
-            batch_end = min(batch_start + batch_size, len(self._chunks))
-            batch_chunks = self._chunks[batch_start:batch_end]
-            response = ai_embeddings(
-                user_id=self.user_id,
-                project_id=self.project_id,
-                agent="content_marketing.rag_embeddings",
-                model="text-embedding-ada-002",
-                input=[chunk["content"] for chunk in batch_chunks],
-            )
-            all_embeddings.extend([item.embedding for item in response.data])
-
-        vectors = np.asarray(all_embeddings, dtype="float32")
+        chunk_contents = [chunk["content"] for chunk in self._chunks]
+        vectors = create_embeddings(
+            chunk_contents,
+            user_id=self.user_id,
+            project_id=self.project_id,
+            agent="content_marketing.rag_embeddings",
+            batch_size=500,
+        )
         if vectors.ndim != 2 or len(vectors) != len(self._chunks):
             raise ValueError("Embedding response did not match the source document chunks")
-        faiss.normalize_L2(vectors)
-        self._index = faiss.IndexFlatIP(vectors.shape[1])
-        self._index.add(vectors)
+        self._index = build_faiss_index(vectors, index_type="IP", normalize=True)
 
     def _retrieve_context(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
         if self._index is None:
             return []
-        response = ai_embeddings(
-            user_id=self.user_id,
-            project_id=self.project_id,
-            agent="content_marketing.rag_query",
-            model="text-embedding-ada-002",
-            input=[query],
+
+        def embed_query(queries: List[str]) -> List[List[float]]:
+            response = ai_embeddings(
+                user_id=self.user_id,
+                project_id=self.project_id,
+                agent="content_marketing.rag_query",
+                model="text-embedding-ada-002",
+                input=queries,
+            )
+            return [item.embedding for item in response.data]
+
+        return retrieve_relevant_chunks(
+            query, self._index, self._chunks, embed_query, top_k=limit, normalize=True
         )
-        query_vector = np.asarray([response.data[0].embedding], dtype="float32")
-        faiss.normalize_L2(query_vector)
-        _, indexes = self._index.search(query_vector, min(limit, len(self._chunks)))
-        return [self._chunks[index] for index in indexes[0] if index >= 0]
 
     @staticmethod
     def _graph_context(knowledge_graph: Optional[Dict[str, Any]]) -> str:

@@ -49,6 +49,7 @@ from core.database import db
 from core.context import ContextStore
 from core.auth import require_auth
 from core.email_sender import send_platform_email
+from core.rag_utils import split_documents, build_faiss_index, retrieve_relevant_chunks
 
 # LangChain imports with fallbacks for version compatibility
 try:
@@ -5707,16 +5708,6 @@ def build_knowledge_graph(nodes, edges):
         G.add_edge(edge['source'], edge['target'], **edge.get('attributes', {}))
     return G
 
-def chunk_text(text, chunk_size=1000, overlap=200):
-    """Split text into overlapping chunks for better context preservation"""
-    chunks = []
-    start = 0
-    while start < len(text):
-        end = start + chunk_size
-        chunks.append(text[start:end])
-        start = end - overlap
-    return chunks
-
 def _log_langchain_embedding_usage(texts, user_id, project_id, agent, model="text-embedding-ada-002"):
     """LangChain's OpenAIEmbeddings goes straight to OpenAI (bypassing
     core.ai_client) and reports no token counts, so its cost never reached the
@@ -5731,27 +5722,6 @@ def _log_langchain_embedding_usage(texts, user_id, project_id, agent, model="tex
         log_ai_usage(user_id, project_id, agent, "openai", model, tokens, 0, "platform")
     except Exception as e:
         print(f"[usage] could not log LangChain embedding usage: {e}")
-
-
-def create_embeddings(chunks):
-    """Generate OpenAI embeddings for text chunks"""
-    embeddings_model = OpenAIEmbeddings()
-    embeddings = embeddings_model.embed_documents(chunks)
-    return np.array(embeddings)
-
-def build_faiss_index(embeddings):
-    """Create FAISS index for efficient similarity search"""
-    dimension = embeddings.shape[1]
-    index = faiss.IndexFlatL2(dimension)
-    index.add(embeddings.astype('float32'))
-    return index
-
-def retrieve_relevant_chunks(query, index, chunks, embeddings_model, top_k=5):
-    """Retrieve most relevant chunks using FAISS similarity search"""
-    query_embedding = embeddings_model.embed_query(query)
-    query_vector = np.array([query_embedding]).astype('float32')
-    distances, indices = index.search(query_vector, top_k)
-    return [chunks[i] for i in indices[0]]
 
 def query_knowledge_graph(graph, query_type, node_id=None):
     """Query knowledge graph for specific information based on query type"""
@@ -5811,37 +5781,43 @@ def process_documents_with_kg_rag(documents, nodes, edges, query, include_contex
     # Check if document embeddings are cached
     if doc_cache_key in kg_rag_cache['embeddings']:
         # Reuse cached data
-        chunks = kg_rag_cache['chunks'][doc_cache_key]
+        chunk_dicts = kg_rag_cache['chunks'][doc_cache_key]
         embeddings = kg_rag_cache['embeddings'][doc_cache_key]
         faiss_index = kg_rag_cache['faiss_indices'][doc_cache_key]
-        embeddings_model = OpenAIEmbeddings()
     else:
         # Extract and combine text from all documents
         all_text = ""
         for doc_info in documents:
             local_path = load_document_from_source(
-                doc_info['source_type'], 
-                doc_info['path'], 
+                doc_info['source_type'],
+                doc_info['path'],
                 doc_info.get('bucket')
             )
             text = extract_text_from_document(local_path)
             all_text += text + "\n\n"
-        
-        chunks = chunk_text(all_text)
+
+        chunk_dicts = split_documents([all_text], chunk_size=1000, overlap=200, track_source=False)
+        chunk_texts = [chunk["content"] for chunk in chunk_dicts]
         embeddings_model = OpenAIEmbeddings()
-        embeddings = create_embeddings(chunks)
-        _log_langchain_embedding_usage(chunks, user_id, project_id, "document_intelligence.kg_rag_embed_documents")
-        
+        embeddings = np.array(embeddings_model.embed_documents(chunk_texts), dtype='float32')
+        _log_langchain_embedding_usage(chunk_texts, user_id, project_id, "document_intelligence.kg_rag_embed_documents")
+
         # Build FAISS index
-        faiss_index = build_faiss_index(embeddings)
-        
+        faiss_index = build_faiss_index(embeddings, index_type="L2", normalize=False)
+
         # Cache all the expensive computations
-        kg_rag_cache['chunks'][doc_cache_key] = chunks
+        kg_rag_cache['chunks'][doc_cache_key] = chunk_dicts
         kg_rag_cache['embeddings'][doc_cache_key] = embeddings
         kg_rag_cache['faiss_indices'][doc_cache_key] = faiss_index
-    
+
     # Retrieve relevant chunks (this is query-specific, not cached)
-    relevant_chunks = retrieve_relevant_chunks(query, faiss_index, chunks, embeddings_model)
+    embeddings_model = OpenAIEmbeddings()
+
+    def embed_query(queries):
+        return [embeddings_model.embed_query(q) for q in queries]
+
+    retrieved_chunk_dicts = retrieve_relevant_chunks(query, faiss_index, chunk_dicts, embed_query, top_k=5, normalize=False)
+    relevant_chunks = [chunk["content"] for chunk in retrieved_chunk_dicts]
     _log_langchain_embedding_usage([query], user_id, project_id, "document_intelligence.kg_rag_embed_query")
     
     # Query knowledge graph for additional context

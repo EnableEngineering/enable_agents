@@ -29,7 +29,7 @@ def test_generation_uses_semantically_retrieved_document_context(monkeypatch):
             data=[SimpleNamespace(embedding=vector) for vector in vectors]
         )
 
-    monkeypatch.setattr(rag_content_generator, "ai_embeddings", fake_embeddings)
+    monkeypatch.setattr("core.ai_client.ai_embeddings", fake_embeddings)
     monkeypatch.setattr(
         rag_content_generator,
         "get_langchain_llm",
