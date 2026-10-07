@@ -292,6 +292,34 @@ def _surface_budget_block(response):
 def _handle_budget_exceeded(exc):
     return jsonify(exc.to_dict()), 402
 
+
+@app.errorhandler(500)
+def _handle_500(exc):
+    app.logger.error(f"Internal Server Error: {str(exc)}", exc_info=True)
+    return jsonify({
+        "success": False,
+        "error": "An unexpected server error occurred. Please try again.",
+        "code": "internal_server_error"
+    }), 500
+
+
+@app.errorhandler(404)
+def _handle_404(exc):
+    return jsonify({
+        "success": False,
+        "error": "The requested resource was not found.",
+        "code": "not_found"
+    }), 404
+
+
+@app.errorhandler(405)
+def _handle_405(exc):
+    return jsonify({
+        "success": False,
+        "error": "Method not allowed for this route.",
+        "code": "method_not_allowed"
+    }), 405
+
 GOOGLE_CLIENT_ID = (os.getenv('GOOGLE_CLIENT_ID') or '').strip()
 GOOGLE_CLIENT_SECRET = (os.getenv('GOOGLE_CLIENT_SECRET') or '').strip()
 GOOGLE_REDIRECT_URI = (os.getenv('GOOGLE_REDIRECT_URI') or 'http://localhost:5000/auth/google/callback').strip()
@@ -9091,9 +9119,12 @@ app.register_blueprint(workflows_bp)
 
 # Load system workflow templates on startup
 with app.app_context():
-    load_system_templates()
-    from agents.registry import validate_workflow_template_agents
-    validate_workflow_template_agents()
+    try:
+        load_system_templates()
+        from agents.registry import validate_workflow_template_agents
+        validate_workflow_template_agents()
+    except Exception as e:
+        app.logger.warning(f"Could not load system workflow templates on startup: {e}")
 
 # Register dependencies API routes
 from routes.dependencies import dependencies_bp

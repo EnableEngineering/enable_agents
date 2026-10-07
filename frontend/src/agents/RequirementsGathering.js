@@ -1038,7 +1038,7 @@ function RequirementsGathering() {
         data = await response.json();
       } catch (parseErr) {
         console.error('[ScoreLeads] failed to parse JSON response', parseErr);
-        showToast('Scoring failed: invalid JSON response from server', 'error');
+        showToast('Scoring could not be completed. Please try again in a moment.', 'error');
         setIsScoring(false);
         return;
       }

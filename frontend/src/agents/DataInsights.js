@@ -188,7 +188,7 @@ function DataInsights() {
           ));
 
           if (status.status === 'completed') {
-            showToast(`Document processed: ${status.chunk_count} chunks, ${status.entity_count} entities`, 'success');
+            showToast('Document processed successfully and ready for analysis', 'success');
             return;
           } else if (status.status === 'failed') {
             showToast(`Processing failed: ${status.error_message}`, 'error');
