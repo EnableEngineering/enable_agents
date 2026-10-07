@@ -1,4 +1,4 @@
-﻿from flask import Flask, request, jsonify, redirect, g
+from flask import Flask, request, jsonify, redirect, g
 from core.budget import BudgetExceeded
 import requests
 import sqlite3
@@ -1058,9 +1058,13 @@ def get_chrome_history_path():
     else:  # Linux
         return os.path.expanduser('~/.config/google-chrome/Default/History')
 
-def identify_saas_tools_with_openai(history_data):
+def identify_saas_tools_with_openai(history_data, user_id=None, project_id=None):
     """Use OpenAI to identify which URLs are web applications, tools, SaaS, PaaS, or productivity platforms"""
     try:
+        if not user_id:
+            user_id = getattr(g, 'user_id', None)
+        if not project_id:
+            project_id = getattr(g, 'project_id', None)
         # Extract URLs for analysis (limit to avoid token limits)
         urls_to_analyze = [item['url'] for item in history_data[:50]]  # Analyze top 50 URLs
         urls_text = "\n".join([f"{i+1}. {url}" for i, url in enumerate(urls_to_analyze)])
@@ -1112,9 +1116,9 @@ Rules:
 - Only mark as "false" if it's clearly a regular informational website
 - Return valid JSON only"""
 
-        from core.ai_client import ai_chat_completion
+        from core.ai_client import ai_chat_completion, safe_parse_json
         response = ai_chat_completion(
-            user_id=None, project_id=None, agent="saas_discovery.identify_tools",
+            user_id=user_id, project_id=project_id, agent="saas_discovery.identify_tools",
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "You are a web application and tool identifier. You identify ALL types of web-based tools, applications, and platforms. Return only valid JSON arrays."},
@@ -1124,20 +1128,15 @@ Rules:
             temperature=0.1
         )
         
-        response_text = response.choices[0].message.content.strip()
-        response_text = response_text.replace('```json', '').replace('```', '').strip()
-        
-        print(response_text)
-
         try:
-            tools_analysis = json.loads(response_text)
-
-            
+            tools_analysis = safe_parse_json(response.choices[0].message.content)
+            if not isinstance(tools_analysis, list):
+                raise ValueError("Expected JSON array from model")
     
             # Create a mapping from URL index to tool info
             tools_mapping = {}
             for item in tools_analysis:
-                if 'url_index' in item:
+                if isinstance(item, dict) and 'url_index' in item:
                     tools_mapping[item['url_index'] - 1] = {  # Convert to 0-based index
                         'is_tool': item.get('is_tool', False),
                         'tool_name': item.get('tool_name'),
@@ -1151,7 +1150,7 @@ Rules:
                 'mapping': tools_mapping
             }
             
-        except json.JSONDecodeError as e:
+        except Exception as e:
             print(f"JSON parsing failed for tools analysis: {str(e)}")
             return {
                 'success': False,
@@ -1376,9 +1375,13 @@ def extract_unique_companies(json_data):
     
     return list(companies)
 
-def get_company_skills_from_openai(company_list):
+def get_company_skills_from_openai(company_list, user_id=None, project_id=None):
     """Send company list to OpenAI and get required skills for each company"""
     try:
+        if not user_id:
+            user_id = getattr(g, 'user_id', None)
+        if not project_id:
+            project_id = getattr(g, 'project_id', None)
         companies_text = ", ".join(company_list)
         
         # Simplified prompt with clearer instructions
@@ -1400,7 +1403,7 @@ Rules:
 
         from core.ai_client import ai_chat_completion
         response = ai_chat_completion(
-            user_id=None, project_id=None, agent="sales_helper.company_skills",
+            user_id=user_id, project_id=project_id, agent="sales_helper.company_skills",
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "You are a JSON generator. Return only valid JSON arrays. Keep responses concise."},
@@ -1532,9 +1535,13 @@ def extract_skills_manually(companies_text, response_text):
             'error': f'Manual extraction failed: {str(e)}'
         }
 
-def enrich_json_with_openai(json_data):
+def enrich_json_with_openai(json_data, user_id=None, project_id=None):
     """Enhanced function: Extract companies -> Get skills from OpenAI -> Enrich original data"""
     try:
+        if not user_id:
+            user_id = getattr(g, 'user_id', None)
+        if not project_id:
+            project_id = getattr(g, 'project_id', None)
         # Step 1: Extract unique company names from JSON data
         unique_companies = extract_unique_companies(json_data)
         
@@ -1547,7 +1554,7 @@ def enrich_json_with_openai(json_data):
         print(f"Found {len(unique_companies)} unique companies: {unique_companies}")
         
         # Step 2: Send company list to OpenAI to get required skills
-        openai_result = get_company_skills_from_openai(unique_companies)
+        openai_result = get_company_skills_from_openai(unique_companies, user_id=user_id, project_id=project_id)
         
         if not openai_result['success']:
             return {
@@ -1892,9 +1899,13 @@ def extract_keywords_from_chunks(page_chunks):
     return chunk_phrases
 
 
-def parse_simple_query_enhanced(user_query):
+def parse_simple_query_enhanced(user_query, user_id=None, project_id=None):
     """Enhanced keyword extraction using OpenAI function calling with special commands support"""
     try:
+        if not user_id:
+            user_id = getattr(g, 'user_id', None)
+        if not project_id:
+            project_id = getattr(g, 'project_id', None)
         # Define the function schema for OpenAI with special commands
         extract_function = {
             "name": "extract_search_criteria",
@@ -1971,7 +1982,7 @@ SPECIAL COMMANDS TO DETECT:
 Extract both specific search terms AND any special commands detected. If the query contains both search terms and special commands, include both in the response."""
 
         response = ai_chat_completion(
-            user_id=None, project_id=None, agent="sales_helper.extract_search_criteria",
+            user_id=user_id, project_id=project_id, agent="sales_helper.extract_search_criteria",
             model="gpt-3.5-turbo",
             messages=[
                 {
@@ -3705,13 +3716,17 @@ def clean_product_info(product_info):
     
     return cleaned
 
-def generate(selected_chunks, query):
+def generate(selected_chunks, query, user_id=None, project_id=None):
     from core.ai_client import ai_chat_completion
+    if not user_id:
+        user_id = getattr(g, 'user_id', None)
+    if not project_id:
+        project_id = getattr(g, 'project_id', None)
     context = "\n\n".join(selected_chunks)
     prompt = f"Answer the following query based on the provided text:\n\n{context}\n\nQuery: {query}\nAnswer:"
 
     response = ai_chat_completion(
-        user_id=None, project_id=None, agent="document_intelligence.generate",
+        user_id=user_id, project_id=project_id, agent="document_intelligence.generate",
         model="gpt-4",
         messages=[
             {
@@ -4047,7 +4062,8 @@ def rag_test():
             max_chunk_length = 1000  # characters
             selected_chunks = [chunk[:max_chunk_length] for chunk in selected_chunks[:max_chunks]]
 
-            answer = generate(selected_chunks, query)
+            project_id = data.get('project_id') or getattr(g, 'project_id', None)
+            answer = generate(selected_chunks, query, user_id=getattr(g, 'user_id', None), project_id=project_id)
 
             return jsonify({
                 "answer": answer,
@@ -4537,7 +4553,8 @@ def chat_api():
     max_chunk_length = 1000  # characters
     selected_chunks = [chunk[:max_chunk_length] for chunk in selected_chunks[:max_chunks]]
 
-    answer = generate(selected_chunks, query)
+    project_id = data.get('project_id') or getattr(g, 'project_id', None)
+    answer = generate(selected_chunks, query, user_id=getattr(g, 'user_id', None), project_id=project_id)
 
     return jsonify({"answer": answer})
 
@@ -4748,13 +4765,14 @@ def simple_search():
         data = request.get_json()
         user_query = data.get('query', '').strip()
         json_data = data.get('data', [])
-        user_id = data.get('user_id', 'default_user')  # For favorites
+        user_id = getattr(g, 'user_id', None) or data.get('user_id', 'default_user')
+        project_id = data.get('project_id') or getattr(g, 'project_id', None)
         
         if not user_query:
             return jsonify({'success': False, 'error': 'No search query provided'}), 400
         
         # Parse the query using enhanced function
-        parse_result = parse_simple_query_enhanced(user_query)
+        parse_result = parse_simple_query_enhanced(user_query, user_id=user_id, project_id=project_id)
         
         if not parse_result['success']:
             return jsonify({
@@ -5346,7 +5364,8 @@ def enrich_with_openai():
             }), 400
         
         # Enrich data using the new workflow
-        result = enrich_json_with_openai(json_data)
+        project_id = request_data.get('project_id') or getattr(g, 'project_id', None)
+        result = enrich_json_with_openai(json_data, user_id=getattr(g, 'user_id', None), project_id=project_id)
         
         return jsonify(result)
         
@@ -5567,7 +5586,11 @@ def read_chrome_history_safe():
         unique_domains = list(domain_map.values())
         # Prepare for OpenAI classification
         history_data_for_ai = [{'url': item['sample_url']} for item in unique_domains]
-        tools_result = identify_saas_tools_with_openai(history_data_for_ai)
+        tools_result = identify_saas_tools_with_openai(
+            history_data_for_ai,
+            user_id=getattr(g, 'user_id', None),
+            project_id=getattr(g, 'project_id', None),
+        )
         for i, item in enumerate(unique_domains):
             if tools_result['success'] and i in tools_result['mapping']:
                 mapping = tools_result['mapping'][i]
@@ -6059,15 +6082,16 @@ Return JSON only, in exactly this shape:
 """
 
     try:
-        from core.ai_client import ai_chat_completion
+        from core.ai_client import ai_chat_completion, safe_parse_json
+        project_id = data.get('project_id') or getattr(g, 'project_id', None)
         response = ai_chat_completion(
-            user_id=None, project_id=None, agent="task_router.route_task",
+            user_id=getattr(g, 'user_id', None), project_id=project_id, agent="task_router.route_task",
             model=os.getenv('OPENAI_MODEL', 'gpt-4o-mini'),
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             temperature=0.2,
         )
-        result = json.loads(response.choices[0].message.content)
+        result = safe_parse_json(response.choices[0].message.content)
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -7134,10 +7158,15 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-def generate_email_content(business, sender_name, user_id=None):
+def generate_email_content(business, sender_name, user_id=None, project_id=None):
     import json
     import os
     from openai import OpenAI
+
+    if not user_id:
+        user_id = getattr(g, 'user_id', None)
+    if not project_id:
+        project_id = getattr(g, 'project_id', None)
 
     language_instruction = ""
     if user_id:
@@ -7195,9 +7224,9 @@ Industry: {business.get('industry', 'Unknown')}
 Do not add any explanation, just return the JSON.
 """
 
-    from core.ai_client import ai_chat_completion
+    from core.ai_client import ai_chat_completion, safe_parse_json
     response = ai_chat_completion(
-        user_id=None, project_id=None, agent="sales_helper.generate_email_content",
+        user_id=user_id, project_id=project_id, agent="sales_helper.generate_email_content",
         model=os.getenv('OPENAI_MODEL', 'gpt-4o-mini'),
         messages=[
             {"role": "user", "content": prompt}
@@ -7206,7 +7235,7 @@ Do not add any explanation, just return the JSON.
         temperature=0.7
     )
     
-    return json.loads(response.choices[0].message.content)
+    return safe_parse_json(response.choices[0].message.content)
 
 @app.route('/api/generate-email', methods=['POST'])
 @cross_origin()
@@ -7215,11 +7244,12 @@ def generate_email():
     """Generate a personalized email using an LLM."""
     try:
         from flask import request
-        data = request.get_json()
+        data = request.get_json() or {}
         business = data.get('business', {})
         sender_name = data.get('sender_name', 'Alex')
+        project_id = data.get('project_id') or getattr(g, 'project_id', None)
         
-        result = generate_email_content(business, sender_name, user_id=g.user_id)
+        result = generate_email_content(business, sender_name, user_id=g.user_id, project_id=project_id)
         return jsonify(result), 200
         
     except Exception as e:
@@ -7555,7 +7585,7 @@ def rank_campaign_vendors(campaign_id):
                 'vendors': ranked,
             }), 200
 
-        from core.ai_client import ai_chat_completion
+        from core.ai_client import ai_chat_completion, safe_parse_json
         prompt = [
             {
                 'role': 'system',
@@ -7584,8 +7614,7 @@ def rank_campaign_vendors(campaign_id):
             max_tokens=int(os.getenv('OPENAI_VENDOR_RANK_MAX_TOKENS', '1400'))
         )
 
-        response_text = (response.choices[0].message.content or '').strip().replace('```json', '').replace('```', '').strip()
-        parsed = json.loads(response_text)
+        parsed = safe_parse_json(response.choices[0].message.content or '')
         vendors = parsed.get('vendors') if isinstance(parsed, dict) else None
         if not isinstance(vendors, list):
             raise ValueError('LLM did not return a vendors array')
