@@ -170,10 +170,10 @@ export function sanitizeToastMessage(message, type) {
       return 'Unable to reach the server. Please check your internet connection.';
     }
     // Gateway / timeout errors
-    if (lower.includes('504') || lower.includes('gateway time-out') || lower.includes('gateway timeout')) {
+    if (/\b504\b/.test(lower) || lower.includes('gateway time-out') || lower.includes('gateway timeout')) {
       return 'The request took longer than expected and timed out. Please try again.';
     }
-    if (lower.includes('502') || lower.includes('bad gateway')) {
+    if (/\b502\b/.test(lower) || lower.includes('bad gateway')) {
       return 'The service is temporarily unavailable. Please try again in a moment.';
     }
     // 500 / unhandled exception / traceback
@@ -181,7 +181,7 @@ export function sanitizeToastMessage(message, type) {
       return 'Something went wrong on the server. Please try again later.';
     }
     // Rate limit / quota
-    if (lower.includes('quota') || lower.includes('rate limit') || lower.includes('429')) {
+    if (lower.includes('quota') || lower.includes('rate limit') || /\b429\b/.test(lower)) {
       return 'Request limit reached. Please wait a moment before trying again.';
     }
     // Auth / session expiration
@@ -191,7 +191,7 @@ export function sanitizeToastMessage(message, type) {
     // Strip technical prefixes like "Error: " if followed by object/stack artifacts
     if (raw.startsWith('Error: ')) {
       const rest = raw.slice(7).trim();
-      if (rest === '[object Object]' || rest === 'undefined' || rest.startsWith('<') || rest.includes('at ')) {
+      if (rest === '[object Object]' || rest === 'undefined' || rest.startsWith('<') || /\n\s*at\s+/.test(raw) || /^\s*at\s+/.test(rest)) {
         return 'An unexpected error occurred. Please try again.';
       }
       return rest;
@@ -249,11 +249,6 @@ export function showToast(message, type = 'info', duration = 3000) {
   container.appendChild(toast);
   const timer = setTimeout(dismiss, duration);
   close.addEventListener('click', () => clearTimeout(timer));
-}
-
-if (typeof window !== 'undefined') {
-  window.showToast = showToast;
-  window.sanitizeToastMessage = sanitizeToastMessage;
 }
 
 export default showToast;
