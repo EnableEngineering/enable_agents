@@ -470,28 +470,57 @@ _CHANNEL_CONFIG = {
 
 def generate_content_core(channel, content_type, user_context, user_id,
                            industry="General", doc_texts=None, cm_project_id=None,
-                           source_doc_ids=None):
+                           source_doc_ids=None, documents=None, knowledge_graph=None):
     """Plain-argument core of app.py's generate_content_marketing - callable
     from a LangGraph node (or anywhere else outside a Flask request) with no
     request/g dependency.
 
     Unlike the interactive route (which hard-requires an existing CMProject
-    with uploaded CMDocuments), `doc_texts` is optional here - a workflow
+    with uploaded CMDocuments), `documents` is optional here - a workflow
     node has no human-uploaded documents to draw on, so this degrades to
-    generating from `user_context`/`industry` alone. `cm_project_id` is also
-    optional: CMGeneratedContent.project_id is a NOT NULL foreign key to
-    cm_projects, so a generated-content row is only persisted when a real
-    CMProject id is given; otherwise the content is returned but not saved
-    anywhere, the same way graph.py's document_analysis_node returns its RAG
-    answer without creating a permanent record.
+    generating from `user_context`/`industry` alone. When `documents` are
+    provided, uses RAGContentGenerator for semantic retrieval instead of
+    naive truncation. `cm_project_id` is also optional: CMGeneratedContent
+    .project_id is a NOT NULL foreign key to cm_projects, so a
+    generated-content row is only persisted when a real CMProject id is
+    given; otherwise the content is returned but not saved anywhere, the
+    same way graph.py's document_analysis_node returns its RAG answer
+    without creating a permanent record.
 
     Returns (result_dict_or_None, error_message_or_None).
     """
     doc_texts = doc_texts or []
     config = _CHANNEL_CONFIG.get(channel, _CHANNEL_CONFIG['linkedin'])
 
-    from core.settings import get_response_language_instruction
-    prompt = f"""Generate marketing content for {channel} channel.
+    try:
+        from core.settings import get_response_language_instruction
+
+        ai_project_id = None
+        if cm_project_id:
+            project = CMProject.query.filter_by(project_id=cm_project_id).first()
+            ai_project_id = project.platform_project_id if project else None
+
+        # Use RAGContentGenerator if documents are provided
+        if documents:
+            from .rag_content_generator import RAGContentGenerator
+
+            generator = RAGContentGenerator(user_id, ai_project_id)
+            result = generator.generate(
+                documents=documents,
+                knowledge_graph=knowledge_graph,
+                channel=channel,
+                content_type=content_type,
+                domain_context=industry,
+                user_context=user_context,
+                language_instruction=get_response_language_instruction(user_id),
+            )
+            response = result["content"]
+            variations = result.get("variations", [])
+        else:
+            # Fallback to naive approach when no documents
+            from core.ai_client import get_langchain_llm, log_langchain_usage
+
+            prompt = f"""Generate marketing content for {channel} channel.
 Industry: {industry or 'General'}
 Tone: {config['tone']}
 Max Length: {config['max_length']} characters
@@ -503,18 +532,11 @@ Language level: {get_response_language_instruction(user_id)}
 
 Generate compelling marketing {content_type} content."""
 
-    try:
-        from core.ai_client import get_langchain_llm, log_langchain_usage
-
-        ai_project_id = None
-        if cm_project_id:
-            project = CMProject.query.filter_by(project_id=cm_project_id).first()
-            ai_project_id = project.platform_project_id if project else None
-
-        llm, key_source, resolved_model = get_langchain_llm(user_id, ai_project_id, model="gpt-4", temperature=0.7)
-        result = llm.invoke(prompt)
-        log_langchain_usage(result, user_id, ai_project_id, "content_marketing.generate_content", resolved_model, key_source)
-        response = result.content
+            llm, key_source, resolved_model = get_langchain_llm(user_id, ai_project_id, model="gpt-4", temperature=0.7)
+            result = llm.invoke(prompt)
+            log_langchain_usage(result, user_id, ai_project_id, "content_marketing.generate_content", resolved_model, key_source)
+            response = result.content
+            variations = [response]
 
         content_id = f"content_{uuid4().hex[:12]}"
         if cm_project_id and CMProject.query.filter_by(project_id=cm_project_id).first():
@@ -535,7 +557,7 @@ Generate compelling marketing {content_type} content."""
             "channel": channel,
             "content_type": content_type,
             "content": response,
-            "variations": [response],
+            "variations": variations,
             "metadata": config,
         }, None
     except Exception as e:
