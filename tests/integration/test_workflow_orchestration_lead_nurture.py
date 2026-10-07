@@ -60,7 +60,7 @@ def template(flask_app):
             tpl = WorkflowTemplate(template_id="lead-nurture", name="Lead Nurturing",
                                     is_system=True, is_active=True)
             tpl.stages = [
-                {"id": "qualify", "agent": "market_research"},
+                {"id": "qualify", "agent": "sales_helper"},
                 {"id": "personalize", "agent": "content_marketing"},
                 {"id": "sequence", "agent": "email_outreach"},
                 {"id": "followup", "agent": "executive_assistant"},
