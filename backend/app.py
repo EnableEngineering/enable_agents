@@ -49,6 +49,7 @@ from core.database import db
 from core.context import ContextStore
 from core.auth import require_auth
 from core.email_sender import send_platform_email
+from core.rag_utils import split_documents, build_faiss_index, retrieve_relevant_chunks
 
 # LangChain imports with fallbacks for version compatibility
 try:
@@ -335,11 +336,6 @@ register_sse_routes(app)
 ALLOWED_EXTENSIONS = {'csv', 'xlsx', 'xls'}
 MAX_FILE_SIZE = 16 * 1024 * 1024  # 16MB
 app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE
-
-# Content Marketing Agent Configuration
-CONTENT_MARKETING_UPLOAD_FOLDER = os.environ.get('CONTENT_MARKETING_UPLOAD_FOLDER', os.path.join(os.path.dirname(__file__), 'data', 'content_marketing_uploads'))
-CONTENT_MARKETING_ALLOWED_EXTENSIONS = {'pdf', 'docx', 'txt', 'xlsx', 'html', 'md'}
-os.makedirs(CONTENT_MARKETING_UPLOAD_FOLDER, exist_ok=True)
 
 # Content Marketing tables are now in PostgreSQL via SQLAlchemy models
 # See: agents/content_marketing/models.py
@@ -902,122 +898,6 @@ class State(TypedDict):
     question: str
     context: 'List'  # List of Document objects
     answer: str
-
-
-# ====== CONTENT MARKETING AGENT CLASSES & HELPERS ======
-
-class DomainSpecializationAnalyzer:
-    """Analyzes documents to extract domain specialization information"""
-
-    def __init__(self, user_id=None, project_id=None):
-        from core.ai_client import get_langchain_llm
-        self.user_id = user_id
-        self.project_id = project_id
-        self.llm, self._key_source, self._model = get_langchain_llm(user_id, project_id, model="gpt-4", temperature=0)
-        self.industry_keywords = self._load_industry_keywords()
-    
-    def _load_industry_keywords(self) -> Dict[str, List[str]]:
-        """Load industry-specific keywords"""
-        return {
-            'Technology': ['software', 'cloud', 'api', 'infrastructure', 'devops', 'saas'],
-            'Healthcare': ['medical', 'patient', 'pharmaceutical', 'clinical', 'health', 'disease'],
-            'Finance': ['banking', 'investment', 'portfolio', 'trading', 'compliance', 'regulatory'],
-            'Retail': ['ecommerce', 'inventory', 'customer', 'sales', 'purchase', 'product'],
-            'Manufacturing': ['production', 'supply chain', 'logistics', 'quality', 'automation'],
-            'Real Estate': ['property', 'tenant', 'lease', 'valuation', 'construction'],
-            'Education': ['student', 'curriculum', 'learning', 'course', 'assessment'],
-        }
-    
-    def analyze_documents(self, documents: List[str]) -> Dict:
-        """
-        Analyze documents to extract domain specialization
-        
-        Args:
-            documents: List of document texts
-            
-        Returns:
-            Dictionary with industry, sector, function, role analysis
-        """
-        combined_text = ' '.join(documents[:3]) if documents else ''
-        
-        prompt = ChatPromptTemplate.from_template("""
-        Analyze the following business documents and extract domain specialization information.
-        
-        Documents:
-        {documents}
-        
-        Provide a JSON response with:
-        {{
-            "industry": "identified industry",
-            "sector": "business sector",
-            "function": "primary business function",
-            "role": "primary role/persona",
-            "target_audience": "target customer/audience",
-            "value_proposition": "key value proposition",
-            "tone": "recommended tone (professional/casual/formal)",
-            "key_themes": ["theme1", "theme2", ...]
-        }}
-        """)
-        
-        try:
-            chain = prompt | self.llm
-            response = chain.invoke({"documents": combined_text[:2000]})
-            from core.ai_client import log_langchain_usage
-            log_langchain_usage(response, self.user_id, self.project_id, "content_marketing.analyze_documents", self._model, self._key_source)
-
-            import re
-            json_match = re.search(r'\{.*\}', response.content, re.DOTALL)
-            if json_match:
-                return json.loads(json_match.group())
-        except:
-            pass
-        
-        return {
-            "industry": "General",
-            "sector": "Unknown",
-            "function": "Marketing",
-            "role": "Marketing Manager",
-            "target_audience": "Business Professionals",
-            "value_proposition": "Enhanced marketing through AI",
-            "tone": "professional",
-            "key_themes": ["innovation", "value", "efficiency"]
-        }
-
-
-def extract_text_from_file_content_marketing(file_path: str, file_type: str) -> str:
-    """Extract text content from various file formats"""
-    try:
-        if file_type == 'pdf':
-            text = []
-            pdf_document = fitz.open(file_path)
-            for page in pdf_document:
-                text.append(page.get_text())
-            pdf_document.close()
-            return '\n'.join(text)
-        
-        elif file_type == 'docx':
-            doc = DocxDocument(file_path)
-            return '\n'.join([para.text for para in doc.paragraphs])
-        
-        elif file_type == 'txt':
-            with open(file_path, 'r', encoding='utf-8') as f:
-                return f.read()
-        
-        elif file_type == 'html':
-            with open(file_path, 'r', encoding='utf-8') as f:
-                soup = BeautifulSoup(f.read(), 'html.parser')
-                return soup.get_text()
-        
-        elif file_type == 'md':
-            with open(file_path, 'r', encoding='utf-8') as f:
-                return f.read()
-        
-        else:
-            return ''
-    
-    except Exception as e:
-        print(f"Error extracting text from {file_path}: {str(e)}")
-        return ''
 
 
 def setup_driver(headless=True):
@@ -5851,16 +5731,6 @@ def build_knowledge_graph(nodes, edges):
         G.add_edge(edge['source'], edge['target'], **edge.get('attributes', {}))
     return G
 
-def chunk_text(text, chunk_size=1000, overlap=200):
-    """Split text into overlapping chunks for better context preservation"""
-    chunks = []
-    start = 0
-    while start < len(text):
-        end = start + chunk_size
-        chunks.append(text[start:end])
-        start = end - overlap
-    return chunks
-
 def _log_langchain_embedding_usage(texts, user_id, project_id, agent, model="text-embedding-ada-002"):
     """LangChain's OpenAIEmbeddings goes straight to OpenAI (bypassing
     core.ai_client) and reports no token counts, so its cost never reached the
@@ -5875,27 +5745,6 @@ def _log_langchain_embedding_usage(texts, user_id, project_id, agent, model="tex
         log_ai_usage(user_id, project_id, agent, "openai", model, tokens, 0, "platform")
     except Exception as e:
         print(f"[usage] could not log LangChain embedding usage: {e}")
-
-
-def create_embeddings(chunks):
-    """Generate OpenAI embeddings for text chunks"""
-    embeddings_model = OpenAIEmbeddings()
-    embeddings = embeddings_model.embed_documents(chunks)
-    return np.array(embeddings)
-
-def build_faiss_index(embeddings):
-    """Create FAISS index for efficient similarity search"""
-    dimension = embeddings.shape[1]
-    index = faiss.IndexFlatL2(dimension)
-    index.add(embeddings.astype('float32'))
-    return index
-
-def retrieve_relevant_chunks(query, index, chunks, embeddings_model, top_k=5):
-    """Retrieve most relevant chunks using FAISS similarity search"""
-    query_embedding = embeddings_model.embed_query(query)
-    query_vector = np.array([query_embedding]).astype('float32')
-    distances, indices = index.search(query_vector, top_k)
-    return [chunks[i] for i in indices[0]]
 
 def query_knowledge_graph(graph, query_type, node_id=None):
     """Query knowledge graph for specific information based on query type"""
@@ -5955,37 +5804,43 @@ def process_documents_with_kg_rag(documents, nodes, edges, query, include_contex
     # Check if document embeddings are cached
     if doc_cache_key in kg_rag_cache['embeddings']:
         # Reuse cached data
-        chunks = kg_rag_cache['chunks'][doc_cache_key]
+        chunk_dicts = kg_rag_cache['chunks'][doc_cache_key]
         embeddings = kg_rag_cache['embeddings'][doc_cache_key]
         faiss_index = kg_rag_cache['faiss_indices'][doc_cache_key]
-        embeddings_model = OpenAIEmbeddings()
     else:
         # Extract and combine text from all documents
         all_text = ""
         for doc_info in documents:
             local_path = load_document_from_source(
-                doc_info['source_type'], 
-                doc_info['path'], 
+                doc_info['source_type'],
+                doc_info['path'],
                 doc_info.get('bucket')
             )
             text = extract_text_from_document(local_path)
             all_text += text + "\n\n"
-        
-        chunks = chunk_text(all_text)
+
+        chunk_dicts = split_documents([all_text], chunk_size=1000, overlap=200, track_source=False)
+        chunk_texts = [chunk["content"] for chunk in chunk_dicts]
         embeddings_model = OpenAIEmbeddings()
-        embeddings = create_embeddings(chunks)
-        _log_langchain_embedding_usage(chunks, user_id, project_id, "document_intelligence.kg_rag_embed_documents")
-        
+        embeddings = np.array(embeddings_model.embed_documents(chunk_texts), dtype='float32')
+        _log_langchain_embedding_usage(chunk_texts, user_id, project_id, "document_intelligence.kg_rag_embed_documents")
+
         # Build FAISS index
-        faiss_index = build_faiss_index(embeddings)
-        
+        faiss_index = build_faiss_index(embeddings, index_type="L2", normalize=False)
+
         # Cache all the expensive computations
-        kg_rag_cache['chunks'][doc_cache_key] = chunks
+        kg_rag_cache['chunks'][doc_cache_key] = chunk_dicts
         kg_rag_cache['embeddings'][doc_cache_key] = embeddings
         kg_rag_cache['faiss_indices'][doc_cache_key] = faiss_index
-    
+
     # Retrieve relevant chunks (this is query-specific, not cached)
-    relevant_chunks = retrieve_relevant_chunks(query, faiss_index, chunks, embeddings_model)
+    embeddings_model = OpenAIEmbeddings()
+
+    def embed_query(queries):
+        return [embeddings_model.embed_query(q) for q in queries]
+
+    retrieved_chunk_dicts = retrieve_relevant_chunks(query, faiss_index, chunk_dicts, embed_query, top_k=5, normalize=False)
+    relevant_chunks = [chunk["content"] for chunk in retrieved_chunk_dicts]
     _log_langchain_embedding_usage([query], user_id, project_id, "document_intelligence.kg_rag_embed_query")
     
     # Query knowledge graph for additional context
@@ -6263,251 +6118,6 @@ def kg_rag_cache_status():
 # - system_health
 #
 # ======
-
-
-# ====== CONTENT MARKETING AGENT API ENDPOINTS ======
-# All SQLite code migrated to PostgreSQL via SQLAlchemy
-# See: agents/content_marketing/service.py and agents/content_marketing/models.py
-
-from agents.content_marketing import service as cm_service
-from agents.content_marketing.models import CMProject, CMDocument, CMKnowledgeGraph, CMGeneratedContent, CMConversation
-
-@app.route('/api/content-marketing/projects', methods=['POST'])
-@cross_origin()
-@require_auth
-def create_content_marketing_project():
-    """Create a new content marketing project"""
-    return cm_service.create_project()
-
-
-@app.route('/api/content-marketing/projects/<project_id>', methods=['GET'])
-@cross_origin()
-@require_auth
-def get_content_marketing_project(project_id):
-    """Get project details"""
-    return cm_service.get_project(project_id)
-
-
-@app.route('/api/content-marketing/documents/upload', methods=['POST'])
-@cross_origin()
-@require_auth
-def upload_content_marketing_documents():
-    """Upload documents to project and build knowledge graph"""
-    try:
-        project_id = request.form.get('project_id')
-        if not project_id:
-            return jsonify({'success': False, 'error': 'project_id required'}), 400
-
-        project = CMProject.query.filter_by(project_id=project_id).first()
-        if not project or project.user_id != g.user_id:
-            return jsonify({'success': False, 'error': 'Project not found'}), 404
-
-        uploaded_files = request.files.getlist('files')
-        if not uploaded_files:
-            return jsonify({'success': False, 'error': 'No files provided'}), 400
-
-        analyzer = DomainSpecializationAnalyzer(user_id=g.user_id, project_id=project.platform_project_id)
-        extracted_documents = []
-        doc_ids = []
-
-        for file in uploaded_files:
-            if not file.filename:
-                continue
-
-            filename = secure_filename(file.filename)
-            file_type = filename.split('.')[-1].lower()
-
-            if file_type not in CONTENT_MARKETING_ALLOWED_EXTENSIONS:
-                continue
-
-            file_path = os.path.join(CONTENT_MARKETING_UPLOAD_FOLDER, project_id, filename)
-            os.makedirs(os.path.dirname(file_path), exist_ok=True)
-            file.save(file_path)
-
-            # Extract text
-            text_content = extract_text_from_file_content_marketing(file_path, file_type)
-
-            # Store in PostgreSQL
-            doc_id = f"doc_{uuid4().hex[:12]}"
-            doc = CMDocument(
-                doc_id=doc_id,
-                project_id=project_id,
-                file_name=filename,
-                file_type=file_type,
-                file_path=file_path,
-                file_size=os.path.getsize(file_path),
-                extracted_content=text_content
-            )
-            db.session.add(doc)
-            extracted_documents.append(text_content)
-            doc_ids.append(doc_id)
-
-        db.session.commit()
-
-        # Analyze domain specialization
-        domain_context = analyzer.analyze_documents(extracted_documents)
-
-        # Build knowledge graph
-        kg_id = f"kg_{uuid4().hex[:12]}"
-        kg_data = {
-            'entities': [f'Entity_{i}' for i in range(min(10, len(extracted_documents)))],
-            'relationships': [],
-            'domain_context': domain_context,
-            'documents_count': len(doc_ids)
-        }
-
-        kg = CMKnowledgeGraph(kg_id=kg_id, project_id=project_id)
-        kg.kg_data = kg_data
-        kg.entities = len(kg_data.get('entities', []))
-        kg.relationships = len(kg_data.get('relationships', []))
-        db.session.add(kg)
-        db.session.commit()
-
-        return jsonify({
-            'success': True,
-            'uploaded_files': len(doc_ids),
-            'document_ids': doc_ids,
-            'knowledge_graph_id': kg_id,
-            'domain_specialization': domain_context
-        }), 201
-
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@app.route('/api/content-marketing/documents/<project_id>', methods=['GET'])
-@cross_origin()
-@require_auth
-def list_content_marketing_documents(project_id):
-    """List all documents in a project"""
-    return cm_service.list_documents(project_id)
-
-
-@app.route('/api/content-marketing/documents/item/<doc_id>', methods=['DELETE'])
-@cross_origin()
-@require_auth
-def delete_content_marketing_document(doc_id):
-    """Delete an uploaded Knowledge Base document - there was previously no
-    way to remove a document once uploaded."""
-    doc = CMDocument.query.filter_by(doc_id=doc_id).first()
-    if not doc:
-        return jsonify({'success': False, 'error': 'Document not found'}), 404
-    project = CMProject.query.filter_by(project_id=doc.project_id).first()
-    if not project or project.user_id != g.user_id:
-        return jsonify({'success': False, 'error': 'Document not found'}), 404
-
-    try:
-        if doc.file_path and os.path.exists(doc.file_path):
-            os.remove(doc.file_path)
-    except OSError:
-        pass
-
-    db.session.delete(doc)
-    db.session.commit()
-    return jsonify({'success': True}), 200
-
-
-@app.route('/api/content-marketing/generate-content', methods=['POST'])
-@cross_origin()
-@require_auth
-def generate_content_marketing():
-    """Generate marketing content for specified channel"""
-    from agents.content_marketing.service import generate_content_core
-
-    data = request.json
-    project_id = data.get('project_id')
-    channel = data.get('channel', 'linkedin')
-    content_type = data.get('content_type', 'post')
-    user_context = data.get('context', '')
-
-    if not project_id:
-        return jsonify({'success': False, 'error': 'project_id required'}), 400
-
-    project = CMProject.query.filter_by(project_id=project_id).first()
-    if not project or project.user_id != g.user_id:
-        return jsonify({'success': False, 'error': 'Project not found'}), 404
-
-    docs = CMDocument.query.filter_by(project_id=project_id).all()
-    doc_texts = [d.extracted_content for d in docs if d.extracted_content]
-
-    if not doc_texts:
-        return jsonify({'success': False, 'error': 'No documents found in project'}), 400
-
-    result, error = generate_content_core(
-        channel, content_type, user_context, g.user_id,
-        industry=project.industry, doc_texts=doc_texts, cm_project_id=project_id,
-        source_doc_ids=[d.doc_id for d in docs],
-    )
-    if error:
-        return jsonify({'success': False, 'error': error}), 500
-    return jsonify({'success': True, **result}), 201
-
-
-@app.route('/api/content-marketing/chat', methods=['POST'])
-@cross_origin()
-@require_auth
-def content_marketing_chat():
-    """Conversational endpoint for iterative content refinement"""
-    try:
-        data = request.json
-        project_id = data.get('project_id')
-        message = data.get('message')
-
-        if not all([project_id, message]):
-            return jsonify({'success': False, 'error': 'project_id and message required'}), 400
-
-        project = CMProject.query.filter_by(project_id=project_id).first()
-        if not project or project.user_id != g.user_id:
-            return jsonify({'success': False, 'error': 'Project not found'}), 404
-
-        docs = CMDocument.query.filter_by(project_id=project_id).limit(10).all()
-        kg = CMKnowledgeGraph.query.filter_by(project_id=project_id).order_by(CMKnowledgeGraph.created_at.desc()).first()
-
-        context_text = ' '.join([d.extracted_content[:500] for d in docs if d.extracted_content])
-
-        prompt = f"""Based on the following document context and knowledge graph, provide helpful marketing advice.
-Document Context: {context_text}
-Knowledge Graph: {json.dumps(kg.kg_data)[:500] if kg else 'No KG available'}
-User Question: {message}
-Provide a helpful, concise response focused on marketing strategy and content improvement."""
-
-        from core.ai_client import get_langchain_llm, log_langchain_usage
-        ai_project_id = project.platform_project_id
-        llm, key_source, resolved_model = get_langchain_llm(g.user_id, ai_project_id, model="gpt-4", temperature=0.7)
-        result = llm.invoke(prompt)
-        log_langchain_usage(result, g.user_id, ai_project_id, "content_marketing.chat", resolved_model, key_source)
-        response = result.content
-
-        # Store in PostgreSQL
-        msg_id = f"msg_{uuid4().hex[:12]}"
-        conv = CMConversation(
-            msg_id=msg_id,
-            project_id=project_id,
-            user_message=message,
-            agent_response=response
-        )
-        conv.context = {"project_name": project.project_name, "doc_count": len(docs)}
-        db.session.add(conv)
-        db.session.commit()
-
-        return jsonify({
-            'success': True,
-            'response': response,
-            'message_id': msg_id
-        }), 200
-
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@app.route('/api/content-marketing/knowledge-graph/<project_id>', methods=['GET'])
-@cross_origin()
-@require_auth
-def get_content_marketing_knowledge_graph(project_id):
-    """Retrieve knowledge graph for visualization"""
-    return cm_service.get_knowledge_graph(project_id)
 
 
 @app.route('/api/get-google-credentials', methods=['GET'])
