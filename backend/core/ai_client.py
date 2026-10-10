@@ -414,7 +414,8 @@ def _anthropic_chat_completion(api_key: str, model: str, messages: List[Dict[str
     if kwargs.get("temperature") is not None:
         request_kwargs["temperature"] = kwargs["temperature"]
 
-    client = anthropic.Anthropic(api_key=api_key)
+    client_kwargs = _build_client_kwargs(api_key, kwargs)
+    client = anthropic.Anthropic(**client_kwargs)
     response = client.messages.create(**request_kwargs)
     text = "".join(block.text for block in response.content if getattr(block, "type", None) == "text")
 
@@ -425,85 +426,27 @@ def _anthropic_chat_completion(api_key: str, model: str, messages: List[Dict[str
     )
 
 
-def _is_retryable_exception(exc: BaseException) -> bool:
-    """True for transient errors that are safe to retry:
-    - 429 RateLimitError (concurrency or temporary quota limit)
-    - 500, 502, 503, 504 InternalServerError / BadGateway / ServiceUnavailable
-    - ConnectionError, TimeoutError, dropped network sockets
-    False for permanent errors:
-    - 400 BadRequest (invalid parameters)
-    - 401 AuthenticationError (bad API key)
-    - 403 PermissionDeniedError
-    - 404 NotFound (model not found)
-    - BudgetExceeded / NoApiKeyConfigured
+def _build_client_kwargs(api_key: str, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract client configuration (max_retries, timeout, http_client)
+    from kwargs or environment defaults, returning kwargs for the client constructor.
+    Delegates backoff, jitter, and Retry-After handling natively to the SDK.
     """
-    status_code = getattr(exc, "status_code", None)
-    if status_code in (429, 500, 502, 503, 504):
-        return True
-    if status_code in (400, 401, 403, 404):
-        return False
+    max_retries = kwargs.pop("max_retries", None)
+    if max_retries is None:
+        max_retries = int(os.environ.get("AI_CLIENT_MAX_RETRIES", "3"))
+    timeout = kwargs.pop("timeout", None)
+    if timeout is None:
+        timeout = float(os.environ.get("AI_CLIENT_TIMEOUT", "60.0"))
 
-    cls_name = exc.__class__.__name__
-    if cls_name in (
-        "RateLimitError",
-        "APIConnectionError",
-        "APITimeoutError",
-        "InternalServerError",
-        "TimeoutError",
-        "ConnectionError",
-    ):
-        return True
-
-    if isinstance(exc, (TimeoutError, ConnectionError)):
-        return True
-
-    return False
-
-
-def _retry_call(
-    func: Any,
-    max_retries: int = 3,
-    initial_delay: float = 1.0,
-    backoff_factor: float = 2.0,
-    max_delay: float = 30.0,
-) -> Any:
-    """Invokes `func()` with exponential backoff and jitter for transient errors.
-    Non-retryable errors fail immediately without retry.
-    """
-    import random
-    import time
-
-    retries = int(os.environ.get("AI_CLIENT_MAX_RETRIES", str(max_retries)))
-    base_delay = float(os.environ.get("AI_CLIENT_RETRY_DELAY", str(initial_delay)))
-
-    delay = base_delay
-    for attempt in range(1, retries + 1):
-        try:
-            return func()
-        except Exception as exc:
-            if attempt >= retries or not _is_retryable_exception(exc):
-                raise
-
-            response = getattr(exc, "response", None)
-            headers = getattr(response, "headers", None) if response else None
-            retry_after = None
-            if headers and "retry-after" in headers:
-                try:
-                    retry_after = float(headers["retry-after"])
-                except (ValueError, TypeError):
-                    pass
-
-            wait_time = retry_after if retry_after is not None else delay
-            jittered_wait = min(wait_time * random.uniform(0.8, 1.2), max_delay)
-
-            print(
-                f"[ai_client] Transient error on attempt {attempt}/{retries} "
-                f"({exc.__class__.__name__}: {exc}). Retrying in {jittered_wait:.2f}s..."
-            )
-            time.sleep(jittered_wait)
-            delay = min(delay * backoff_factor, max_delay)
-
-    return func()
+    client_kwargs: Dict[str, Any] = {
+        "api_key": api_key,
+        "max_retries": max_retries,
+        "timeout": timeout,
+    }
+    http_client = kwargs.pop("http_client", None)
+    if http_client is not None:
+        client_kwargs["http_client"] = http_client
+    return client_kwargs
 
 
 def ai_chat_completion(
@@ -547,16 +490,14 @@ def ai_chat_completion(
             )
 
         if resolved_provider == "anthropic":
-            response = _retry_call(lambda: _anthropic_chat_completion(api_key, resolved_model, messages, **kwargs))
+            response = _anthropic_chat_completion(api_key, resolved_model, messages, **kwargs)
             prompt_tokens = response.usage.prompt_tokens
             completion_tokens = response.usage.completion_tokens
         else:
-            def _call_openai():
-                import openai
-                client = openai.OpenAI(api_key=api_key)
-                return client.chat.completions.create(model=resolved_model, messages=messages, **kwargs)
-
-            response = _retry_call(_call_openai)
+            import openai
+            client_kwargs = _build_client_kwargs(api_key, kwargs)
+            client = openai.OpenAI(**client_kwargs)
+            response = client.chat.completions.create(model=resolved_model, messages=messages, **kwargs)
             usage = getattr(response, "usage", None)
             prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
             completion_tokens = getattr(usage, "completion_tokens", 0) or 0
@@ -598,11 +539,9 @@ def ai_embeddings(
                 "No OpenAI API key configured for this project or user, and no platform default is set."
             )
 
-        def _call_embeddings():
-            client = openai.OpenAI(api_key=api_key)
-            return client.embeddings.create(model=model, input=input, **kwargs)
-
-        response = _retry_call(_call_embeddings)
+        client_kwargs = _build_client_kwargs(api_key, kwargs)
+        client = openai.OpenAI(**client_kwargs)
+        response = client.embeddings.create(model=model, input=input, **kwargs)
 
         usage = getattr(response, "usage", None)
         log_ai_usage(
