@@ -7235,7 +7235,10 @@ Do not add any explanation, just return the JSON.
         temperature=0.7
     )
     
-    return safe_parse_json(response.choices[0].message.content)
+    parsed = safe_parse_json(response.choices[0].message.content)
+    if not isinstance(parsed, dict) or not parsed.get("subject") or not parsed.get("body"):
+        raise ValueError("Model failed to generate email content with required subject and body.")
+    return parsed
 
 @app.route('/api/generate-email', methods=['POST'])
 @cross_origin()
