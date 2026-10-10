@@ -1711,18 +1711,30 @@ def extract_keywords_from_chunks(page_chunks):
             chunk_phrases[(page, chunk_number)] = phrases
     return chunk_phrases
 
-def get_embeddings(phrase):
+def get_embeddings(phrase, user_id=None, project_id=None):
     from core.ai_client import ai_embeddings
-    response = ai_embeddings(user_id=None, project_id=None, agent="document_intelligence.embed", model="text-embedding-ada-002", input=phrase)
+    if not user_id:
+        user_id = getattr(g, 'user_id', None)
+    if not project_id:
+        project_id = getattr(g, 'project_id', None)
+    response = ai_embeddings(user_id=user_id, project_id=project_id, agent="document_intelligence.embed", model="text-embedding-ada-002", input=phrase)
     return response.data[0].embedding
 
-def get_embeddings_batch(phrases):
+def get_embeddings_batch(phrases, user_id=None, project_id=None):
     from core.ai_client import ai_embeddings
-    response = ai_embeddings(user_id=None, project_id=None, agent="document_intelligence.embed_batch", model="text-embedding-ada-002", input=phrases)
+    if not user_id:
+        user_id = getattr(g, 'user_id', None)
+    if not project_id:
+        project_id = getattr(g, 'project_id', None)
+    response = ai_embeddings(user_id=user_id, project_id=project_id, agent="document_intelligence.embed_batch", model="text-embedding-ada-002", input=phrases)
     return [data.embedding for data in response.data]
 
-def store_embeddings(page_phrases, chunk_phrases):
+def store_embeddings(page_phrases, chunk_phrases, user_id=None, project_id=None):
     """Store embeddings with better error handling"""
+    if not user_id:
+        user_id = getattr(g, 'user_id', None)
+    if not project_id:
+        project_id = getattr(g, 'project_id', None)
     print("Processing embeddings...")
     print(f"Page phrases: {page_phrases}")
     print(f"Chunk phrases keys: {list(chunk_phrases.keys())}")
@@ -1734,7 +1746,7 @@ def store_embeddings(page_phrases, chunk_phrases):
     for (page, chunk_number), phrases in chunk_phrases.items():
         if phrases:  # Only process if there are phrases
             try:
-                embeddings = get_embeddings_batch(phrases)
+                embeddings = get_embeddings_batch(phrases, user_id=user_id, project_id=project_id)
                 phrase_embeddings[(page, chunk_number)] = list(zip(phrases, embeddings))
                 # Collect all embeddings for FAISS index
                 all_embeddings.extend(embeddings)
@@ -1771,12 +1783,17 @@ def extract_phrases_from_query(query):
     rake.extract_keywords_from_text(query)
     return rake.get_ranked_phrases()
 
-def get_embeddings_for_query(phrases):
+def get_embeddings_for_query(phrases, user_id=None, project_id=None):
     from core.ai_client import ai_embeddings
+    if not user_id:
+        user_id = getattr(g, 'user_id', None)
+    if not project_id:
+        project_id = getattr(g, 'project_id', None)
     return [
-        ai_embeddings(user_id=None, project_id=None, agent="document_intelligence.embed_query", model="text-embedding-ada-002", input=phrase).data[0].embedding
+        ai_embeddings(user_id=user_id, project_id=project_id, agent="document_intelligence.embed_query", model="text-embedding-ada-002", input=phrase).data[0].embedding
         for phrase in phrases
     ]
+
 
 def get_cosine_similarity(embedding1, embedding2):
     return 1 - cosine(embedding1, embedding2)
@@ -4028,6 +4045,9 @@ def rag_test():
         openai.api_key = get_credentials()
         file_hash = get_file_hash(file_path)
 
+        user_id = getattr(g, 'user_id', None)
+        project_id = data.get('project_id') or getattr(g, 'project_id', None)
+
         try:
             if file_hash in cache:
                 print(f"Using cached embeddings for file hash: {file_hash}")
@@ -4047,7 +4067,7 @@ def rag_test():
                 page_phrases = extract_keywords_from_pdf(pdf_doc)
                 chunk_phrases = extract_keywords_from_chunks(page_chunks)
                 
-                index, phrase_embeddings = store_embeddings(page_phrases, chunk_phrases)
+                index, phrase_embeddings = store_embeddings(page_phrases, chunk_phrases, user_id=user_id, project_id=project_id)
                 cache[file_hash] = (index, phrase_embeddings, page_chunks)
                 save_embeddings(file_hash, index, phrase_embeddings, page_chunks)
 
@@ -4055,15 +4075,14 @@ def rag_test():
             if not query_phrases:
                 query_phrases = [query]  # Use the full query if no phrases extracted
             
-            query_embeddings = get_embeddings_for_query(query_phrases)
+            query_embeddings = get_embeddings_for_query(query_phrases, user_id=user_id, project_id=project_id)
             selected_chunks = retrieve_similar_chunks(query_embeddings, index, phrase_embeddings, page_chunks)
 
             max_chunks = 5
             max_chunk_length = 1000  # characters
             selected_chunks = [chunk[:max_chunk_length] for chunk in selected_chunks[:max_chunks]]
 
-            project_id = data.get('project_id') or getattr(g, 'project_id', None)
-            answer = generate(selected_chunks, query, user_id=getattr(g, 'user_id', None), project_id=project_id)
+            answer = generate(selected_chunks, query, user_id=user_id, project_id=project_id)
 
             return jsonify({
                 "answer": answer,
@@ -4545,16 +4564,18 @@ def chat_api():
     if not index or not phrase_embeddings or not page_chunks:
         return jsonify({"error": "No valid embeddings found."}), 400
 
+    user_id = getattr(g, 'user_id', None)
+    project_id = data.get('project_id') or getattr(g, 'project_id', None)
+
     query_phrases = extract_phrases_from_query(query)
-    query_embeddings = get_embeddings_for_query(query_phrases)
+    query_embeddings = get_embeddings_for_query(query_phrases, user_id=user_id, project_id=project_id)
     selected_chunks = retrieve_similar_chunks(query_embeddings, index, phrase_embeddings, page_chunks)
 
     max_chunks = 5
     max_chunk_length = 1000  # characters
     selected_chunks = [chunk[:max_chunk_length] for chunk in selected_chunks[:max_chunks]]
 
-    project_id = data.get('project_id') or getattr(g, 'project_id', None)
-    answer = generate(selected_chunks, query, user_id=getattr(g, 'user_id', None), project_id=project_id)
+    answer = generate(selected_chunks, query, user_id=user_id, project_id=project_id)
 
     return jsonify({"answer": answer})
 
