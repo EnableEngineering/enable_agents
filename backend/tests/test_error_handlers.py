@@ -7,7 +7,13 @@ rather than raw stack traces or default HTML pages.
 """
 
 import unittest
-from app import app, _handle_500
+from unittest.mock import patch
+
+# Mock system template loading and validation during import so app can be imported
+# in unit tests without requiring a seeded database.
+with patch("routes.workflows.load_system_templates"), \
+     patch("agents.registry.validate_workflow_template_agents"):
+    from app import app, _handle_500
 
 
 class TestStandardizedErrorHandlers(unittest.TestCase):
