@@ -433,10 +433,10 @@ def _build_client_kwargs(api_key: str, kwargs: Dict[str, Any]) -> Dict[str, Any]
     """
     max_retries = kwargs.pop("max_retries", None)
     if max_retries is None:
-        max_retries = int(os.environ.get("AI_CLIENT_MAX_RETRIES", "3"))
+        max_retries = int(os.environ.get("AI_CLIENT_MAX_RETRIES", "2"))
     timeout = kwargs.pop("timeout", None)
     if timeout is None:
-        timeout = float(os.environ.get("AI_CLIENT_TIMEOUT", "60.0"))
+        timeout = float(os.environ.get("AI_CLIENT_TIMEOUT", "30.0"))
 
     client_kwargs: Dict[str, Any] = {
         "api_key": api_key,

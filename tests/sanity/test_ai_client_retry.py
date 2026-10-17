@@ -18,37 +18,56 @@ import openai
 
 class AIClientRetryTests(unittest.TestCase):
     def setUp(self):
-        os.environ["AI_CLIENT_MAX_RETRIES"] = "3"
-        os.environ["AI_CLIENT_TIMEOUT"] = "60.0"
+        os.environ["AI_CLIENT_MAX_RETRIES"] = "2"
+        os.environ["AI_CLIENT_TIMEOUT"] = "30.0"
 
     def tearDown(self):
         os.environ.pop("AI_CLIENT_MAX_RETRIES", None)
         os.environ.pop("AI_CLIENT_TIMEOUT", None)
 
     def test_build_client_kwargs_defaults_and_overrides(self):
-        # Default behavior: max_retries=3, timeout=60.0
+        # Default behavior: max_retries=2, timeout=30.0
         kwargs = {}
         client_kwargs = ai_client._build_client_kwargs("sk-test", kwargs)
         self.assertEqual(client_kwargs["api_key"], "sk-test")
-        self.assertEqual(client_kwargs["max_retries"], 3)
-        self.assertEqual(client_kwargs["timeout"], 60.0)
+        self.assertEqual(client_kwargs["max_retries"], 2)
+        self.assertEqual(client_kwargs["timeout"], 30.0)
         self.assertNotIn("http_client", client_kwargs)
 
         # Environment variable overrides
-        os.environ["AI_CLIENT_MAX_RETRIES"] = "5"
-        os.environ["AI_CLIENT_TIMEOUT"] = "30.0"
+        os.environ["AI_CLIENT_MAX_RETRIES"] = "4"
+        os.environ["AI_CLIENT_TIMEOUT"] = "15.0"
         client_kwargs_env = ai_client._build_client_kwargs("sk-test", {})
-        self.assertEqual(client_kwargs_env["max_retries"], 5)
-        self.assertEqual(client_kwargs_env["timeout"], 30.0)
+        self.assertEqual(client_kwargs_env["max_retries"], 4)
+        self.assertEqual(client_kwargs_env["timeout"], 15.0)
 
         # Explicit kwargs override environment
         mock_http = MagicMock()
         client_kwargs_explicit = ai_client._build_client_kwargs(
-            "sk-test", {"max_retries": 1, "timeout": 15.0, "http_client": mock_http, "other_arg": "value"}
+            "sk-test", {"max_retries": 1, "timeout": 10.0, "http_client": mock_http, "other_arg": "value"}
         )
         self.assertEqual(client_kwargs_explicit["max_retries"], 1)
-        self.assertEqual(client_kwargs_explicit["timeout"], 15.0)
+        self.assertEqual(client_kwargs_explicit["timeout"], 10.0)
         self.assertEqual(client_kwargs_explicit["http_client"], mock_http)
+
+    def test_retry_timeout_does_not_exceed_gunicorn_worker_timeout(self):
+        """Ensure worst-case cumulative timeout (all attempts timing out + backoff)
+        is strictly less than Gunicorn's 120s worker timeout so workers are never killed
+        and budget reservations are safely released.
+        """
+        # Test with defaults (no env overrides)
+        os.environ.pop("AI_CLIENT_MAX_RETRIES", None)
+        os.environ.pop("AI_CLIENT_TIMEOUT", None)
+        client_kwargs = ai_client._build_client_kwargs("sk-test", {})
+        timeout = client_kwargs["timeout"]
+        max_retries = client_kwargs["max_retries"]
+        total_attempts = max_retries + 1
+        worst_case_timeout = timeout * total_attempts
+        self.assertLess(
+            worst_case_timeout,
+            120.0,
+            f"Worst-case cumulative timeout ({worst_case_timeout}s) must be < Gunicorn 120s limit",
+        )
 
     def test_openai_chat_completion_persistent_429_http_attempts(self):
         """Asserts total HTTP attempts on a persistent 429 does not multiply.
