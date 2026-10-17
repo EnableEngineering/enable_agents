@@ -10,7 +10,6 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 import anthropic
-from anthropic._base_client import httpx2
 import core.ai_client as ai_client
 import httpx
 import openai
@@ -234,21 +233,59 @@ class AIClientRetryTests(unittest.TestCase):
             mock_log.assert_not_called()
             mock_release.assert_called_once_with(["res-1"])
 
-    def test_anthropic_chat_completion_persistent_529_overloaded_attempts(self):
-        """Anthropic 529 OverloadedError is retried natively by the Anthropic SDK."""
-        attempts = 0
+    @patch("anthropic.Anthropic")
+    def test_anthropic_chat_completion_delegates_to_sdk_and_normalizes_response(self, mock_anthropic_cls):
+        """Verify ai_chat_completion instantiates anthropic.Anthropic with resolved
+        client kwargs (max_retries, timeout) and normalizes response to OpenAI format.
+        """
+        mock_client = MagicMock()
+        mock_anthropic_cls.return_value = mock_client
+        mock_block = MagicMock(type="text", text="Anthropic success response")
+        mock_response = MagicMock(
+            content=[mock_block],
+            usage=MagicMock(input_tokens=12, output_tokens=8),
+        )
+        mock_client.messages.create.return_value = mock_response
 
-        def handler(request):
-            nonlocal attempts
-            attempts += 1
-            return httpx2.Response(
-                529,
-                headers={"retry-after": "0.001"},
-                json={"type": "error", "error": {"type": "overloaded_error", "message": "Anthropic is overloaded"}},
+        with patch.object(ai_client, "resolve_model_and_provider", return_value=("claude-3-5-sonnet", "anthropic")), \
+             patch.object(ai_client, "reserve_budget_for_call", return_value=["res-anthropic"]), \
+             patch.object(ai_client, "release_reservations") as mock_release, \
+             patch.object(ai_client, "resolve_api_key", return_value=("fake-key", "platform")), \
+             patch.object(ai_client, "log_ai_usage") as mock_log:
+
+            response = ai_client.ai_chat_completion(
+                user_id="user_123",
+                project_id=None,
+                agent="test.agent",
+                model="claude-3-5-sonnet",
+                messages=[{"role": "user", "content": "hi"}],
+                max_retries=2,
+                timeout=30.0,
             )
 
-        transport = httpx2.MockTransport(handler)
-        mock_http_client = httpx2.Client(transport=transport)
+            mock_anthropic_cls.assert_called_once_with(
+                api_key="fake-key",
+                max_retries=2,
+                timeout=30.0,
+            )
+            self.assertEqual(response.choices[0].message.content, "Anthropic success response")
+            self.assertEqual(response.usage.prompt_tokens, 12)
+            self.assertEqual(response.usage.completion_tokens, 8)
+            mock_log.assert_called_once()
+            mock_release.assert_called_once_with(["res-anthropic"])
+
+    @patch("anthropic.Anthropic")
+    def test_anthropic_chat_completion_overloaded_error_releases_reservation(self, mock_anthropic_cls):
+        """Verify that when Anthropic raises OverloadedError (HTTP 529),
+        ai_chat_completion raises the exception and safely releases budget reservations.
+        """
+        mock_client = MagicMock()
+        mock_anthropic_cls.return_value = mock_client
+        mock_client.messages.create.side_effect = anthropic.OverloadedError(
+            message="Anthropic is overloaded",
+            response=MagicMock(status_code=529),
+            body={"type": "error", "error": {"type": "overloaded_error"}},
+        )
 
         with patch.object(ai_client, "resolve_model_and_provider", return_value=("claude-3-5-sonnet", "anthropic")), \
              patch.object(ai_client, "reserve_budget_for_call", return_value=["res-anthropic"]), \
@@ -264,60 +301,15 @@ class AIClientRetryTests(unittest.TestCase):
                     model="claude-3-5-sonnet",
                     messages=[{"role": "user", "content": "hi"}],
                     max_retries=2,
-                    http_client=mock_http_client,
+                    timeout=30.0,
                 )
 
-            self.assertEqual(attempts, 3, "Expected 3 attempts (1 initial + 2 retries) on Anthropic 529")
-            mock_log.assert_not_called()
-            mock_release.assert_called_once_with(["res-anthropic"])
-
-    def test_anthropic_chat_completion_transient_529_recovers_and_succeeds(self):
-        attempts = 0
-
-        def handler(request):
-            nonlocal attempts
-            attempts += 1
-            if attempts == 1:
-                return httpx2.Response(
-                    529,
-                    headers={"retry-after": "0.001"},
-                    json={"type": "error", "error": {"type": "overloaded_error", "message": "Anthropic is overloaded"}},
-                )
-            return httpx2.Response(
-                200,
-                json={
-                    "id": "msg_test",
-                    "type": "message",
-                    "role": "assistant",
-                    "content": [{"type": "text", "text": "Anthropic success response"}],
-                    "model": "claude-3-5-sonnet-20241022",
-                    "stop_reason": "end_turn",
-                    "usage": {"input_tokens": 12, "output_tokens": 8},
-                },
-            )
-
-        transport = httpx2.MockTransport(handler)
-        mock_http_client = httpx2.Client(transport=transport)
-
-        with patch.object(ai_client, "resolve_model_and_provider", return_value=("claude-3-5-sonnet", "anthropic")), \
-             patch.object(ai_client, "reserve_budget_for_call", return_value=["res-anthropic"]), \
-             patch.object(ai_client, "release_reservations") as mock_release, \
-             patch.object(ai_client, "resolve_api_key", return_value=("fake-key", "platform")), \
-             patch.object(ai_client, "log_ai_usage") as mock_log:
-
-            response = ai_client.ai_chat_completion(
-                user_id="user_123",
-                project_id=None,
-                agent="test.agent",
-                model="claude-3-5-sonnet",
-                messages=[{"role": "user", "content": "hi"}],
+            mock_anthropic_cls.assert_called_once_with(
+                api_key="fake-key",
                 max_retries=2,
-                http_client=mock_http_client,
+                timeout=30.0,
             )
-
-            self.assertEqual(attempts, 2, "Expected call to succeed on attempt 2 after recovering from 529")
-            self.assertEqual(response.choices[0].message.content, "Anthropic success response")
-            mock_log.assert_called_once()
+            mock_log.assert_not_called()
             mock_release.assert_called_once_with(["res-anthropic"])
 
     def test_ai_embeddings_persistent_429_http_attempts(self):
