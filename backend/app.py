@@ -313,6 +313,10 @@ def _trusted_project_id(data):
     return project_id if user_can_access_project(user_id, project_id) else None
 
 
+# Standardized uncaught error handlers.
+# Note: These handlers only catch uncaught exceptions (e.g. 500, 404, 405). Routes that catch
+# exceptions internally and return jsonify({'error': str(e)}) still transmit raw error strings;
+# the frontend toast sanitizer masks those from the UI.
 @app.errorhandler(500)
 def _handle_500(exc):
     app.logger.error(f"Internal Server Error: {str(exc)}", exc_info=True)
