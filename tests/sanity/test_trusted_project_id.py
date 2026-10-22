@@ -266,8 +266,7 @@ class TrustedProjectIdTests(unittest.TestCase):
             fake_response.choices = [MagicMock(message=MagicMock(content=json.dumps({"subject": "Hi", "body": "Hello"})))]
             fake_response.usage = MagicMock(prompt_tokens=10, completion_tokens=10)
 
-            with patch("core.ai_client._retry_call", side_effect=lambda fn: fn()), \
-                 patch("core.ai_client.reserve_budget_for_call", return_value=[]), \
+            with patch("core.ai_client.reserve_budget_for_call", return_value=[]), \
                  patch("core.ai_client.release_reservations"), \
                  patch("core.ai_client.log_ai_usage"), \
                  patch("openai.OpenAI") as mock_openai_cls:
@@ -288,7 +287,7 @@ class TrustedProjectIdTests(unittest.TestCase):
                 self.assertEqual(resp.status_code, 200)
 
                 # The OpenAI client must have been initialized with the platform key, NOT the victim's project key!
-                mock_openai_cls.assert_called_with(api_key="sk-platform-key-00000")
+                self.assertEqual(mock_openai_cls.call_args.kwargs["api_key"], "sk-platform-key-00000")
                 self.assertNotEqual(
                     mock_openai_cls.call_args.kwargs.get("api_key"),
                     "sk-victim-key-99999",
@@ -306,8 +305,7 @@ class TrustedProjectIdTests(unittest.TestCase):
             fake_response.choices = [MagicMock(message=MagicMock(content=json.dumps({"subject": "Hi", "body": "Hello"})))]
             fake_response.usage = MagicMock(prompt_tokens=10, completion_tokens=10)
 
-            with patch("core.ai_client._retry_call", side_effect=lambda fn: fn()), \
-                 patch("core.ai_client.reserve_budget_for_call", return_value=[]), \
+            with patch("core.ai_client.reserve_budget_for_call", return_value=[]), \
                  patch("core.ai_client.release_reservations"), \
                  patch("core.ai_client.log_ai_usage"), \
                  patch("openai.OpenAI") as mock_openai_cls:
@@ -328,7 +326,7 @@ class TrustedProjectIdTests(unittest.TestCase):
                 self.assertEqual(resp.status_code, 200)
 
                 # For an authorized project, the project's key should be used!
-                mock_openai_cls.assert_called_with(api_key="sk-my-project-key-77777")
+                self.assertEqual(mock_openai_cls.call_args.kwargs["api_key"], "sk-my-project-key-77777")
 
     def test_save_message_sanitizes_unauthorized_project_id(self):
         """POST /api/ai_assistant_messages must sanitize project_id to None if unauthorized."""

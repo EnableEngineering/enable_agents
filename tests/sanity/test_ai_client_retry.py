@@ -1,3 +1,4 @@
+import ast
 import os
 import sys
 import unittest
@@ -8,71 +9,179 @@ BACKEND_DIR = Path(__file__).resolve().parents[2] / "backend"
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
+import anthropic
 import core.ai_client as ai_client
-
-
-class MockRateLimitError(Exception):
-    status_code = 429
-
-
-class MockInternalServerError(Exception):
-    status_code = 500
-
-
-class MockAuthenticationError(Exception):
-    status_code = 401
-
-
-class MockBadRequestError(Exception):
-    status_code = 400
+import httpx
+import openai
 
 
 class AIClientRetryTests(unittest.TestCase):
     def setUp(self):
-        # Keep retries fast in unit tests
-        os.environ["AI_CLIENT_MAX_RETRIES"] = "3"
-        os.environ["AI_CLIENT_RETRY_DELAY"] = "0.001"
+        os.environ["AI_CLIENT_MAX_RETRIES"] = "2"
+        os.environ["AI_CLIENT_TIMEOUT"] = "30.0"
 
     def tearDown(self):
         os.environ.pop("AI_CLIENT_MAX_RETRIES", None)
-        os.environ.pop("AI_CLIENT_RETRY_DELAY", None)
+        os.environ.pop("AI_CLIENT_TIMEOUT", None)
 
-    def test_is_retryable_exception_identifies_transient_vs_permanent(self):
-        self.assertTrue(ai_client._is_retryable_exception(MockRateLimitError("Rate limit")))
-        self.assertTrue(ai_client._is_retryable_exception(MockInternalServerError("Server error")))
-        self.assertTrue(ai_client._is_retryable_exception(TimeoutError("Socket timeout")))
-        self.assertTrue(ai_client._is_retryable_exception(ConnectionError("Connection dropped")))
+    def test_build_client_kwargs_defaults_and_overrides(self):
+        # Default behavior: max_retries=2, timeout=30.0
+        kwargs = {}
+        client_kwargs = ai_client._build_client_kwargs("sk-test", kwargs)
+        self.assertEqual(client_kwargs["api_key"], "sk-test")
+        self.assertEqual(client_kwargs["max_retries"], 2)
+        self.assertEqual(client_kwargs["timeout"], 30.0)
+        self.assertNotIn("http_client", client_kwargs)
 
-        # Permanent errors must not be retried
-        self.assertFalse(ai_client._is_retryable_exception(MockAuthenticationError("Invalid API key")))
-        self.assertFalse(ai_client._is_retryable_exception(MockBadRequestError("Invalid model parameter")))
-        self.assertFalse(ai_client._is_retryable_exception(ValueError("Bad value")))
-        self.assertFalse(ai_client._is_retryable_exception(RuntimeError("Unknown crash")))
+        # Environment variable overrides
+        os.environ["AI_CLIENT_MAX_RETRIES"] = "4"
+        os.environ["AI_CLIENT_TIMEOUT"] = "15.0"
+        client_kwargs_env = ai_client._build_client_kwargs("sk-test", {})
+        self.assertEqual(client_kwargs_env["max_retries"], 4)
+        self.assertEqual(client_kwargs_env["timeout"], 15.0)
 
-    def test_ai_chat_completion_retries_transient_error_and_succeeds(self):
+        # Explicit kwargs override environment
+        mock_http = MagicMock()
+        client_kwargs_explicit = ai_client._build_client_kwargs(
+            "sk-test", {"max_retries": 1, "timeout": 10.0, "http_client": mock_http, "other_arg": "value"}
+        )
+        self.assertEqual(client_kwargs_explicit["max_retries"], 1)
+        self.assertEqual(client_kwargs_explicit["timeout"], 10.0)
+        self.assertEqual(client_kwargs_explicit["http_client"], mock_http)
+
+    def test_retry_timeout_does_not_exceed_gunicorn_worker_timeout(self):
+        """Ensure worst-case cumulative timeout (all attempts timing out + backoff)
+        is strictly less than Gunicorn's 120s worker timeout so workers are never killed
+        and budget reservations are safely released.
+        """
+        # Test with defaults (no env overrides)
+        os.environ.pop("AI_CLIENT_MAX_RETRIES", None)
+        os.environ.pop("AI_CLIENT_TIMEOUT", None)
+        client_kwargs = ai_client._build_client_kwargs("sk-test", {})
+        timeout = client_kwargs["timeout"]
+        max_retries = client_kwargs["max_retries"]
+        total_attempts = max_retries + 1
+        worst_case_timeout = timeout * total_attempts
+        self.assertLess(
+            worst_case_timeout,
+            120.0,
+            f"Worst-case cumulative timeout ({worst_case_timeout}s) must be < Gunicorn 120s limit",
+        )
+
+    def test_openai_chat_completion_persistent_429_http_attempts(self):
+        """Asserts total HTTP attempts on a persistent 429 does not multiply.
+        With max_retries=2, total HTTP requests must be exactly 3 (1 initial + 2 retries),
+        not 3 * 3 = 9.
+        """
         attempts = 0
 
-        def fake_create(*args, **kwargs):
+        def handler(request):
             nonlocal attempts
             attempts += 1
-            if attempts == 1:
-                raise MockRateLimitError("Rate limit hit")
-            return MagicMock(
-                usage=MagicMock(prompt_tokens=15, completion_tokens=10),
-                choices=[MagicMock(message=MagicMock(content="Hello from AI"))],
+            return httpx.Response(
+                429,
+                headers={"retry-after": "0.001"},
+                json={"error": {"message": "Rate limit exceeded", "type": "requests", "code": "rate_limit_exceeded"}},
             )
 
-        mock_openai_module = MagicMock()
-        mock_client = MagicMock()
-        mock_client.chat.completions.create.side_effect = fake_create
-        mock_openai_module.OpenAI.return_value = mock_client
+        transport = httpx.MockTransport(handler)
+        mock_http_client = httpx.Client(transport=transport)
 
         with patch.object(ai_client, "resolve_model_and_provider", return_value=("gpt-4o-mini", "openai")), \
              patch.object(ai_client, "reserve_budget_for_call", return_value=["res-1"]), \
              patch.object(ai_client, "release_reservations") as mock_release, \
              patch.object(ai_client, "resolve_api_key", return_value=("fake-key", "platform")), \
-             patch.object(ai_client, "log_ai_usage") as mock_log, \
-             patch.dict("sys.modules", {"openai": mock_openai_module}):
+             patch.object(ai_client, "log_ai_usage") as mock_log:
+
+            with self.assertRaises(openai.RateLimitError):
+                ai_client.ai_chat_completion(
+                    user_id="user_123",
+                    project_id=None,
+                    agent="test.agent",
+                    model="gpt-4o-mini",
+                    messages=[{"role": "user", "content": "hi"}],
+                    max_retries=2,
+                    http_client=mock_http_client,
+                )
+
+            self.assertEqual(attempts, 3, "Expected exactly 3 HTTP attempts (1 initial + 2 retries)")
+            mock_log.assert_not_called()
+            mock_release.assert_called_once_with(["res-1"])
+
+    def test_openai_chat_completion_zero_retries_makes_single_attempt(self):
+        attempts = 0
+
+        def handler(request):
+            nonlocal attempts
+            attempts += 1
+            return httpx.Response(
+                429,
+                headers={"retry-after": "0.001"},
+                json={"error": {"message": "Rate limit exceeded", "type": "requests"}},
+            )
+
+        transport = httpx.MockTransport(handler)
+        mock_http_client = httpx.Client(transport=transport)
+
+        with patch.object(ai_client, "resolve_model_and_provider", return_value=("gpt-4o-mini", "openai")), \
+             patch.object(ai_client, "reserve_budget_for_call", return_value=["res-1"]), \
+             patch.object(ai_client, "release_reservations") as mock_release, \
+             patch.object(ai_client, "resolve_api_key", return_value=("fake-key", "platform")), \
+             patch.object(ai_client, "log_ai_usage") as mock_log:
+
+            with self.assertRaises(openai.RateLimitError):
+                ai_client.ai_chat_completion(
+                    user_id="user_123",
+                    project_id=None,
+                    agent="test.agent",
+                    model="gpt-4o-mini",
+                    messages=[{"role": "user", "content": "hi"}],
+                    max_retries=0,
+                    http_client=mock_http_client,
+                )
+
+            self.assertEqual(attempts, 1, "Expected single attempt with max_retries=0")
+            mock_log.assert_not_called()
+            mock_release.assert_called_once_with(["res-1"])
+
+    def test_openai_chat_completion_transient_429_recovers_and_succeeds(self):
+        attempts = 0
+
+        def handler(request):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                return httpx.Response(
+                    429,
+                    headers={"retry-after": "0.001"},
+                    json={"error": {"message": "Rate limit hit", "type": "requests"}},
+                )
+            return httpx.Response(
+                200,
+                json={
+                    "id": "chatcmpl-test",
+                    "object": "chat.completion",
+                    "created": 1234567,
+                    "model": "gpt-4o-mini",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {"role": "assistant", "content": "Hello from AI"},
+                            "finish_reason": "stop",
+                        }
+                    ],
+                    "usage": {"prompt_tokens": 15, "completion_tokens": 10, "total_tokens": 25},
+                },
+            )
+
+        transport = httpx.MockTransport(handler)
+        mock_http_client = httpx.Client(transport=transport)
+
+        with patch.object(ai_client, "resolve_model_and_provider", return_value=("gpt-4o-mini", "openai")), \
+             patch.object(ai_client, "reserve_budget_for_call", return_value=["res-1"]), \
+             patch.object(ai_client, "release_reservations") as mock_release, \
+             patch.object(ai_client, "resolve_api_key", return_value=("fake-key", "platform")), \
+             patch.object(ai_client, "log_ai_usage") as mock_log:
 
             response = ai_client.ai_chat_completion(
                 user_id="user_123",
@@ -80,6 +189,8 @@ class AIClientRetryTests(unittest.TestCase):
                 agent="test.agent",
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": "hi"}],
+                max_retries=2,
+                http_client=mock_http_client,
             )
 
             self.assertEqual(attempts, 2, "Expected call to succeed on attempt 2 after 1 retry")
@@ -87,92 +198,184 @@ class AIClientRetryTests(unittest.TestCase):
             mock_log.assert_called_once()
             mock_release.assert_called_once_with(["res-1"])
 
-    def test_ai_chat_completion_fails_immediately_on_non_retryable_error(self):
+    def test_openai_chat_completion_fails_immediately_on_non_retryable_error(self):
         attempts = 0
 
-        def fake_create(*args, **kwargs):
+        def handler(request):
             nonlocal attempts
             attempts += 1
-            raise MockAuthenticationError("Incorrect API key provided")
+            return httpx.Response(
+                401,
+                json={"error": {"message": "Invalid authentication", "type": "invalid_request_error"}},
+            )
 
-        mock_openai_module = MagicMock()
-        mock_client = MagicMock()
-        mock_client.chat.completions.create.side_effect = fake_create
-        mock_openai_module.OpenAI.return_value = mock_client
+        transport = httpx.MockTransport(handler)
+        mock_http_client = httpx.Client(transport=transport)
 
         with patch.object(ai_client, "resolve_model_and_provider", return_value=("gpt-4o-mini", "openai")), \
              patch.object(ai_client, "reserve_budget_for_call", return_value=["res-1"]), \
              patch.object(ai_client, "release_reservations") as mock_release, \
              patch.object(ai_client, "resolve_api_key", return_value=("fake-key", "platform")), \
-             patch.object(ai_client, "log_ai_usage") as mock_log, \
-             patch.dict("sys.modules", {"openai": mock_openai_module}):
+             patch.object(ai_client, "log_ai_usage") as mock_log:
 
-            with self.assertRaises(MockAuthenticationError):
+            with self.assertRaises(openai.AuthenticationError):
                 ai_client.ai_chat_completion(
                     user_id="user_123",
                     project_id=None,
                     agent="test.agent",
                     model="gpt-4o-mini",
                     messages=[{"role": "user", "content": "hi"}],
+                    max_retries=3,
+                    http_client=mock_http_client,
                 )
 
-            self.assertEqual(attempts, 1, "Non-retryable error should not be retried")
+            self.assertEqual(attempts, 1, "Permanent 401 error must not be retried")
             mock_log.assert_not_called()
             mock_release.assert_called_once_with(["res-1"])
 
-    def test_ai_chat_completion_exhausts_retries_and_raises(self):
-        attempts = 0
-
-        def fake_create(*args, **kwargs):
-            nonlocal attempts
-            attempts += 1
-            raise MockRateLimitError("Persistent rate limit")
-
-        mock_openai_module = MagicMock()
+    @patch("anthropic.Anthropic")
+    def test_anthropic_chat_completion_delegates_to_sdk_and_normalizes_response(self, mock_anthropic_cls):
+        """Verify ai_chat_completion instantiates anthropic.Anthropic with resolved
+        client kwargs (max_retries, timeout) and normalizes response to OpenAI format.
+        """
         mock_client = MagicMock()
-        mock_client.chat.completions.create.side_effect = fake_create
-        mock_openai_module.OpenAI.return_value = mock_client
+        mock_anthropic_cls.return_value = mock_client
+        mock_block = MagicMock(type="text", text="Anthropic success response")
+        mock_response = MagicMock(
+            content=[mock_block],
+            usage=MagicMock(input_tokens=12, output_tokens=8),
+        )
+        mock_client.messages.create.return_value = mock_response
 
-        with patch.object(ai_client, "resolve_model_and_provider", return_value=("gpt-4o-mini", "openai")), \
-             patch.object(ai_client, "reserve_budget_for_call", return_value=["res-1"]), \
+        with patch.object(ai_client, "resolve_model_and_provider", return_value=("claude-3-5-sonnet", "anthropic")), \
+             patch.object(ai_client, "reserve_budget_for_call", return_value=["res-anthropic"]), \
              patch.object(ai_client, "release_reservations") as mock_release, \
              patch.object(ai_client, "resolve_api_key", return_value=("fake-key", "platform")), \
-             patch.object(ai_client, "log_ai_usage") as mock_log, \
-             patch.dict("sys.modules", {"openai": mock_openai_module}):
+             patch.object(ai_client, "log_ai_usage") as mock_log:
 
-            with self.assertRaises(MockRateLimitError):
+            response = ai_client.ai_chat_completion(
+                user_id="user_123",
+                project_id=None,
+                agent="test.agent",
+                model="claude-3-5-sonnet",
+                messages=[{"role": "user", "content": "hi"}],
+                max_retries=2,
+                timeout=30.0,
+            )
+
+            mock_anthropic_cls.assert_called_once_with(
+                api_key="fake-key",
+                max_retries=2,
+                timeout=30.0,
+            )
+            self.assertEqual(response.choices[0].message.content, "Anthropic success response")
+            self.assertEqual(response.usage.prompt_tokens, 12)
+            self.assertEqual(response.usage.completion_tokens, 8)
+            mock_log.assert_called_once()
+            mock_release.assert_called_once_with(["res-anthropic"])
+
+    @patch("anthropic.Anthropic")
+    def test_anthropic_chat_completion_overloaded_error_releases_reservation(self, mock_anthropic_cls):
+        """Verify that when Anthropic raises OverloadedError (HTTP 529),
+        ai_chat_completion raises the exception and safely releases budget reservations.
+        """
+        mock_client = MagicMock()
+        mock_anthropic_cls.return_value = mock_client
+        mock_client.messages.create.side_effect = anthropic.OverloadedError(
+            message="Anthropic is overloaded",
+            response=MagicMock(status_code=529),
+            body={"type": "error", "error": {"type": "overloaded_error"}},
+        )
+
+        with patch.object(ai_client, "resolve_model_and_provider", return_value=("claude-3-5-sonnet", "anthropic")), \
+             patch.object(ai_client, "reserve_budget_for_call", return_value=["res-anthropic"]), \
+             patch.object(ai_client, "release_reservations") as mock_release, \
+             patch.object(ai_client, "resolve_api_key", return_value=("fake-key", "platform")), \
+             patch.object(ai_client, "log_ai_usage") as mock_log:
+
+            with self.assertRaises(anthropic.OverloadedError):
                 ai_client.ai_chat_completion(
                     user_id="user_123",
                     project_id=None,
                     agent="test.agent",
-                    model="gpt-4o-mini",
+                    model="claude-3-5-sonnet",
                     messages=[{"role": "user", "content": "hi"}],
+                    max_retries=2,
+                    timeout=30.0,
                 )
 
-            self.assertEqual(attempts, 3, "Expected 3 attempts before raising")
+            mock_anthropic_cls.assert_called_once_with(
+                api_key="fake-key",
+                max_retries=2,
+                timeout=30.0,
+            )
             mock_log.assert_not_called()
-            mock_release.assert_called_once_with(["res-1"])
+            mock_release.assert_called_once_with(["res-anthropic"])
 
-    def test_ai_embeddings_retries_transient_error(self):
+    def test_ai_embeddings_persistent_429_http_attempts(self):
         attempts = 0
 
-        def fake_embed(*args, **kwargs):
+        def handler(request):
             nonlocal attempts
             attempts += 1
-            if attempts == 1:
-                raise MockInternalServerError("500 Internal Server Error from OpenAI")
-            return MagicMock(usage=MagicMock(prompt_tokens=8), data=[MagicMock(embedding=[0.1, 0.2])])
+            return httpx.Response(
+                429,
+                headers={"retry-after": "0.001"},
+                json={"error": {"message": "Rate limit exceeded", "type": "requests"}},
+            )
 
-        mock_openai_module = MagicMock()
-        mock_client = MagicMock()
-        mock_client.embeddings.create.side_effect = fake_embed
-        mock_openai_module.OpenAI.return_value = mock_client
+        transport = httpx.MockTransport(handler)
+        mock_http_client = httpx.Client(transport=transport)
 
         with patch.object(ai_client, "reserve_budget_for_call", return_value=["res-embed"]), \
              patch.object(ai_client, "release_reservations") as mock_release, \
              patch.object(ai_client, "resolve_api_key", return_value=("fake-key", "platform")), \
-             patch.object(ai_client, "log_ai_usage") as mock_log, \
-             patch.dict("sys.modules", {"openai": mock_openai_module}):
+             patch.object(ai_client, "log_ai_usage") as mock_log:
+
+            with self.assertRaises(openai.RateLimitError):
+                ai_client.ai_embeddings(
+                    user_id="user_123",
+                    project_id=None,
+                    agent="test.embeddings",
+                    model="text-embedding-ada-002",
+                    input="Sample text",
+                    max_retries=2,
+                    http_client=mock_http_client,
+                )
+
+            self.assertEqual(attempts, 3, "Expected 3 attempts (1 initial + 2 retries) on persistent 429")
+            mock_log.assert_not_called()
+            mock_release.assert_called_once_with(["res-embed"])
+
+    def test_ai_embeddings_transient_500_recovers_and_succeeds(self):
+        attempts = 0
+
+        def handler(request):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                return httpx.Response(
+                    500,
+                    headers={"retry-after": "0.001"},
+                    json={"error": {"message": "Internal error", "type": "internal_server_error"}},
+                )
+            return httpx.Response(
+                200,
+                json={
+                    "object": "list",
+                    "data": [{"object": "embedding", "index": 0, "embedding": [0.1, 0.2, 0.3]}],
+                    "model": "text-embedding-ada-002",
+                    "usage": {"prompt_tokens": 8, "total_tokens": 8},
+                },
+            )
+
+        transport = httpx.MockTransport(handler)
+        mock_http_client = httpx.Client(transport=transport)
+
+        with patch.object(ai_client, "reserve_budget_for_call", return_value=["res-embed"]), \
+             patch.object(ai_client, "release_reservations") as mock_release, \
+             patch.object(ai_client, "resolve_api_key", return_value=("fake-key", "platform")), \
+             patch.object(ai_client, "log_ai_usage") as mock_log:
 
             response = ai_client.ai_embeddings(
                 user_id="user_123",
@@ -180,11 +383,66 @@ class AIClientRetryTests(unittest.TestCase):
                 agent="test.embeddings",
                 model="text-embedding-ada-002",
                 input="Sample text",
+                max_retries=2,
+                http_client=mock_http_client,
             )
 
-            self.assertEqual(attempts, 2)
+            self.assertEqual(attempts, 2, "Expected embeddings call to succeed on attempt 2")
+            self.assertEqual(response.data[0].embedding, [0.1, 0.2, 0.3])
             mock_log.assert_called_once()
             mock_release.assert_called_once_with(["res-embed"])
+
+
+class GenerateEmailValidationTests(unittest.TestCase):
+    def _get_generate_email_function(self):
+        app_file = BACKEND_DIR / "app.py"
+        source = app_file.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+
+        target_nodes = [
+            node for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "generate_email_content"
+        ]
+        module_ast = ast.Module(body=target_nodes, type_ignores=[])
+        code = compile(module_ast, filename="<ast_helpers>", mode="exec")
+        ns = {"os": MagicMock(), "g": MagicMock()}
+        exec(code, ns)
+        return ns["generate_email_content"]
+
+    def test_generate_email_content_raises_on_empty_reply(self):
+        """When the LLM returns an empty string, safe_parse_json returns {},
+        and generate_email_content must raise ValueError rather than returning {}.
+        """
+        fn = self._get_generate_email_function()
+        with patch("core.settings.get_response_language_instruction", return_value=""), \
+             patch("core.ai_client.ai_chat_completion") as mock_ai:
+            mock_ai.return_value = MagicMock(choices=[MagicMock(message=MagicMock(content=""))])
+            with self.assertRaises(ValueError):
+                fn({"name": "Acme"}, "Alex")
+
+    def test_generate_email_content_raises_on_missing_subject_or_body(self):
+        fn = self._get_generate_email_function()
+        with patch("core.settings.get_response_language_instruction", return_value=""), \
+             patch("core.ai_client.ai_chat_completion") as mock_ai:
+            # Missing body
+            mock_ai.return_value = MagicMock(choices=[MagicMock(message=MagicMock(content='{"subject": "Hello"}'))])
+            with self.assertRaises(ValueError):
+                fn({"name": "Acme"}, "Alex")
+
+            # Missing subject
+            mock_ai.return_value = MagicMock(choices=[MagicMock(message=MagicMock(content='{"body": "Hello world"}'))])
+            with self.assertRaises(ValueError):
+                fn({"name": "Acme"}, "Alex")
+
+    def test_generate_email_content_succeeds_on_valid_payload(self):
+        fn = self._get_generate_email_function()
+        with patch("core.settings.get_response_language_instruction", return_value=""), \
+             patch("core.ai_client.ai_chat_completion") as mock_ai:
+            mock_ai.return_value = MagicMock(
+                choices=[MagicMock(message=MagicMock(content='{"subject": "Idea for Acme", "body": "Hi there"}'))]
+            )
+            result = fn({"name": "Acme"}, "Alex")
+            self.assertEqual(result, {"subject": "Idea for Acme", "body": "Hi there"})
 
 
 class SafeParseJsonAndUserIdentityTests(unittest.TestCase):
@@ -285,4 +543,3 @@ class SafeParseJsonAndUserIdentityTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
