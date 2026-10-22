@@ -266,8 +266,7 @@ class TrustedProjectIdTests(unittest.TestCase):
             fake_response.choices = [MagicMock(message=MagicMock(content=json.dumps({"subject": "Hi", "body": "Hello"})))]
             fake_response.usage = MagicMock(prompt_tokens=10, completion_tokens=10)
 
-            with patch("core.ai_client._retry_call", side_effect=lambda fn: fn()), \
-                 patch("core.ai_client.reserve_budget_for_call", return_value=[]), \
+            with patch("core.ai_client.reserve_budget_for_call", return_value=[]), \
                  patch("core.ai_client.release_reservations"), \
                  patch("core.ai_client.log_ai_usage"), \
                  patch("openai.OpenAI") as mock_openai_cls:
@@ -306,8 +305,7 @@ class TrustedProjectIdTests(unittest.TestCase):
             fake_response.choices = [MagicMock(message=MagicMock(content=json.dumps({"subject": "Hi", "body": "Hello"})))]
             fake_response.usage = MagicMock(prompt_tokens=10, completion_tokens=10)
 
-            with patch("core.ai_client._retry_call", side_effect=lambda fn: fn()), \
-                 patch("core.ai_client.reserve_budget_for_call", return_value=[]), \
+            with patch("core.ai_client.reserve_budget_for_call", return_value=[]), \
                  patch("core.ai_client.release_reservations"), \
                  patch("core.ai_client.log_ai_usage"), \
                  patch("openai.OpenAI") as mock_openai_cls:
