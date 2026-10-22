@@ -8,13 +8,103 @@ from datetime import datetime
 from uuid import uuid4
 import json
 import os
+from typing import Any, Dict, List, Optional
 
-from flask import g, jsonify, request, current_app
+from flask import g, jsonify, request
 from werkzeug.utils import secure_filename
 
 from core.auth import user_can_access_project
 from core.database import db
 from .models import CMProject, CMDocument, CMKnowledgeGraph, CMGeneratedContent, CMConversation
+
+CONTENT_MARKETING_UPLOAD_FOLDER = os.environ.get(
+    "CONTENT_MARKETING_UPLOAD_FOLDER",
+    os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+        "data",
+        "content_marketing_uploads",
+    ),
+)
+CONTENT_MARKETING_ALLOWED_EXTENSIONS = {"pdf", "docx", "txt", "xlsx", "html", "md"}
+os.makedirs(CONTENT_MARKETING_UPLOAD_FOLDER, exist_ok=True)
+
+
+def _extract_content(file_path: str, file_type: str) -> str:
+    if file_type == "pdf":
+        import fitz
+
+        with fitz.open(file_path) as document:
+            return "\n".join(page.get_text() for page in document)
+    if file_type == "docx":
+        from docx import Document
+
+        document = Document(file_path)
+        return "\n".join(paragraph.text for paragraph in document.paragraphs)
+    if file_type in {"txt", "md"}:
+        with open(file_path, "r", encoding="utf-8") as source_file:
+            return source_file.read()
+    if file_type == "html":
+        from bs4 import BeautifulSoup
+
+        with open(file_path, "r", encoding="utf-8") as source_file:
+            return BeautifulSoup(source_file.read(), "html.parser").get_text(" ")
+    if file_type == "xlsx":
+        import openpyxl
+
+        workbook = openpyxl.load_workbook(file_path, data_only=True, read_only=True)
+        try:
+            return "\n".join(
+                "\t".join(str(value) for value in row if value is not None)
+                for sheet in workbook.worksheets
+                for row in sheet.iter_rows(values_only=True)
+                if any(value is not None for value in row)
+            )
+        finally:
+            workbook.close()
+    return ""
+
+
+def _analyze_domain(
+    documents: List[str],
+    user_id: str,
+    platform_project_id: Optional[str],
+    fallback_industry: Optional[str] = None,
+) -> Dict[str, Any]:
+    fallback = {
+        "industry": fallback_industry or "General",
+        "sector": "Unknown",
+        "function": "Marketing",
+        "role": "Marketing Manager",
+        "target_audience": "Business Professionals",
+        "value_proposition": "",
+        "tone": "professional",
+        "key_themes": [],
+    }
+    try:
+        from core.ai_client import get_langchain_llm, log_langchain_usage
+
+        llm, key_source, model = get_langchain_llm(
+            user_id, platform_project_id, model="gpt-4", temperature=0
+        )
+        prompt = f"""Analyze these business documents and return one JSON object with
+industry, sector, function, role, target_audience, value_proposition, tone,
+and key_themes (an array of strings). Use concise values.
+
+Documents:
+{' '.join(documents[:3])[:2000]}"""
+        response = llm.invoke(prompt)
+        log_langchain_usage(
+            response, user_id, platform_project_id,
+            "content_marketing.analyze_documents", model, key_source,
+        )
+        response_text = str(response.content).strip()
+        start, end = response_text.find("{"), response_text.rfind("}")
+        if start >= 0 and end > start:
+            result = json.loads(response_text[start:end + 1])
+            return {**fallback, **result}
+    except Exception:
+        pass
+    return fallback
 
 
 def _owned_cm_project_or_none(project_id: str):
@@ -141,96 +231,83 @@ def get_project(project_id: str):
 # Document Operations
 # =============================================================================
 
-def upload_documents(analyzer=None, upload_folder=None):
-    """
-    Upload documents to project.
-    Extracts text and creates initial knowledge graph.
-
-    Args:
-        analyzer: DomainSpecializationAnalyzer instance (passed from app.py)
-        upload_folder: Path to upload folder (passed from app.py)
-    """
-    project_id = request.form.get('project_id')
+def upload_documents():
+    project_id = request.form.get("project_id")
     if not project_id:
-        return jsonify({'success': False, 'error': 'project_id required'}), 400
+        return jsonify({"success": False, "error": "project_id required"}), 400
 
-    uploaded_files = request.files.getlist('files')
+    uploaded_files = request.files.getlist("files")
     if not uploaded_files:
-        return jsonify({'success': False, 'error': 'No files provided'}), 400
+        return jsonify({"success": False, "error": "No files provided"}), 400
 
-    # Verify project exists and belongs to the caller
     project = _owned_cm_project_or_none(project_id)
     if not project:
-        return jsonify({'success': False, 'error': 'Project not found'}), 404
+        return jsonify({"success": False, "error": "Project not found"}), 404
 
-    extracted_documents = []
     doc_ids = []
+    document_texts = []
+    try:
+        for uploaded_file in uploaded_files:
+            if not uploaded_file.filename:
+                continue
+            filename = secure_filename(uploaded_file.filename)
+            if not filename or "." not in filename:
+                continue
+            file_type = filename.rsplit(".", 1)[-1].lower()
+            if file_type not in CONTENT_MARKETING_ALLOWED_EXTENSIONS:
+                continue
 
-    for file in uploaded_files:
-        if not file.filename:
-            continue
-
-        filename = secure_filename(file.filename)
-        file_type = filename.split('.')[-1].lower()
-
-        # Save file
-        file_path = os.path.join(upload_folder, project_id, filename)
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-        file.save(file_path)
-
-        # Extract content
-        extracted_content = ""
-        if analyzer:
-            try:
-                extracted_content = analyzer.extract_text(file_path)
-            except Exception:
-                pass
-
-        # Create document record
-        doc_id = f"doc_{uuid4().hex[:12]}"
-        doc = CMDocument(
-            doc_id=doc_id,
-            project_id=project_id,
-            file_name=filename,
-            file_type=file_type,
-            file_path=file_path,
-            file_size=os.path.getsize(file_path),
-            document_type=file_type,
-            extracted_content=extracted_content
-        )
-        db.session.add(doc)
-        doc_ids.append(doc_id)
-        extracted_documents.append({
-            'doc_id': doc_id,
-            'file_name': filename,
-            'content_preview': extracted_content[:500] if extracted_content else ''
-        })
-
-    db.session.commit()
-
-    # Build knowledge graph if we have documents
-    if extracted_documents and analyzer:
-        try:
-            all_content = "\n\n".join([d.get('content_preview', '') for d in extracted_documents])
-            kg_data = analyzer.build_knowledge_graph(all_content) if hasattr(analyzer, 'build_knowledge_graph') else {}
-
-            kg = CMKnowledgeGraph(
-                kg_id=f"kg_{uuid4().hex[:12]}",
-                project_id=project_id,
+            safe_project_id = secure_filename(project_id)
+            file_path = os.path.join(
+                CONTENT_MARKETING_UPLOAD_FOLDER, safe_project_id, filename
             )
-            kg.kg_data = kg_data
-            kg.entities = len(kg_data.get('entities', []))
-            kg.relationships = len(kg_data.get('relationships', []))
-            db.session.add(kg)
-            db.session.commit()
-        except Exception:
-            pass
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            uploaded_file.save(file_path)
+            extracted_content = _extract_content(file_path, file_type)
+            doc_id = f"doc_{uuid4().hex[:12]}"
+            db.session.add(
+                CMDocument(
+                    doc_id=doc_id,
+                    project_id=project_id,
+                    file_name=filename,
+                    file_type=file_type,
+                    file_path=file_path,
+                    file_size=os.path.getsize(file_path),
+                    document_type=file_type,
+                    extracted_content=extracted_content,
+                )
+            )
+            doc_ids.append(doc_id)
+            document_texts.append(extracted_content)
+
+        domain_context = _analyze_domain(
+            document_texts, g.user_id, project.platform_project_id, project.industry
+        )
+        knowledge_graph_id = f"kg_{uuid4().hex[:12]}"
+        entities = domain_context.get("key_themes") or []
+        graph_data = {
+            "entities": entities,
+            "relationships": [],
+            "domain_context": domain_context,
+            "documents_count": len(doc_ids),
+        }
+        graph = CMKnowledgeGraph(kg_id=knowledge_graph_id, project_id=project_id)
+        graph.kg_data = graph_data
+        graph.entities = len(entities)
+        graph.relationships = 0
+        db.session.add(graph)
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(exc)}), 500
 
     return jsonify({
-        'success': True,
-        'uploaded_count': len(doc_ids),
-        'documents': extracted_documents
-    })
+        "success": True,
+        "uploaded_files": len(doc_ids),
+        "document_ids": doc_ids,
+        "knowledge_graph_id": knowledge_graph_id,
+        "domain_specialization": domain_context,
+    }), 201
 
 
 def list_documents(project_id: str):
@@ -242,6 +319,21 @@ def list_documents(project_id: str):
         "success": True,
         "documents": [d.to_dict() for d in docs]
     })
+
+
+def delete_document(doc_id: str):
+    document = CMDocument.query.filter_by(doc_id=doc_id).first()
+    if not document or not _owned_cm_project_or_none(document.project_id):
+        return jsonify({"success": False, "error": "Document not found"}), 404
+    try:
+        if document.file_path and os.path.exists(document.file_path):
+            os.remove(document.file_path)
+        db.session.delete(document)
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(exc)}), 500
+    return jsonify({"success": True}), 200
 
 
 # =============================================================================
@@ -264,6 +356,104 @@ def get_knowledge_graph(project_id: str):
         "relationships": kg.relationships,
         "created_at": kg.created_at.isoformat() if kg.created_at else None
     })
+
+
+def generate_content():
+    data = request.get_json(silent=True) or {}
+    project_id = data.get("project_id")
+    if not project_id:
+        return jsonify({"success": False, "error": "project_id required"}), 400
+
+    project = _owned_cm_project_or_none(project_id)
+    if not project:
+        return jsonify({"success": False, "error": "Project not found"}), 404
+
+    documents = CMDocument.query.filter_by(project_id=project_id).all()
+    document_texts = [doc.extracted_content for doc in documents if doc.extracted_content]
+    if not document_texts:
+        return jsonify({"success": False, "error": "No documents found in project"}), 400
+
+    knowledge_graph = (
+        CMKnowledgeGraph.query.filter_by(project_id=project_id)
+        .order_by(CMKnowledgeGraph.created_at.desc())
+        .first()
+    )
+    try:
+        from core.settings import get_response_language_instruction
+        from .rag_content_generator import RAGContentGenerator
+
+        result = RAGContentGenerator(g.user_id, project.platform_project_id).generate(
+            documents=document_texts,
+            knowledge_graph=knowledge_graph.kg_data if knowledge_graph else None,
+            channel=data.get("channel", "linkedin"),
+            content_type=data.get("content_type", "post"),
+            domain_context=project.industry,
+            user_context=data.get("context", ""),
+            language_instruction=get_response_language_instruction(g.user_id),
+        )
+        content_id = f"content_{uuid4().hex[:12]}"
+        content = CMGeneratedContent(
+            content_id=content_id,
+            project_id=project_id,
+            channel=result["metadata"]["channel"],
+            content_type=result["metadata"]["content_type"],
+            content=result["content"],
+        )
+        content.source_docs = [doc.doc_id for doc in documents]
+        content.domain_context = {
+            "industry": project.industry,
+            "prompt": data.get("context", ""),
+            "sources_used": result["metadata"]["sources_used"],
+        }
+        db.session.add(content)
+        db.session.commit()
+        return jsonify({"success": True, "content_id": content_id, **result}), 201
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(exc)}), 500
+
+
+def chat():
+    data = request.get_json(silent=True) or {}
+    project_id = data.get("project_id")
+    message = data.get("message")
+    if not project_id or not message:
+        return jsonify({"success": False, "error": "project_id and message required"}), 400
+
+    project = _owned_cm_project_or_none(project_id)
+    if not project:
+        return jsonify({"success": False, "error": "Project not found"}), 404
+
+    documents = CMDocument.query.filter_by(project_id=project_id).limit(10).all()
+    knowledge_graph = (
+        CMKnowledgeGraph.query.filter_by(project_id=project_id)
+        .order_by(CMKnowledgeGraph.created_at.desc())
+        .first()
+    )
+    try:
+        from core.settings import get_response_language_instruction
+        from .rag_content_generator import RAGContentGenerator
+
+        response = RAGContentGenerator(g.user_id, project.platform_project_id).chat_response(
+            user_message=message,
+            documents=[doc.extracted_content for doc in documents if doc.extracted_content],
+            knowledge_graph=knowledge_graph.kg_data if knowledge_graph else None,
+            language_instruction=get_response_language_instruction(g.user_id),
+        )
+        message_id = f"msg_{uuid4().hex[:12]}"
+        conversation = CMConversation(
+            msg_id=message_id,
+            project_id=project_id,
+            user_message=message,
+            agent_response=response,
+        )
+        conversation.context = {"project_name": project.project_name, "doc_count": len(documents)}
+        db.session.add(conversation)
+        db.session.commit()
+        return jsonify({"success": True, "response": response, "message_id": message_id}), 200
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(exc)}), 500
 
 
 # =============================================================================
