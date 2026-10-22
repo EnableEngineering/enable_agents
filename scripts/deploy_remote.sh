@@ -4,13 +4,22 @@
 #
 #     ./scripts/deploy_remote.sh
 #
-# What it does (all on the VM, over gcloud ssh):
-#   1. Fast-forwards the VM checkout to origin/local-preview.
+# What it does:
+#   0. Builds the backend/frontend images LOCALLY and pushes them to GCR
+#      (scripts/build_and_push.sh) - the VM never builds anything anymore.
+#      This used to build on the VM itself, which competes with gunicorn/
+#      Postgres/Redis for the VM's 4GB RAM during every deploy and has
+#      pushed it into heavy swap before. Skip with DEPLOY_SKIP_BUILD=1 if
+#      you already pushed images yourself (e.g. a specific tag via
+#      DEPLOY_IMAGE_TAG).
+#   Then, on the VM (over gcloud ssh):
+#   1. Fast-forwards the VM checkout to origin/local-preview (for the updated
+#      docker-compose.yml, migrations, and nginx config - not for building).
 #   2. Tags the currently-running backend/celery images :previous, so a bad
-#      build can be undone without rebuilding anything.
-#   3. Stops celery (frees RAM - the VM is 4GB), builds all four images
-#      (backend-remote, celery-worker-remote and celery-beat-remote each build
-#      their OWN image from backend/Dockerfile; skipping one leaves it stale).
+#      deploy can be undone without re-pulling anything.
+#   3. Stops celery (frees RAM), pulls the just-pushed images (one backend
+#      image serves backend-remote, backend-remote-b, celery-worker-remote
+#      and celery-beat-remote - they differ only by `command:`).
 #   4. Runs `flask db upgrade` against the new image BEFORE cutting traffic
 #      over. Migrations must therefore be additive/backward compatible: if the
 #      new build is rolled back, the OLD code has to keep working against the
@@ -34,7 +43,8 @@
 # a few seconds, much shorter with --preload - see backend/gunicorn_conf.py).
 #
 # Overrides: DEPLOY_INSTANCE, DEPLOY_ZONE, DEPLOY_READY_TIMEOUT (seconds),
-# DEPLOY_ROLLING (1|0), DEPLOY_MIN_FREE_MB.
+# DEPLOY_ROLLING (1|0), DEPLOY_MIN_FREE_MB, DEPLOY_SKIP_BUILD (1|0),
+# DEPLOY_IMAGE_TAG (defaults to the current git short SHA).
 set -euo pipefail
 
 INSTANCE="${DEPLOY_INSTANCE:-instance-20260419-210128}"
@@ -42,6 +52,8 @@ ZONE="${DEPLOY_ZONE:-us-east1-b}"
 READY_TIMEOUT="${DEPLOY_READY_TIMEOUT:-300}"
 ROLLING="${DEPLOY_ROLLING:-1}"
 MIN_FREE_MB="${DEPLOY_MIN_FREE_MB:-900}"
+SKIP_BUILD="${DEPLOY_SKIP_BUILD:-0}"
+IMAGE_TAG="${DEPLOY_IMAGE_TAG:-$(git rev-parse --short HEAD)}"
 
 # Warn if the commit you have checked out isn't what's about to ship.
 git fetch -q origin local-preview 2>/dev/null || true
@@ -49,6 +61,13 @@ AHEAD="$(git rev-list --count origin/local-preview..HEAD 2>/dev/null || echo 0)"
 if [ "$AHEAD" != "0" ]; then
   echo "WARNING: your local HEAD is $AHEAD commit(s) ahead of origin/local-preview." >&2
   echo "         The VM deploys origin/local-preview - push first if you want those shipped." >&2
+fi
+
+if [ "$SKIP_BUILD" != "1" ]; then
+  echo "==> building and pushing images locally (tag: $IMAGE_TAG)"
+  "$(dirname "$0")/build_and_push.sh" "$IMAGE_TAG"
+else
+  echo "==> DEPLOY_SKIP_BUILD=1 - assuming gcr.io/enable-agents/{backend,frontend}:latest are already pushed"
 fi
 
 # The remote steps are shipped to the VM as a FILE (base64 in --command), not
@@ -153,11 +172,11 @@ drain() {  # $1 = port (8000|8001|all), $2 = down|up
   sudo systemctl reload nginx
 }
 
-echo "==> stopping celery (free RAM for the build)"
+echo "==> stopping celery"
 sudo docker compose stop celery-worker-remote celery-beat-remote >/dev/null
 
-echo "==> building images"
-sudo docker compose build backend-remote backend-remote-b celery-worker-remote celery-beat-remote frontend-remote
+echo "==> pulling images (built and pushed locally, not on this VM)"
+sudo docker compose pull backend-remote backend-remote-b celery-worker-remote celery-beat-remote frontend-remote
 
 echo "==> running migrations against the new image"
 # -T and </dev/null: without them `docker compose run` reads the rest of THIS

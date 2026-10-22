@@ -323,9 +323,10 @@ services:
     # A restart (deploy) lets gunicorn finish in-flight requests - AI calls can
     # take a minute - before Docker kills it (default grace is only 10s).
     stop_grace_period: 75s
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    # Built and pushed locally (scripts/build_and_push.sh), not on the VM -
+    # see docs/deploy.md. The VM only ever pulls. Override the tag with
+    # BACKEND_IMAGE=gcr.io/enable-agents/backend:<sha> for a pinned deploy.
+    image: ${BACKEND_IMAGE:-gcr.io/enable-agents/backend:latest}
     container_name: enable_agents_backend_remote
     command: >
       gunicorn "app:app" --bind 0.0.0.0:8000 --workers ${BACKEND_WORKERS:-2} --timeout 120 --graceful-timeout 70
@@ -396,9 +397,9 @@ services:
 
   celery-worker-remote:
     profiles: ["remote"]
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    # Same image as backend-remote (identical Dockerfile/context, just a
+    # different command below) - built and pushed locally, see backend-remote.
+    image: ${BACKEND_IMAGE:-gcr.io/enable-agents/backend:latest}
     container_name: enable_agents_celery_remote
     command: celery -A core.celery_app worker --loglevel=info --concurrency=4
     env_file:
@@ -420,9 +421,8 @@ services:
 
   celery-beat-remote:
     profiles: ["remote"]
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    # Same image as backend-remote - see that service's comment.
+    image: ${BACKEND_IMAGE:-gcr.io/enable-agents/backend:latest}
     container_name: enable_agents_beat_remote
     command: celery -A core.celery_app beat --loglevel=info --scheduler celery.beat:PersistentScheduler
     env_file:
@@ -444,11 +444,9 @@ services:
 
   frontend-remote:
     profiles: ["remote"]
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        REACT_APP_API_URL: "${PUBLIC_URL:-http://localhost}"
+    # Built and pushed locally (scripts/build_and_push.sh) with
+    # REACT_APP_API_URL baked in at build time - see docs/deploy.md.
+    image: ${FRONTEND_IMAGE:-gcr.io/enable-agents/frontend:latest}
     container_name: enable_agents_frontend_remote
     depends_on:
       backend-remote:
