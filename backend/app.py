@@ -292,6 +292,27 @@ def _surface_budget_block(response):
 def _handle_budget_exceeded(exc):
     return jsonify(exc.to_dict()), 402
 
+
+def _trusted_project_id(data):
+    """Returns data.get('project_id') or data.get('projectId') only if the
+    authenticated user (g.user_id) has access to it, and None otherwise.
+    Prevents untrusted callers from billing AI calls or using custom API keys
+    from another team's project."""
+    if not isinstance(data, dict):
+        return None
+    raw_pid = data.get('project_id') or data.get('projectId') or None
+    if not raw_pid or not isinstance(raw_pid, str):
+        return None
+    project_id = raw_pid.strip()
+    if not project_id:
+        return None
+    user_id = getattr(g, 'user_id', None)
+    if not user_id:
+        return None
+    from core.auth import user_can_access_project
+    return project_id if user_can_access_project(user_id, project_id) else None
+
+
 GOOGLE_CLIENT_ID = (os.getenv('GOOGLE_CLIENT_ID') or '').strip()
 GOOGLE_CLIENT_SECRET = (os.getenv('GOOGLE_CLIENT_SECRET') or '').strip()
 GOOGLE_REDIRECT_URI = (os.getenv('GOOGLE_REDIRECT_URI') or 'http://localhost:5000/auth/google/callback').strip()
@@ -1061,10 +1082,6 @@ def get_chrome_history_path():
 def identify_saas_tools_with_openai(history_data, user_id=None, project_id=None):
     """Use OpenAI to identify which URLs are web applications, tools, SaaS, PaaS, or productivity platforms"""
     try:
-        if not user_id:
-            user_id = getattr(g, 'user_id', None)
-        if not project_id:
-            project_id = getattr(g, 'project_id', None)
         # Extract URLs for analysis (limit to avoid token limits)
         urls_to_analyze = [item['url'] for item in history_data[:50]]  # Analyze top 50 URLs
         urls_text = "\n".join([f"{i+1}. {url}" for i, url in enumerate(urls_to_analyze)])
@@ -1378,10 +1395,6 @@ def extract_unique_companies(json_data):
 def get_company_skills_from_openai(company_list, user_id=None, project_id=None):
     """Send company list to OpenAI and get required skills for each company"""
     try:
-        if not user_id:
-            user_id = getattr(g, 'user_id', None)
-        if not project_id:
-            project_id = getattr(g, 'project_id', None)
         companies_text = ", ".join(company_list)
         
         # Simplified prompt with clearer instructions
@@ -1538,10 +1551,6 @@ def extract_skills_manually(companies_text, response_text):
 def enrich_json_with_openai(json_data, user_id=None, project_id=None):
     """Enhanced function: Extract companies -> Get skills from OpenAI -> Enrich original data"""
     try:
-        if not user_id:
-            user_id = getattr(g, 'user_id', None)
-        if not project_id:
-            project_id = getattr(g, 'project_id', None)
         # Step 1: Extract unique company names from JSON data
         unique_companies = extract_unique_companies(json_data)
         
@@ -1902,10 +1911,6 @@ def extract_keywords_from_chunks(page_chunks):
 def parse_simple_query_enhanced(user_query, user_id=None, project_id=None):
     """Enhanced keyword extraction using OpenAI function calling with special commands support"""
     try:
-        if not user_id:
-            user_id = getattr(g, 'user_id', None)
-        if not project_id:
-            project_id = getattr(g, 'project_id', None)
         # Define the function schema for OpenAI with special commands
         extract_function = {
             "name": "extract_search_criteria",
@@ -3718,10 +3723,6 @@ def clean_product_info(product_info):
 
 def generate(selected_chunks, query, user_id=None, project_id=None):
     from core.ai_client import ai_chat_completion
-    if not user_id:
-        user_id = getattr(g, 'user_id', None)
-    if not project_id:
-        project_id = getattr(g, 'project_id', None)
     context = "\n\n".join(selected_chunks)
     prompt = f"Answer the following query based on the provided text:\n\n{context}\n\nQuery: {query}\nAnswer:"
 
@@ -3935,8 +3936,9 @@ def openai_chat():
         temperature = data.get('temperature', 0.7)
         
         from core.ai_client import ai_chat_completion
+        project_id = _trusted_project_id(data)
         response = ai_chat_completion(
-            user_id=g.user_id, project_id=data.get('project_id'), agent="matchmaking.openai_chat",
+            user_id=g.user_id, project_id=project_id, agent="matchmaking.openai_chat",
             model="gpt-3.5-turbo",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=max_tokens,
@@ -4062,7 +4064,7 @@ def rag_test():
             max_chunk_length = 1000  # characters
             selected_chunks = [chunk[:max_chunk_length] for chunk in selected_chunks[:max_chunks]]
 
-            project_id = data.get('project_id') or getattr(g, 'project_id', None)
+            project_id = _trusted_project_id(data)
             answer = generate(selected_chunks, query, user_id=getattr(g, 'user_id', None), project_id=project_id)
 
             return jsonify({
@@ -4464,7 +4466,7 @@ def upsert_ai_assistant_message():
     role = data.get('role')
     text = data.get('text', '')
     tool_result = data.get('toolResult')
-    project_id = data.get('project_id') or None
+    project_id = _trusted_project_id(data)
     if not message_id or role not in ('user', 'assistant'):
         return jsonify({"success": False, "error": "id and a valid role are required"}), 400
 
@@ -4553,7 +4555,7 @@ def chat_api():
     max_chunk_length = 1000  # characters
     selected_chunks = [chunk[:max_chunk_length] for chunk in selected_chunks[:max_chunks]]
 
-    project_id = data.get('project_id') or getattr(g, 'project_id', None)
+    project_id = _trusted_project_id(data)
     answer = generate(selected_chunks, query, user_id=getattr(g, 'user_id', None), project_id=project_id)
 
     return jsonify({"answer": answer})
@@ -4766,7 +4768,7 @@ def simple_search():
         user_query = data.get('query', '').strip()
         json_data = data.get('data', [])
         user_id = getattr(g, 'user_id', None) or data.get('user_id', 'default_user')
-        project_id = data.get('project_id') or getattr(g, 'project_id', None)
+        project_id = _trusted_project_id(data)
         
         if not user_query:
             return jsonify({'success': False, 'error': 'No search query provided'}), 400
@@ -5364,7 +5366,7 @@ def enrich_with_openai():
             }), 400
         
         # Enrich data using the new workflow
-        project_id = request_data.get('project_id') or getattr(g, 'project_id', None)
+        project_id = _trusted_project_id(request_data)
         result = enrich_json_with_openai(json_data, user_id=getattr(g, 'user_id', None), project_id=project_id)
         
         return jsonify(result)
@@ -5589,7 +5591,6 @@ def read_chrome_history_safe():
         tools_result = identify_saas_tools_with_openai(
             history_data_for_ai,
             user_id=getattr(g, 'user_id', None),
-            project_id=getattr(g, 'project_id', None),
         )
         for i, item in enumerate(unique_domains):
             if tools_result['success'] and i in tools_result['mapping']:
@@ -6083,7 +6084,7 @@ Return JSON only, in exactly this shape:
 
     try:
         from core.ai_client import ai_chat_completion, safe_parse_json
-        project_id = data.get('project_id') or getattr(g, 'project_id', None)
+        project_id = _trusted_project_id(data)
         response = ai_chat_completion(
             user_id=getattr(g, 'user_id', None), project_id=project_id, agent="task_router.route_task",
             model=os.getenv('OPENAI_MODEL', 'gpt-4o-mini'),
@@ -6126,7 +6127,7 @@ def extract_with_kg_rag():
         edges = data.get('edges', [])
         query = data.get('query', '')
         include_context = data.get('include_context', False)  # Optional: return chunks and KG context
-        project_id = data.get('project_id')
+        project_id = _trusted_project_id(data)
 
         if not documents or not query:
             return jsonify({
@@ -7163,11 +7164,6 @@ def generate_email_content(business, sender_name, user_id=None, project_id=None)
     import os
     from openai import OpenAI
 
-    if not user_id:
-        user_id = getattr(g, 'user_id', None)
-    if not project_id:
-        project_id = getattr(g, 'project_id', None)
-
     language_instruction = ""
     if user_id:
         from core.settings import get_response_language_instruction
@@ -7247,7 +7243,7 @@ def generate_email():
         data = request.get_json() or {}
         business = data.get('business', {})
         sender_name = data.get('sender_name', 'Alex')
-        project_id = data.get('project_id') or getattr(g, 'project_id', None)
+        project_id = _trusted_project_id(data)
         
         result = generate_email_content(business, sender_name, user_id=g.user_id, project_id=project_id)
         return jsonify(result), 200
