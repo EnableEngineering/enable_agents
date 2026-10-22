@@ -1753,28 +1753,16 @@ def extract_keywords_from_chunks(page_chunks):
 
 def get_embeddings(phrase, user_id=None, project_id=None):
     from core.ai_client import ai_embeddings
-    if not user_id:
-        user_id = getattr(g, 'user_id', None)
-    if not project_id:
-        project_id = getattr(g, 'project_id', None)
     response = ai_embeddings(user_id=user_id, project_id=project_id, agent="document_intelligence.embed", model="text-embedding-ada-002", input=phrase)
     return response.data[0].embedding
 
 def get_embeddings_batch(phrases, user_id=None, project_id=None):
     from core.ai_client import ai_embeddings
-    if not user_id:
-        user_id = getattr(g, 'user_id', None)
-    if not project_id:
-        project_id = getattr(g, 'project_id', None)
     response = ai_embeddings(user_id=user_id, project_id=project_id, agent="document_intelligence.embed_batch", model="text-embedding-ada-002", input=phrases)
     return [data.embedding for data in response.data]
 
 def store_embeddings(page_phrases, chunk_phrases, user_id=None, project_id=None):
     """Store embeddings with better error handling"""
-    if not user_id:
-        user_id = getattr(g, 'user_id', None)
-    if not project_id:
-        project_id = getattr(g, 'project_id', None)
     print("Processing embeddings...")
     print(f"Page phrases: {page_phrases}")
     print(f"Chunk phrases keys: {list(chunk_phrases.keys())}")
@@ -1825,10 +1813,6 @@ def extract_phrases_from_query(query):
 
 def get_embeddings_for_query(phrases, user_id=None, project_id=None):
     from core.ai_client import ai_embeddings
-    if not user_id:
-        user_id = getattr(g, 'user_id', None)
-    if not project_id:
-        project_id = getattr(g, 'project_id', None)
     return [
         ai_embeddings(user_id=user_id, project_id=project_id, agent="document_intelligence.embed_query", model="text-embedding-ada-002", input=phrase).data[0].embedding
         for phrase in phrases

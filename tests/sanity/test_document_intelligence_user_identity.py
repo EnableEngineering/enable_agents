@@ -66,26 +66,6 @@ class DocumentIntelligenceFunctionalTests(unittest.TestCase):
         self.assertEqual(kwargs.get("input"), "test phrase")
 
     @patch("core.ai_client.ai_embeddings")
-    def test_get_embeddings_fallback_to_g(self, mock_ai_embeddings):
-        import flask
-        ns = self._compile_functions()
-        mock_response = MagicMock()
-        mock_response.data = [MagicMock(embedding=[0.1, 0.2, 0.3])]
-        mock_ai_embeddings.return_value = mock_response
-
-        app = flask.Flask("test")
-        with app.test_request_context():
-            flask.g.user_id = "user_g_ctx"
-            flask.g.project_id = "proj_g_ctx"
-            fn = ns["get_embeddings"]
-            fn("test phrase")
-
-        mock_ai_embeddings.assert_called_once()
-        kwargs = mock_ai_embeddings.call_args.kwargs
-        self.assertEqual(kwargs.get("user_id"), "user_g_ctx")
-        self.assertEqual(kwargs.get("project_id"), "proj_g_ctx")
-
-    @patch("core.ai_client.ai_embeddings")
     def test_get_embeddings_batch_explicit_args(self, mock_ai_embeddings):
         ns = self._compile_functions()
         mock_response = MagicMock()
@@ -106,26 +86,6 @@ class DocumentIntelligenceFunctionalTests(unittest.TestCase):
         self.assertEqual(kwargs.get("input"), ["phrase1", "phrase2"])
 
     @patch("core.ai_client.ai_embeddings")
-    def test_get_embeddings_batch_fallback_to_g(self, mock_ai_embeddings):
-        import flask
-        ns = self._compile_functions()
-        mock_response = MagicMock()
-        mock_response.data = [MagicMock(embedding=[0.1])]
-        mock_ai_embeddings.return_value = mock_response
-
-        app = flask.Flask("test")
-        with app.test_request_context():
-            flask.g.user_id = "user_g_batch"
-            flask.g.project_id = "proj_g_batch"
-            fn = ns["get_embeddings_batch"]
-            fn(["phrase1"])
-
-        mock_ai_embeddings.assert_called_once()
-        kwargs = mock_ai_embeddings.call_args.kwargs
-        self.assertEqual(kwargs.get("user_id"), "user_g_batch")
-        self.assertEqual(kwargs.get("project_id"), "proj_g_batch")
-
-    @patch("core.ai_client.ai_embeddings")
     def test_get_embeddings_for_query_explicit_args(self, mock_ai_embeddings):
         ns = self._compile_functions()
         mock_response = MagicMock()
@@ -141,26 +101,6 @@ class DocumentIntelligenceFunctionalTests(unittest.TestCase):
             kwargs = call.kwargs
             self.assertEqual(kwargs.get("user_id"), "user_q")
             self.assertEqual(kwargs.get("project_id"), "proj_q")
-
-    @patch("core.ai_client.ai_embeddings")
-    def test_get_embeddings_for_query_fallback_to_g(self, mock_ai_embeddings):
-        import flask
-        ns = self._compile_functions()
-        mock_response = MagicMock()
-        mock_response.data = [MagicMock(embedding=[0.1, 0.2, 0.3])]
-        mock_ai_embeddings.return_value = mock_response
-
-        app = flask.Flask("test")
-        with app.test_request_context():
-            flask.g.user_id = "user_g_q"
-            flask.g.project_id = "proj_g_q"
-            fn = ns["get_embeddings_for_query"]
-            fn(["query phrase"])
-
-        mock_ai_embeddings.assert_called_once()
-        kwargs = mock_ai_embeddings.call_args.kwargs
-        self.assertEqual(kwargs.get("user_id"), "user_g_q")
-        self.assertEqual(kwargs.get("project_id"), "proj_g_q")
 
     @patch("core.ai_client.ai_embeddings")
     def test_store_embeddings_forwards_user_identity(self, mock_ai_embeddings):
