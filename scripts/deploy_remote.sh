@@ -233,7 +233,7 @@ echo "==> starting celery"
 sudo docker compose up -d celery-worker-remote celery-beat-remote
 
 echo "==> swapping frontend static files"
-sudo docker create --name frontend_extract_tmp enable_agents-frontend-remote:latest >/dev/null
+sudo docker create --name frontend_extract_tmp "${FRONTEND_IMAGE:-gcr.io/enable-agents/frontend:latest}" >/dev/null
 sudo rm -rf /var/www/enable_agents.bak
 sudo mv /var/www/enable_agents /var/www/enable_agents.bak
 sudo mkdir -p /var/www/enable_agents
