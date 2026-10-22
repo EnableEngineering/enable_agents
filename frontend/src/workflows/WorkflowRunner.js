@@ -604,7 +604,7 @@ function WorkflowRunner() {
             try {
               data[key] = field.value.trim() ? JSON.parse(field.value) : null;
             } catch (err) {
-              showToast(`"${formatLabel(key)}" must be valid JSON`, 'error');
+              showToast(`"${formatLabel(key)}" has an invalid format. Please enter valid data.`, 'error');
               setResumingAction(null);
               return;
             }

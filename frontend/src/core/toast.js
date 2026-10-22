@@ -144,6 +144,64 @@ function getContainer() {
 }
 
 /**
+ * Translates technical error strings into user-friendly business copy,
+ * ensuring internal technical jargon (JSON errors, stack traces, HTTP codes)
+ * is never exposed directly in UI toasts. Full technical errors are logged
+ * to console for developer inspection.
+ */
+export function sanitizeToastMessage(message, type) {
+  if (!message) return type === 'error' ? 'An unexpected error occurred. Please try again.' : '';
+  const raw = typeof message === 'object' && message.message ? message.message : String(message);
+
+  if (type === 'error') {
+    // Log the full technical error to console for debugging
+    if (typeof console !== 'undefined' && console.error) {
+      console.error('[Toast Error Detail]:', message);
+    }
+
+    const lower = raw.toLowerCase();
+
+    // JSON / Parsing errors (e.g. from HTML error bodies or malformed LLM responses)
+    if (lower.includes('invalid json') || lower.includes('unexpected token') || lower.includes('json.parse')) {
+      return 'The server returned an unexpected response. Please try again in a moment.';
+    }
+    // Network / connectivity errors
+    if (lower.includes('failed to fetch') || lower.includes('networkerror') || lower.includes('network request failed')) {
+      return 'Unable to reach the server. Please check your internet connection.';
+    }
+    // Gateway / timeout errors
+    if (/\b504\b/.test(lower) || lower.includes('gateway time-out') || lower.includes('gateway timeout')) {
+      return 'The request took longer than expected and timed out. Please try again.';
+    }
+    if (/\b502\b/.test(lower) || lower.includes('bad gateway')) {
+      return 'The service is temporarily unavailable. Please try again in a moment.';
+    }
+    // 500 / unhandled exception / traceback
+    if (lower.includes('500 internal server error') || lower.includes('traceback (most recent call last)')) {
+      return 'Something went wrong on the server. Please try again later.';
+    }
+    // Rate limit / quota
+    if (lower.includes('quota') || lower.includes('rate limit') || /\b429\b/.test(lower)) {
+      return 'Request limit reached. Please wait a moment before trying again.';
+    }
+    // Auth / session expiration
+    if (lower.includes('token expired') || lower.includes('missing or invalid session') || lower.includes('401 unauthorized')) {
+      return 'Your session has expired. Please refresh the page or sign in again.';
+    }
+    // Strip technical prefixes like "Error: " if followed by object/stack artifacts
+    if (raw.startsWith('Error: ')) {
+      const rest = raw.slice(7).trim();
+      if (rest === '[object Object]' || rest === 'undefined' || rest.startsWith('<') || /\n\s*at\s+/.test(raw) || /^\s*at\s+/.test(rest)) {
+        return 'An unexpected error occurred. Please try again.';
+      }
+      return rest;
+    }
+  }
+
+  return raw;
+}
+
+/**
  * Show a platform toast notification.
  * Position/duration convention (Reflection-aligned, 2026-09-13): top-right,
  * 3000ms default - position already matched, duration is the change here.
@@ -168,7 +226,7 @@ export function showToast(message, type = 'info', duration = 3000) {
 
   const msg = document.createElement('span');
   msg.className = 'ea-toast__msg';
-  msg.textContent = message;
+  msg.textContent = sanitizeToastMessage(message, type);
 
   const close = document.createElement('button');
   close.type = 'button';
