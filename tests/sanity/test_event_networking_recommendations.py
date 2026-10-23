@@ -329,6 +329,52 @@ class EventNetworkingRecommendationsFunctionalTests(unittest.TestCase):
             self.assertIn("Robotics", text)
             self.assertIn("warehouse mobile robots", text)
 
+    def test_upload_attendees_generates_and_caches_embeddings(self):
+        """Uploading attendees should batch-embed them and assign embedding vectors."""
+        mock_event = MagicMock()
+        mock_event.user_id = "test_user"
+
+        with self.app.test_request_context(
+            "/api/event-networking/events/evt-1/attendees",
+            method="POST",
+            json={"attendees": [{"name": "Test Ingest", "role": "Engineer", "company": "Tech"}]},
+        ):
+            g.user_id = "test_user"
+            with patch.object(service, "_owned_event_or_404", return_value=mock_event), \
+                 patch("core.database.db.session.add"), \
+                 patch("core.database.db.session.commit"), \
+                 patch.object(service.ENAttendee, "query") as mock_query, \
+                 patch.object(service, "_embed_texts", return_value=[[0.1, 0.2, 0.3]]) as mock_embed:
+
+                mock_query.filter_by.return_value.all.return_value = []
+                response, status_code = service.upload_attendees("evt-1")
+                self.assertEqual(status_code, 201)
+                self.assertTrue(mock_embed.called)
+
+    def test_update_notes_recomputes_embedding(self):
+        """Updating attendee notes should recalculate embedding for that attendee."""
+        attendee = self._create_mock_attendee(
+            "att-1", "Test Update", "Lead", "Corp", ["AI"], notes="old notes"
+        )
+        attendee.event = MagicMock()
+        attendee.event.user_id = "test_user"
+
+        with self.app.test_request_context(
+            "/api/event-networking/attendees/att-1/notes",
+            method="PUT",
+            json={"notes": "new notes about supply chain"},
+        ):
+            g.user_id = "test_user"
+            with patch.object(service, "_owned_attendee_or_404", return_value=attendee), \
+                 patch("core.database.db.session.commit"), \
+                 patch.object(service, "_embed_texts", return_value=[[0.5, 0.5, 0.5]]) as mock_embed:
+
+                response, status_code = service.update_attendee_notes("att-1")
+                self.assertEqual(status_code, 200)
+                self.assertTrue(mock_embed.called)
+                self.assertEqual(attendee.notes, "new notes about supply chain")
+                self.assertEqual(attendee.embedding, [0.5, 0.5, 0.5])
+
 
 if __name__ == "__main__":
     unittest.main()

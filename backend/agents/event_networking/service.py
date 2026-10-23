@@ -1,15 +1,21 @@
 """Event Networking Agent — service layer."""
+import logging
 import os
 import re
 import smtplib
 from datetime import datetime
 from email.message import EmailMessage
+from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
 from flask import g, jsonify, request
 
 from core.database import db
 from .models import ENEvent, ENAttendee
+
+logger = logging.getLogger(__name__)
+
+EMBEDDING_MODEL = "text-embedding-3-small"
 
 
 def _owned_event_or_404(event_id):
@@ -59,6 +65,80 @@ def list_attendees(event_id):
     return jsonify({"success": True, "attendees": [a.to_dict() for a in event.attendees]}), 200
 
 
+# =============================================================================
+# Embedding & Profile Serialization Helpers
+# =============================================================================
+
+def _attendee_to_embedding_text(attendee) -> str:
+    """Compiles an attendee profile into a structured summary for embedding."""
+    parts = []
+    name = getattr(attendee, "name", None)
+    if name:
+        parts.append(f"Name: {name}")
+    role = getattr(attendee, "role", None) or ""
+    company = getattr(attendee, "company", None) or ""
+    role_company = f"{role} at {company}".strip()
+    if role_company and role_company != "at":
+        parts.append(f"Role: {role_company}")
+    interests = getattr(attendee, "interests", None)
+    if isinstance(interests, list) and interests:
+        parts.append(f"Interests: {', '.join(interests)}")
+    notes = getattr(attendee, "notes", None)
+    if notes:
+        parts.append(f"Notes: {notes}")
+    return "\n".join(parts) if parts else getattr(attendee, "name", "") or ""
+
+
+def _embed_texts(texts: List[str], user_id: Optional[str] = None) -> List[List[float]]:
+    """Generates embedding vectors via core.ai_client.ai_embeddings in batches."""
+    if not texts:
+        return []
+    from core.ai_client import ai_embeddings
+
+    batch_size = 100
+    all_vectors = []
+    for i in range(0, len(texts), batch_size):
+        batch = texts[i : i + batch_size]
+        response = ai_embeddings(
+            user_id=user_id,
+            project_id=None,
+            agent="event_networking",
+            model=EMBEDDING_MODEL,
+            input=batch,
+        )
+        batch_vectors = [item.embedding for item in response.data]
+        all_vectors.extend(batch_vectors)
+    return all_vectors
+
+
+def _embed_and_save_attendees(attendees: List[ENAttendee], user_id: Optional[str] = None):
+    """Generates and assigns embeddings for the given attendee objects."""
+    if not attendees:
+        return
+    try:
+        texts = [_attendee_to_embedding_text(a) for a in attendees]
+        vectors = _embed_texts(texts, user_id=user_id)
+        for a, vec in zip(attendees, vectors):
+            a.embedding = vec
+    except Exception as exc:
+        logger.warning("Failed to generate embeddings for attendees: %s", exc)
+
+
+def _ensure_attendees_embedded(attendees: List[ENAttendee], user_id: Optional[str] = None):
+    """Backfills embeddings for attendees whose embedding is currently None."""
+    missing = [a for a in attendees if getattr(a, "embedding", None) is None]
+    if not missing:
+        return
+    try:
+        texts = [_attendee_to_embedding_text(a) for a in missing]
+        vectors = _embed_texts(texts, user_id=user_id)
+        for a, vec in zip(missing, vectors):
+            a.embedding = vec
+        db.session.commit()
+    except Exception as exc:
+        logger.warning("Could not backfill attendee embeddings: %s", exc)
+
+
 def upload_attendees(event_id):
     event = _owned_event_or_404(event_id)
     if not event:
@@ -69,6 +149,7 @@ def upload_attendees(event_id):
     if not incoming:
         return jsonify({"success": False, "error": "No attendees provided"}), 400
 
+    added_attendees = []
     for a in incoming:
         name = (a.get("name") or "").strip()
         if not name:
@@ -83,6 +164,10 @@ def upload_attendees(event_id):
         )
         attendee.interests = a.get("interests") or []
         db.session.add(attendee)
+        added_attendees.append(attendee)
+
+    # Pre-embed and cache in DB on ingest
+    _embed_and_save_attendees(added_attendees, user_id=getattr(g, "user_id", None))
 
     db.session.commit()
     all_attendees = ENAttendee.query.filter_by(event_id=event_id).all()
@@ -108,6 +193,10 @@ def update_attendee_notes(attendee_id):
     data = request.get_json(silent=True) or {}
     attendee.notes = data.get("notes", attendee.notes)
     attendee.last_contact = datetime.utcnow().strftime("%Y-%m-%d")
+
+    # Invalidate and re-embed since notes changed
+    _embed_and_save_attendees([attendee], user_id=getattr(g, "user_id", None))
+
     db.session.commit()
     return jsonify({"success": True, "attendee": attendee.to_dict()}), 200
 
