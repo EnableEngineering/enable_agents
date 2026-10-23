@@ -16,6 +16,9 @@ depends_on = None
 
 
 def upgrade():
+    # Ensure pgvector extension exists before altering table
+    op.execute('CREATE EXTENSION IF NOT EXISTS vector')
+
     # Safe inspect check prevents duplicate column errors across environments
     columns = {c["name"] for c in sa.inspect(op.get_bind()).get_columns("en_attendees")}
     if "embedding" not in columns:
