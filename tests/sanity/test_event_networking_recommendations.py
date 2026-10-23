@@ -81,7 +81,9 @@ class EventNetworkingRecommendationsFunctionalTests(unittest.TestCase):
                 vectors = []
                 for text in input:
                     t = text.lower()
-                    if "supply chain" in t or "freight" in t:
+                    if "logistics" in t:
+                        vectors.append(query_vector)
+                    elif "supply chain" in t or "freight" in t:
                         vectors.append(alice_vector)
                     else:
                         vectors.append(bob_vector)
