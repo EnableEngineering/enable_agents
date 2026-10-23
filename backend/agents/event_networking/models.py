@@ -3,6 +3,8 @@ import json
 from datetime import datetime
 from typing import Any, Dict, List
 
+from pgvector.sqlalchemy import Vector
+
 from core.database import db
 
 
@@ -58,6 +60,7 @@ class ENAttendee(db.Model):
     follow_up_date = db.Column(db.String(20))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    embedding = db.Column(Vector(1536), nullable=True)
 
     event = db.relationship("ENEvent", back_populates="attendees")
 
